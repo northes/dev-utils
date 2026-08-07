@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Name=My Product
+Comment=A dev-utils application
+# The Exec line includes %u to pass the URL to the application
+Exec=/usr/local/bin/dev-utils %u
+Terminal=false
+Type=Application
+Icon=dev-utils
+Categories=Utility;
+StartupWMClass=dev-utils
+
+ 
