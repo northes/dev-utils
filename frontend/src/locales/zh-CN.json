@@ -71,6 +71,7 @@
     "format": "格式化",
     "minify": "压缩",
     "copy": "复制",
+    "clear": "清空",
     "bytes": "字节",
     "copied": "已复制",
     "invalid": "JSON 无效",

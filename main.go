@@ -64,17 +64,27 @@ func main() {
 	} else {
 		tray.SetIcon(trayLight)
 	}
+	showFromTray := func() {
+		tray.ShowWindow()
+		window.SetAlwaysOnTop(false)
+	}
+	analyzeClipboard := func() {
+		showFromTray()
+		app.Event.Emit("tray:analyze")
+	}
+
 	menu := app.Menu.New()
 	menu.Add("剪贴板检测就绪").SetEnabled(false)
 	menu.AddSeparator()
-	menu.Add("打开 DevUtils").OnClick(func(_ *application.Context) { tray.ShowWindow() })
+	menu.Add("打开 DevUtils").OnClick(func(_ *application.Context) { analyzeClipboard() })
 	menu.Add("设置").OnClick(func(_ *application.Context) {
-		tray.ShowWindow()
+		showFromTray()
 		app.Event.Emit("navigate", "settings")
 	})
 	menu.AddSeparator()
 	menu.Add("退出").OnClick(func(_ *application.Context) { app.Quit() })
 	tray.AttachWindow(window).WindowOffset(5).SetMenu(menu)
+	tray.OnClick(func() { analyzeClipboard() })
 
 	window.RegisterHook(events.Common.WindowClosing, func(event *application.WindowEvent) {
 		window.Hide()
