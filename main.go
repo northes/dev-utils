@@ -128,8 +128,7 @@ func main() {
 		tray.SetIcon(trayLight)
 	}
 	showFromTray := func() {
-		applySaved()
-		tray.ShowWindow()
+		window.Show().Focus()
 		window.SetAlwaysOnTop(false)
 	}
 	analyzeClipboard := func() {
@@ -147,7 +146,7 @@ func main() {
 	})
 	menu.AddSeparator()
 	menu.Add("退出").OnClick(func(_ *application.Context) { app.Quit() })
-	tray.AttachWindow(window).WindowOffset(5).SetMenu(menu)
+	tray.AttachWindow(window).SetMenu(menu)
 	tray.OnClick(func() { analyzeClipboard() })
 
 	window.RegisterHook(events.Common.WindowClosing, func(event *application.WindowEvent) {
