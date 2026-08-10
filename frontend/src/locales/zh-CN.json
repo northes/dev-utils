@@ -66,7 +66,6 @@
   },
   "jsonTool": {
     "title": "JSON 工作区",
-    "subtitle": "格式化与压缩结构化数据",
     "placeholder": "粘贴 JSON 或直接输入…",
     "format": "格式化",
     "minify": "压缩",
@@ -83,7 +82,6 @@
     "copied": "已复制",
     "invalid": "JSON 无效",
     "schema": "Schema",
-    "schemaPathLabel": "匹配路径",
     "schemaPathPlaceholder": "输入 JSONPath，例如 $.owner.team",
     "foldObject": "{… {{count}} 个键}",
     "foldArray": "[… {{count}} 项]",
