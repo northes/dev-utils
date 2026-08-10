@@ -149,11 +149,7 @@
     "detection": "支持的检测类型",
     "detectionSubtitle": "选择可识别的内容类型。",
     "privacy": "隐私",
-    "privacySubtitle": "剪贴板内容不会写入历史。",
-    "neverStore": "不存储剪贴板内容",
-    "neverStoreDesc": "仅保留工具名称与操作记录",
-    "clearAfter": "处理完成后清空",
-    "clearAfterDesc": "操作完成后清空剪贴板",
+    "privacySubtitle": "管理本机历史记录。",
     "history": "历史记录",
     "historyDesc": "清除本机所有最近活动",
     "clearHistory": "清除历史"
@@ -179,6 +175,12 @@
     "title": "匹配到内容",
     "body": "剪贴板匹配到 {{tool}}，是否填入？",
     "confirm": "填入",
+    "cancel": "取消"
+  },
+  "clearHistoryDialog": {
+    "title": "清空历史记录？",
+    "body": "此操作将删除本机所有历史记录，无法撤销。",
+    "confirm": "清空",
     "cancel": "取消"
   },
   "timeAgo": {
