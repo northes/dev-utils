@@ -91,11 +91,11 @@
     "formatted": "格式化 JSON",
     "formatFailed": "格式化失败",
     "minifyFailed": "压缩失败",
-    "invalidJsonDesc": "内容不是有效的 JSON，无法继续"
+    "invalidJsonDesc": "内容不是有效的 JSON，无法继续",
+    "subtitle": "格式化、压缩、校验与路径提取"
   },
   "timeTool": {
     "title": "时间转换器",
-    "subtitle": "无需猜测格式即可转换日期与时间戳",
     "input": "输入",
     "placeholder": "时间戳或日期",
     "hint": "支持 Unix 秒、毫秒、ISO 8601 及常见日期字符串。",
@@ -111,11 +111,11 @@
     "copy": "复制 {{label}}",
     "converted": "转换时间戳",
     "emptyTitle": "请输入有效时间",
-    "emptyHint": "例如：1786358400 或 2026-08-10T12:00:00Z"
+    "emptyHint": "例如：1786358400 或 2026-08-10T12:00:00Z",
+    "subtitle": "无需猜测格式即可转换日期与时间戳"
   },
   "textTool": {
     "title": "文本工具集",
-    "subtitle": "测量与规范化纯文本",
     "input": "输入",
     "trim": "修剪",
     "removeSpaces": "删除空格",
@@ -129,7 +129,8 @@
     "characters": "字符",
     "words": "单词",
     "lines": "行",
-    "bytes": "字节"
+    "bytes": "字节",
+    "subtitle": "测量与规范化纯文本"
   },
   "settings": {
     "title": "设置",
