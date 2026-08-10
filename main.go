@@ -88,7 +88,7 @@ func main() {
 			TitleBar: application.MacTitleBar{
 				AppearsTransparent: true,
 				Hide:               false,
-				HideTitle:          false,
+				HideTitle:          true,
 				FullSizeContent:    false,
 			},
 		},
