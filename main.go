@@ -64,6 +64,9 @@ func main() {
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),
 		},
+		Services: []application.Service{
+			application.NewService(NewConfigService()),
+		},
 		Mac: application.MacOptions{
 			ActivationPolicy: application.ActivationPolicyAccessory,
 		},
@@ -108,9 +111,19 @@ func main() {
 		}
 		saveTimer = time.AfterFunc(400*time.Millisecond, func() { saveWindowState(saved) })
 	}
+	flushBounds := func() {
+		if saveTimer != nil {
+			saveTimer.Stop()
+			saveTimer = nil
+		}
+		if saved != nil {
+			saveWindowState(saved)
+		}
+	}
 	window.RegisterHook(events.Common.WindowRuntimeReady, func(*application.WindowEvent) { applySaved() })
 	window.RegisterHook(events.Common.WindowDidMove, func(*application.WindowEvent) { persistBounds() })
 	window.RegisterHook(events.Common.WindowDidResize, func(*application.WindowEvent) { persistBounds() })
+	app.OnShutdown(flushBounds)
 
 	tray := app.SystemTray.New()
 	tray.SetTooltip("DevUtils — 本地开发工具")

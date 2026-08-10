@@ -21,7 +21,8 @@ Wails v3(beta)桌面托盘应用:Go 后端 + React 19 前端。本地优先的�
 
 ## 架构
 
-- `main.go` 是整个 Go 侧:一个窗口、系统托盘菜单、无服务。**未绑定任何 Go 服务** — `greetservice.go` 是未使用的模板残留;前端无法调用 Go 方法。Go→前端通信仅通过 `app.Event.Emit` / `Events.On`(托盘「设置」发出 `navigate`,由 `frontend/src/App.tsx` 处理)。
+- `main.go` 是整个 Go 侧:一个窗口、系统托盘菜单、已绑定的服务。**已绑定 `ConfigService`**(`configservice.go`):`Get()`/`Save()` 管理应用配置,持久化到 `~/Library/Application Support/DevUtils/config.json`,前端通过 `frontend/bindings/changeme/` 生成的绑定调用。`greetservice.go` 是未使用的模板残留。Go→前端通信通过 `app.Event.Emit` / `Events.On`(托盘「设置」发出 `navigate`,托盘点击发出 `tray:analyze`,由 `frontend/src/App.tsx` 处理)。
+- 配置(设置页内容)由 Go 统一管理;**前端不把设置写入 localStorage**;`devutils.settings` 仅用于旧版迁移(已废弃)。
 - 关闭窗口隐藏到托盘而非退出(`WindowClosing` 钩子调用 `Hide()` + `Cancel()`);退出只能走托盘菜单。应用为 Mac accessory(`ActivationPolicyAccessory`),无普通 Dock 窗口。
 - `go.mod` 模块名仍是模板默认值 `changeme` — 不要惊讶;添加依赖时使用真实 import 路径。
 - `build/config.yml` 保存构建资源元数据(info 字段仍是「My Company」占位符)。修改后需运行 `wails3 task common:update:build-assets`,它会重新生成/覆盖资源。
@@ -36,7 +37,7 @@ Wails v3(beta)桌面托盘应用:Go 后端 + React 19 前端。本地优先的�
 - 图标来自 `@phosphor-icons/react`(统一 `weight="bold"` 粗笔画)。字体用系统默认栈,`frontend/public/` 内的 Inter TTF 未引用,勿在 CSS 引入。
 - 窗口拖拽区域由 `--wails-draggable: drag/no-drag` CSS 控制(titlebar 用 `data-wails-drag`),不用 JS。
 - **工具页面扁平化,禁止圆角卡片**:不要用带边框/圆角/独立背景的卡片包裹工具内容;工具栏与状态栏用顶部/底部边框线分隔,内容直接落在页面背景上。
-- 持久化状态用 localStorage key:`devutils.favorites`、`devutils.history`、`devutils.settings`。
+- 持久化状态用 localStorage key:`devutils.favorites`、`devutils.history`(设置页配置由 Go `ConfigService` 管理,不走 localStorage)。
 - `frontend/.npmrc` 设置 `minimum-release-age=10080`(供应链策略;pnpm/bun 生效,npm 忽略)。
 
 ## HeroUI 设计原则
