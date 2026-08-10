@@ -6,7 +6,10 @@
     "home": "首页",
     "history": "历史记录",
     "settings": "设置",
-    "nav": "应用导航"
+    "nav": "系统设置"
+  },
+  "sidebar": {
+    "toggle": "收起或展开侧边栏"
   },
   "statusbar": {
     "openPalette": "打开命令面板"
