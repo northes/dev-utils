@@ -89,7 +89,10 @@
     "foldArray": "[… {{count}} 项]",
     "validated": "校验 JSON",
     "minified": "压缩 JSON",
-    "formatted": "格式化 JSON"
+    "formatted": "格式化 JSON",
+    "formatFailed": "格式化失败",
+    "minifyFailed": "压缩失败",
+    "invalidJsonDesc": "内容不是有效的 JSON，无法继续"
   },
   "timeTool": {
     "title": "时间转换器",
