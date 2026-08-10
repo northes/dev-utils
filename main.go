@@ -50,7 +50,7 @@ func main() {
 	})
 
 	tray := app.SystemTray.New()
-	tray.SetTooltip("DevUtils — local developer tools")
+	tray.SetTooltip("DevUtils — 本地开发工具")
 	macTrayIcon, err := trayAssets.ReadFile("assets/tray/tray-mac-template.png")
 	if err != nil {
 		log.Fatal(err)
@@ -65,15 +65,15 @@ func main() {
 		tray.SetIcon(trayLight)
 	}
 	menu := app.Menu.New()
-	menu.Add("Clipboard detection ready").SetEnabled(false)
+	menu.Add("剪贴板检测就绪").SetEnabled(false)
 	menu.AddSeparator()
-	menu.Add("Open DevUtils").OnClick(func(_ *application.Context) { tray.ShowWindow() })
-	menu.Add("Settings").OnClick(func(_ *application.Context) {
+	menu.Add("打开 DevUtils").OnClick(func(_ *application.Context) { tray.ShowWindow() })
+	menu.Add("设置").OnClick(func(_ *application.Context) {
 		tray.ShowWindow()
 		app.Event.Emit("navigate", "settings")
 	})
 	menu.AddSeparator()
-	menu.Add("Quit").OnClick(func(_ *application.Context) { app.Quit() })
+	menu.Add("退出").OnClick(func(_ *application.Context) { app.Quit() })
 	tray.AttachWindow(window).WindowOffset(5).SetMenu(menu)
 
 	window.RegisterHook(events.Common.WindowClosing, func(event *application.WindowEvent) {

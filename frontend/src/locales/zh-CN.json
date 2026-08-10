@@ -1,0 +1,185 @@
+{
+  "app": {
+    "name": "DevUtils"
+  },
+  "titlebar": {
+    "home": "首页",
+    "history": "历史记录",
+    "settings": "设置",
+    "nav": "应用导航"
+  },
+  "statusbar": {
+    "local": "仅本地处理",
+    "paletteHint": "命令面板"
+  },
+  "palette": {
+    "searchLabel": "搜索",
+    "searchPlaceholder": "搜索工具和命令…",
+    "listLabel": "命令列表",
+    "empty": "未找到匹配命令"
+  },
+  "nav": {
+    "home": "打开首页",
+    "settings": "打开设置",
+    "history": "打开历史"
+  },
+  "groups": {
+    "nav": "导航",
+    "tools": "工具",
+    "json": "JSON 命令",
+    "time": "时间命令",
+    "text": "文本命令"
+  },
+  "tools": {
+    "json": {
+      "name": "JSON 工作区",
+      "description": "格式化、压缩、对比并检查路径"
+    },
+    "time": {
+      "name": "时间转换器",
+      "description": "Unix、UTC、RFC3339 与 ISO 8601"
+    },
+    "text": {
+      "name": "文本工具集",
+      "description": "统计、修剪与规范化文本"
+    }
+  },
+  "commands": {
+    "openJson": "打开 JSON 工具",
+    "openTime": "打开时间转换",
+    "openText": "打开文本工具",
+    "format": "格式化 JSON",
+    "minify": "压缩 JSON",
+    "validate": "校验 JSON",
+    "compare": "对比 JSON",
+    "convert": "转换时间戳",
+    "trim": "修剪文本",
+    "removeSpaces": "删除空格",
+    "compress": "压缩空白",
+    "count": "统计文本"
+  },
+  "home": {
+    "recent": "最近使用",
+    "lastActions": "最近操作",
+    "tools": "工具",
+    "subtitle": "全部在本机运行",
+    "addFavorite": "添加收藏",
+    "removeFavorite": "取消收藏"
+  },
+  "jsonTool": {
+    "title": "JSON 工作区",
+    "subtitle": "格式化、压缩并对比结构化数据",
+    "format": "格式化",
+    "minify": "压缩",
+    "compare": "对比",
+    "original": "原始",
+    "input": "输入",
+    "modified": "修改后",
+    "preview": "预览",
+    "valid": "JSON 有效",
+    "bytes": "字节",
+    "lines": "行",
+    "rootPath": "根路径",
+    "minifyAction": "压缩 JSON",
+    "validateOriginal": "校验原始",
+    "formatAction": "格式化 JSON",
+    "copied": "已复制",
+    "copyOutput": "复制输出",
+    "invalid": "JSON 无效",
+    "validated": "校验 JSON",
+    "compared": "对比 JSON",
+    "loadedOriginal": "已载入原始文档",
+    "minified": "压缩 JSON",
+    "formatted": "格式化 JSON",
+    "diffIdentical": "两份文档均有效且相同。",
+    "diffDifferent": "文档存在差异，使用修改后的值前请先检查。",
+    "diffInvalid": "其中一份或多份文档包含无效 JSON。"
+  },
+  "timeTool": {
+    "title": "时间转换器",
+    "subtitle": "无需猜测格式即可转换日期与时间戳",
+    "input": "输入",
+    "placeholder": "时间戳或日期",
+    "hint": "支持 Unix 秒、毫秒、ISO 8601 及常见日期字符串。",
+    "detected": "检测到",
+    "unixSec": "Unix 时间戳 · 秒",
+    "unixMs": "Unix 时间戳 · 毫秒",
+    "dateString": "日期字符串",
+    "unrecognized": "无法识别的时间值",
+    "localTime": "本地时间",
+    "utc": "UTC",
+    "rfc3339": "RFC3339",
+    "unixSeconds": "Unix 秒",
+    "copy": "复制 {{label}}",
+    "converted": "转换时间戳",
+    "emptyTitle": "请输入有效时间",
+    "emptyHint": "例如：1786358400 或 2026-08-10T12:00:00Z"
+  },
+  "textTool": {
+    "title": "文本工具集",
+    "subtitle": "测量与规范化纯文本",
+    "input": "输入",
+    "trim": "修剪",
+    "removeSpaces": "删除空格",
+    "compressWhitespace": "压缩空白",
+    "clear": "清空",
+    "trimmed": "修剪文本",
+    "removedSpaces": "删除空格",
+    "compressed": "压缩空白",
+    "cleared": "清空文本",
+    "count": "统计文本",
+    "characters": "字符",
+    "words": "单词",
+    "lines": "行",
+    "bytes": "字节"
+  },
+  "settings": {
+    "title": "设置",
+    "subtitle": "控制上下文检测与本地数据。",
+    "language": "语言",
+    "languageSubtitle": "选择界面显示语言。",
+    "languages": {
+      "zh-CN": "简体中文"
+    },
+    "clipboard": "剪贴板",
+    "clipboardSubtitle": "仅在您请求时分析剪贴板内容。",
+    "enableDetection": "启用剪贴板检测",
+    "enableDetectionDesc": "按需允许 DevUtils 检查剪贴板",
+    "analyzeOnOpen": "打开托盘时自动分析",
+    "analyzeOnOpenDesc": "打开托盘菜单后建议可执行操作",
+    "detection": "支持的检测类型",
+    "detectionSubtitle": "选择可识别的内容类型。",
+    "privacy": "隐私",
+    "privacySubtitle": "剪贴板内容不会写入历史。",
+    "neverStore": "不存储剪贴板内容",
+    "neverStoreDesc": "仅保留工具名称与操作记录",
+    "clearAfter": "处理完成后清空",
+    "clearAfterDesc": "操作完成后清空剪贴板",
+    "history": "历史记录",
+    "historyDesc": "清除本机所有最近活动",
+    "clearHistory": "清除历史"
+  },
+  "history": {
+    "title": "历史记录",
+    "subtitle": "仅操作记录，不保留输入内容。",
+    "clear": "清空",
+    "emptyTitle": "暂无活动",
+    "emptyHint": "运行工具后，其操作会显示在这里。"
+  },
+  "types": {
+    "json": "JSON",
+    "timestamp": "时间戳",
+    "url": "URL",
+    "jwt": "JWT"
+  },
+  "toast": {
+    "clipboardEmpty": "剪贴板内容为空",
+    "clipboardEmptyDesc": "请先复制内容后再执行该命令"
+  },
+  "timeAgo": {
+    "justNow": "刚刚",
+    "minutes": "{{count}} 分钟前",
+    "hours": "{{count}} 小时前",
+    "days": "{{count}} 天前"
+  }
+}
