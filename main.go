@@ -85,12 +85,13 @@ func main() {
 		Mac: application.MacWindow{
 			Appearance: application.NSAppearanceNameDarkAqua,
 			Backdrop:   application.MacBackdropTranslucent,
-			TitleBar: application.MacTitleBar{
-				AppearsTransparent: true,
-				Hide:               false,
-				HideTitle:          true,
-				FullSizeContent:    false,
-			},
+			// TitleBar: application.MacTitleBar{
+			// 	AppearsTransparent: true,
+			// 	Hide:               false,
+			// 	HideTitle:          true,
+			// 	FullSizeContent:    false,
+			// },
+			TitleBar: application.MacTitleBarHidden,
 		},
 	})
 
