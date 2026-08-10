@@ -5,11 +5,11 @@
 	"info": {
 		"0000": {
 			"ProductVersion": "0.1.0",
-			"CompanyName": "My Company",
-			"FileDescription": "A dev-utils application",
-			"LegalCopyright": "© 2026, My Company",
-			"ProductName": "My Product",
-			"Comments": "This is a comment"
+			"CompanyName": "DevUtils",
+			"FileDescription": "Local-first developer utility launcher",
+			"LegalCopyright": "(c) 2026, DevUtils",
+			"ProductName": "DevUtils",
+			"Comments": "Local-first developer utility launcher"
 		}
 	}
 }

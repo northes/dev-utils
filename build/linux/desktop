@@ -1,7 +1,7 @@
 [Desktop Entry]
 Version=1.0
-Name=My Product
-Comment=A dev-utils application
+Name=DevUtils
+Comment=Local-first developer utility launcher
 # The Exec line includes %u to pass the URL to the application
 Exec=/usr/local/bin/dev-utils %u
 Terminal=false

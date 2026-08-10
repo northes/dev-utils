@@ -7,11 +7,13 @@ import (
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
-	"github.com/wailsapp/wails/v3/pkg/icons"
 )
 
 //go:embed all:frontend/dist
 var assets embed.FS
+
+//go:embed assets/tray/*.png
+var trayAssets embed.FS
 
 func main() {
 	app := application.New(application.Options{
@@ -36,18 +38,31 @@ func main() {
 		BackgroundColour: application.NewRGB(17, 17, 19),
 		URL:              "/",
 		Mac: application.MacWindow{
-			InvisibleTitleBarHeight: 48,
-			Backdrop:                application.MacBackdropTranslucent,
-			TitleBar:                application.MacTitleBarHiddenInset,
+			Appearance: application.NSAppearanceNameDarkAqua,
+			Backdrop:   application.MacBackdropTranslucent,
+			TitleBar: application.MacTitleBar{
+				AppearsTransparent: true,
+				Hide:               false,
+				HideTitle:          false,
+				FullSizeContent:    false,
+			},
 		},
 	})
 
 	tray := app.SystemTray.New()
 	tray.SetTooltip("DevUtils — local developer tools")
+	macTrayIcon, err := trayAssets.ReadFile("assets/tray/tray-mac-template.png")
+	if err != nil {
+		log.Fatal(err)
+	}
+	trayLight, err := trayAssets.ReadFile("assets/tray/tray-light.png")
+	if err != nil {
+		log.Fatal(err)
+	}
 	if runtime.GOOS == "darwin" {
-		tray.SetTemplateIcon(icons.SystrayMacTemplate)
+		tray.SetTemplateIcon(macTrayIcon)
 	} else {
-		tray.SetIcon(icons.SystrayLight)
+		tray.SetIcon(trayLight)
 	}
 	menu := app.Menu.New()
 	menu.Add("Clipboard detection ready").SetEnabled(false)

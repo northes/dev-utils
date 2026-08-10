@@ -14,6 +14,7 @@
     "@heroui/styles": "^3.2.4",
     "@phosphor-icons/react": "^2.1.10",
     "@wailsio/runtime": "latest",
+    "pinyin-pro": "^3.28.2",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },
