@@ -1,4 +1,4 @@
-import {useEffect, useMemo, useRef, useState} from 'react'
+import {useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react'
 import {AlertDialog, Button, Switch, ToastProvider, toast} from '@heroui/react'
 import {Clipboard, Events} from '@wailsio/runtime'
 import {useTranslation} from 'react-i18next'
@@ -52,7 +52,7 @@ function App(){
   useEffect(()=>{const onKey=(event:KeyboardEvent)=>{if((event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==='k'){event.preventDefault();setPaletteOpen(open=>!open)}else if(event.key==='Escape'){if(paletteOpen)setPaletteOpen(false);else setPage('home')}};window.addEventListener('keydown',onKey);return()=>window.removeEventListener('keydown',onKey)},[paletteOpen])
   useEffect(()=>Events.On('navigate',event=>setPage(event.data as Page)),[])
   useEffect(()=>Events.On('tray:analyze',()=>{void analyzeClipboard()}),[settings])
-  useEffect(()=>workspaceRef.current?.scrollTo(0,0),[page])
+  useLayoutEffect(()=>workspaceRef.current?.scrollTo(0,0),[page])
   useEffect(()=>{GetConfig().then(c=>{settingsReady.current=true;setSettings(c)}).catch(()=>{settingsReady.current=true})},[])
   useEffect(()=>{if(!settingsReady.current)return;void SaveConfig(settings)},[settings])
   useEffect(()=>localStorage.setItem('devutils.favorites',JSON.stringify(favorites)),[favorites]);useEffect(()=>localStorage.setItem('devutils.history',JSON.stringify(history)),[history])
