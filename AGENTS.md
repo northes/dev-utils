@@ -36,9 +36,45 @@ Wails v3(beta)桌面托盘应用:Go 后端 + React 19 前端。本地优先的�
 - HeroUI(`@heroui/react`):用 HeroUI props 而非标准 DOM — `Button` 触发 `onPress`,`Switch` 用 `isSelected` + `onChange`。使用其他 HeroUI 组件前先查阅 `frontend/.agents/skills/heroui-react/SKILL.md`。
 - 图标来自 `@phosphor-icons/react`(统一 `weight="bold"` 粗笔画)。字体用系统默认栈,`frontend/public/` 内的 Inter TTF 未引用,勿在 CSS 引入。
 - 窗口拖拽区域由 `--wails-draggable: drag/no-drag` CSS 控制(titlebar 用 `data-wails-drag`),不用 JS。
-- **工具页面扁平化,禁止圆角卡片**:不要用带边框/圆角/独立背景的卡片包裹工具内容;工具栏与状态栏用顶部/底部边框线分隔,内容直接落在页面背景上。
+- **工具页面扁平化,禁止圆角卡片**:不要用带边框/圆角/独立背景的卡片包裹工具内容;内容直接落在页面背景上,层次用 1px 顶/底边框线表达,并按视觉密度取舍(标题-编辑区、编辑区-底部按钮栏之间若显紧贴就去掉边框)。
 - 持久化状态用 localStorage key:`devutils.favorites`、`devutils.history`(设置页配置由 Go `ConfigService` 管理,不走 localStorage)。
 - `frontend/.npmrc` 设置 `minimum-release-age=10080`(供应链策略;pnpm/bun 生效,npm 忽略)。
+
+## UI 与布局经验(通用原则,自本项目实践沉淀)
+
+### 页面切换与状态保留
+- 工具页**常驻挂载**,隐藏用 `position:absolute;inset:0;visibility:hidden;pointer-events:none`(不要 `display:none`)——保留布局与尺寸,避免 CodeMirror 塌陷/重测量,也保住撤销历史与滚动状态。
+- CodeMirror 的原生撤销/重做历史绑定在编辑器实例上:实例不卸载则历史天然保留。JSON 左区/路径/右区各是独立实例 → 各自独立撤销重做,聚焦哪个区就撤销哪个。**不要在切页或 schema 开关时重建编辑器。**
+- 纯 textarea/input 的浏览器原生撤销不可靠(程序化 `setValue` 后失效):用 `useHistory`(shared.tsx)自研撤销栈——600ms 窗口内键入合并成一步,工具栏/粘贴等程序化变更用 `{isolate:true}` 独立入栈;快捷键在元素 `onKeyDown` 拦截(`Mod/Ctrl+Z`、`Shift+Mod/Ctrl+Z` / `Ctrl+Y`),`event.nativeEvent.isComposing` 时放行 IME。
+- 常驻后所有工具页都会收到同一个 `pending` action,**effect 必须校验 `pending.tool === 自身 id`**,否则多个工具会互相抢走剪贴板命令。
+
+### 入场动画与滚动条闪烁(共因)
+- 自下而上入场动画用 `translateY(+12px)` 时,元素底部会瞬时超出滚动容器视口 → 产生可滚动溢出 → 滚动条「短暂出现又消失」(所有页面复现)。
+- 解决(二选一):保留上移动画时,用包裹容器 `overflow:hidden` 裁剪该溢出(本项目 `.tool-slot` 承担此职);或改用 `translateY(-12px)`(顶部溢出不可滚动,不出滚动条)。
+- 切页滚动复位用 `useLayoutEffect`(绘制前),别用 `useEffect`(会先按旧滚动位置绘制一帧)。滚动容器加 `overflow-x:hidden` 防横向瞬时滚动条。
+
+### 扁平化与分隔线
+- 工具页内容直接落在页面背景,不用带边框/圆角/独立背景的卡片包裹;层次用 1px 顶/底边框线表达。
+- 分隔线按视觉密度取舍:标题-编辑区、编辑区-底部按钮栏之间若显紧贴,直接去掉边框,不要保留多余线条。
+- 工具页标题:字号小(≈14px)、贴近左上角、与左侧 sidebar 顶沿对齐;不放副标题。开关式布局(如 JSON schema)开/关状态下边距必须一致。
+
+### CodeMirror 与 JSON
+- CodeMirror 基础主题给聚焦编辑器 `outline:1px dotted`(虚线);统一加 `.cm-editor.cm-focused{outline:none}`,用容器 `:focus-within` 实线边框表示聚焦,否则 `overflow:visible` 的编辑器会露出虚线。
+- 支持注释的 JSON:语法高亮用 `codemirror-json5`(节点名与 lezer-json 一致,折叠可用);解析前用 shared.tsx 的 `stripJsonComments`/`stripTrailingCommas`/`parseJsonLoose`(字符串感知)剥离注释与尾逗号。
+- 带注释内容执行格式化/压缩:先弹 AlertDialog 询问(格式化:尝试保留/清除注释/取消;压缩:清除/取消);失败用 toast 提示,不静默忽略。
+
+### 弹层(AlertDialog)
+- HeroUI AlertDialog portal 到 body、脱离 `.app-shell`:`--accent`/`--cta-*` 等作用域变量不可用。必须在 `index.css` 用 `:root` 变量或显式色值补齐对话框背景、标题、body、Footer 按钮(primary/secondary/tertiary/danger)与关闭按钮样式,否则会继承 HeroUI 浅色主题 token 而配色异常。
+- 破坏性操作(清空历史等)执行前必须 AlertDialog 二次确认,确认按钮用 `danger`。
+
+### HeroUI v3 易踩坑
+- `Switch` 是 compound 组件:裸 `<Switch isSelected onChange/>` 只渲染空字段、看不见开关;必须包成 `<Switch.Content><Switch.Control><Switch.Thumb/></Switch.Control></Switch.Content>`(项目内已封装 `SettingSwitch` 复用)。
+- 其余遵循上文「HeroUI 设计原则」。
+
+### 托盘与窗口、配置持久化
+- 托盘附件窗口:显示时**不要**用 `tray.ShowWindow()`(会强制定位到托盘图标下并置顶),直接 `window.Show().Focus()` + `SetAlwaysOnTop(false)`,窗口才回到上次位置。
+- 窗口位置/大小(`window-state.json`)与用户配置(`config.json`)都由 Go 持久化,前端不写 localStorage(收藏/历史除外);Go 退出前用 `app.OnShutdown` flush 防抖中的保存。
+- Go 结构体经 `wails3 generate bindings -clean=true -ts -i` 直接生成 TS 模型与方法绑定,前端 `type Settings = Config` 直接复用;**改动 Go 结构体后必须重新生成 bindings**。
 
 ## HeroUI 设计原则
 
