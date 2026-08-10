@@ -60,6 +60,14 @@ func saveWindowState(s *windowState) {
 const appName = "DevUtils"
 
 func main() {
+	saved := loadWindowState()
+	width, height := 720, 520
+	x, y := 0, 0
+	if saved != nil {
+		width, height = saved.W, saved.H
+		x, y = saved.X, saved.Y
+	}
+
 	app := application.New(application.Options{
 		Name:        appName,
 		Description: "Local-first developer utility launcher",
@@ -77,8 +85,11 @@ func main() {
 	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:             appName,
 		Title:            appName,
-		Width:            720,
-		Height:           520,
+		Width:            width,
+		Height:           height,
+		X:                x,
+		Y:                y,
+		InitialPosition:  application.WindowXY,
 		MinWidth:         640,
 		MinHeight:        440,
 		DisableResize:    false,
@@ -97,14 +108,7 @@ func main() {
 		},
 	})
 
-	saved := loadWindowState()
 	var saveTimer *time.Timer
-	applySaved := func() {
-		if saved != nil {
-			window.SetSize(saved.W, saved.H)
-			window.SetPosition(saved.X, saved.Y)
-		}
-	}
 	persistBounds := func() {
 		x, y := window.Position()
 		w, h := window.Size()
@@ -123,7 +127,6 @@ func main() {
 			saveWindowState(saved)
 		}
 	}
-	window.RegisterHook(events.Common.WindowRuntimeReady, func(*application.WindowEvent) { applySaved() })
 	window.RegisterHook(events.Common.WindowDidMove, func(*application.WindowEvent) { persistBounds() })
 	window.RegisterHook(events.Common.WindowDidResize, func(*application.WindowEvent) { persistBounds() })
 	app.OnShutdown(flushBounds)
