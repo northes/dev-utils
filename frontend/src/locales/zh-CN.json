@@ -133,9 +133,14 @@
     "subtitle": "测量与规范化纯文本"
   },
   "settings": {
-    "title": "设置",
-    "subtitle": "控制上下文检测与本地数据。",
-    "language": "语言",
+ "title": "设置",
+ "subtitle": "控制上下文检测与本地数据。",
+ "appearance": "外观",
+ "appearanceSubtitle": "选择界面显示模式。",
+ "theme": "主题",
+ "themeDark": "深色",
+ "themeLight": "浅色",
+ "language": "语言",
     "languageSubtitle": "选择界面显示语言。",
     "languages": {
       "zh-CN": "简体中文"

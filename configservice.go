@@ -16,6 +16,7 @@ type Config struct {
 	DetectJwt        bool   `json:"detectJwt"`
 	Language         string `json:"language"`
 	SidebarMode      string `json:"sidebarMode"`
+	Theme            string `json:"theme"`
 }
 
 func defaultConfig() Config {
@@ -28,6 +29,7 @@ func defaultConfig() Config {
 		DetectJwt:        true,
 		Language:         "zh-CN",
 		SidebarMode:      "full",
+		Theme:            "dark",
 	}
 }
 
