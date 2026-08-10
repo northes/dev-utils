@@ -12,3 +12,5 @@ build/android/overlay.json
 build/android/gen/
 .wails-docs
 .playwright-cli/
+
+changeme
