@@ -61,9 +61,7 @@
   },
   "home": {
     "recent": "最近使用",
-    "lastActions": "最近操作",
     "tools": "工具",
-    "subtitle": "全部在本机运行",
     "addFavorite": "添加收藏",
     "removeFavorite": "取消收藏"
   },
