@@ -68,6 +68,8 @@ func main() {
 		x, y = saved.X, saved.Y
 	}
 
+	cfgService := NewConfigService()
+
 	app := application.New(application.Options{
 		Name:        appName,
 		Description: "Local-first developer utility launcher",
@@ -75,7 +77,7 @@ func main() {
 			Handler: application.AssetFileServerFS(assets),
 		},
 		Services: []application.Service{
-			application.NewService(NewConfigService()),
+			application.NewService(cfgService),
 		},
 		Mac: application.MacOptions{
 			ActivationPolicy: application.ActivationPolicyAccessory,
@@ -131,8 +133,13 @@ func main() {
 	window.RegisterHook(events.Common.WindowDidResize, func(*application.WindowEvent) { persistBounds() })
 	app.OnShutdown(flushBounds)
 
+	en := cfgService.Get().Language == "en-US"
 	tray := app.SystemTray.New()
-	tray.SetTooltip("DevUtils — 本地开发工具")
+	if en {
+		tray.SetTooltip("DevUtils — local dev tools")
+	} else {
+		tray.SetTooltip("DevUtils — 本地开发工具")
+	}
 	macTrayIcon, err := trayAssets.ReadFile("assets/tray/tray-mac-template.png")
 	if err != nil {
 		log.Fatal(err)
@@ -156,15 +163,29 @@ func main() {
 	}
 
 	menu := app.Menu.New()
-	menu.Add("剪贴板检测就绪").SetEnabled(false)
+	if en {
+		menu.Add("Clipboard detection ready").SetEnabled(false)
+	} else {
+		menu.Add("剪贴板检测就绪").SetEnabled(false)
+	}
 	menu.AddSeparator()
-	menu.Add("打开 DevUtils").OnClick(func(_ *application.Context) { analyzeClipboard() })
-	menu.Add("设置").OnClick(func(_ *application.Context) {
-		showFromTray()
-		app.Event.Emit("navigate", "settings")
-	})
-	menu.AddSeparator()
-	menu.Add("退出").OnClick(func(_ *application.Context) { app.Quit() })
+	if en {
+		menu.Add("Open DevUtils").OnClick(func(_ *application.Context) { analyzeClipboard() })
+		menu.Add("Settings").OnClick(func(_ *application.Context) {
+			showFromTray()
+			app.Event.Emit("navigate", "settings")
+		})
+		menu.AddSeparator()
+		menu.Add("Quit").OnClick(func(_ *application.Context) { app.Quit() })
+	} else {
+		menu.Add("打开 DevUtils").OnClick(func(_ *application.Context) { analyzeClipboard() })
+		menu.Add("设置").OnClick(func(_ *application.Context) {
+			showFromTray()
+			app.Event.Emit("navigate", "settings")
+		})
+		menu.AddSeparator()
+		menu.Add("退出").OnClick(func(_ *application.Context) { app.Quit() })
+	}
 	tray.AttachWindow(window).SetMenu(menu)
 	tray.OnClick(func() { analyzeClipboard() })
 

@@ -1,0 +1,203 @@
+{
+  "app": {
+    "name": "DevUtils"
+  },
+  "titlebar": {
+    "home": "Home",
+    "history": "History",
+    "settings": "Settings",
+    "nav": "System"
+  },
+  "sidebar": {
+    "toggle": "Toggle sidebar"
+  },
+  "statusbar": {
+    "openPalette": "Open command palette"
+  },
+  "palette": {
+    "searchLabel": "Search",
+    "searchPlaceholder": "Search tools and commands…",
+    "listLabel": "Commands",
+    "empty": "No matching commands"
+  },
+  "nav": {
+    "home": "Open home",
+    "settings": "Open settings",
+    "history": "Open history"
+  },
+  "groups": {
+    "nav": "Navigation",
+    "tools": "Tools",
+    "json": "JSON commands",
+    "time": "Time commands",
+    "text": "Text commands"
+  },
+  "tools": {
+    "json": {
+      "name": "JSON Workspace",
+      "description": "Format, minify and inspect paths"
+    },
+    "time": {
+      "name": "Time Converter",
+      "description": "Unix, UTC, RFC3339 and ISO 8601"
+    },
+    "text": {
+      "name": "Text Toolkit",
+      "description": "Count, trim and normalize text"
+    }
+  },
+  "commands": {
+    "openJson": "Open JSON tool",
+    "openTime": "Open time converter",
+    "openText": "Open text tool",
+    "format": "Format JSON",
+    "minify": "Minify JSON",
+    "validate": "Validate JSON",
+    "convert": "Convert timestamp",
+    "trim": "Trim text",
+    "removeSpaces": "Remove spaces",
+    "compress": "Compress whitespace",
+    "count": "Count text"
+  },
+  "home": {
+    "recent": "Recent",
+    "tools": "Tools",
+    "addFavorite": "Add favorite",
+    "removeFavorite": "Remove favorite"
+  },
+  "jsonTool": {
+    "title": "JSON Workspace",
+    "placeholder": "Paste JSON or type…",
+    "format": "Format",
+    "minify": "Minify",
+    "copy": "Copy",
+    "clear": "Clear",
+    "cancel": "Cancel",
+    "commentTitle": "Content contains comments",
+    "commentFormatBody": "Formatting JSON with comments may fail. Clear comments and continue?",
+    "commentMinifyBody": "Minifying loses comments, so the result may not match expectations. Clear comments and continue?",
+    "keepComments": "Try to keep",
+    "clearComments": "Clear comments",
+    "minifyClear": "Clear",
+    "bytes": "bytes",
+    "copied": "Copied",
+    "invalid": "Invalid JSON",
+    "schema": "Schema",
+    "schemaPathPlaceholder": "Enter a JSONPath, e.g. $.owner.team",
+    "foldObject": "{… {{count}} keys}",
+    "foldArray": "[… {{count}} items]",
+    "validated": "Validate JSON",
+    "minified": "Minify JSON",
+    "formatted": "Format JSON",
+    "formatFailed": "Format failed",
+    "minifyFailed": "Minify failed",
+    "invalidJsonDesc": "Content is not valid JSON, cannot continue",
+    "subtitle": "Format, minify, validate and extract paths"
+  },
+  "timeTool": {
+    "title": "Time Converter",
+    "input": "Input",
+    "placeholder": "Timestamp or date",
+    "refresh": "Insert current timestamp",
+    "hint": "Supports Unix seconds, milliseconds, ISO 8601 and common date strings.",
+    "detected": "Detected",
+    "unixSec": "Unix timestamp · seconds",
+    "unixMs": "Unix timestamp · milliseconds",
+    "dateString": "Date string",
+    "unrecognized": "Unrecognized time value",
+    "localTime": "Local time",
+    "rfc3339": "RFC3339",
+    "unixSeconds": "Unix seconds",
+    "unixMilliseconds": "Unix milliseconds",
+    "unixNanoseconds": "Unix nanoseconds",
+    "copy": "Copy {{label}}",
+    "converted": "Convert timestamp",
+    "emptyTitle": "Enter a valid time",
+    "emptyHint": "e.g. 1786358400 or 2026-08-10T12:00:00Z",
+    "subtitle": "Convert dates and timestamps without guessing the format"
+  },
+  "textTool": {
+    "title": "Text Toolkit",
+    "input": "Input",
+    "trim": "Trim",
+    "removeSpaces": "Remove spaces",
+    "compressWhitespace": "Compress whitespace",
+    "clear": "Clear",
+    "trimmed": "Trim text",
+    "removedSpaces": "Remove spaces",
+    "compressed": "Compress whitespace",
+    "cleared": "Clear text",
+    "count": "Count text",
+    "characters": "characters",
+    "words": "words",
+    "lines": "lines",
+    "bytes": "bytes",
+    "subtitle": "Measure and normalize plain text"
+  },
+  "settings": {
+    "title": "Settings",
+    "subtitle": "Control context detection and local data.",
+    "appearance": "Appearance",
+    "appearanceSubtitle": "Choose how the interface is displayed.",
+    "theme": "Theme",
+    "themeDark": "Dark",
+    "themeLight": "Light",
+    "language": "Language",
+    "languageSubtitle": "Choose the interface language.",
+    "languages": {
+      "zh-CN": "简体中文",
+      "en-US": "English"
+    },
+    "clipboard": "Clipboard",
+    "clipboardSubtitle": "Analyze clipboard content only when you request it.",
+    "trayMatch": "Tray icon match",
+    "trayMatchDesc": "Automatically match clipboard content when clicking the tray icon",
+    "autoOverwrite": "Auto overwrite",
+    "autoOverwriteDesc": "Fill the matching tool automatically after matching; ask each time when off",
+    "detection": "Supported detection types",
+    "detectionSubtitle": "Choose recognizable content types.",
+    "privacy": "Privacy",
+    "privacySubtitle": "Manage local history.",
+    "history": "History",
+    "historyDesc": "Clear all recent activity on this device",
+    "clearHistory": "Clear history"
+  },
+  "history": {
+    "title": "History",
+    "subtitle": "Only records actions, does not store input content.",
+    "clear": "Clear",
+    "emptyTitle": "No activity yet",
+    "emptyHint": "After you run a tool, its actions will show here."
+  },
+  "types": {
+    "json": "JSON",
+    "timestamp": "Timestamp",
+    "url": "URL",
+    "jwt": "JWT"
+  },
+  "toast": {
+    "region": "Notifications",
+    "close": "Close notification",
+    "clipboardEmpty": "Clipboard is empty",
+    "clipboardEmptyDesc": "Copy some content before running this command",
+    "copied": "Copied {{value}}"
+  },
+  "matchDialog": {
+    "title": "Content matched",
+    "body": "Clipboard matched {{tool}}. Fill it in?",
+    "confirm": "Fill in",
+    "cancel": "Cancel"
+  },
+  "clearHistoryDialog": {
+    "title": "Clear history?",
+    "body": "This will delete all local history and cannot be undone.",
+    "confirm": "Clear",
+    "cancel": "Cancel"
+  },
+  "timeAgo": {
+    "justNow": "just now",
+    "minutes": "{{count}} minutes ago",
+    "hours": "{{count}} hours ago",
+    "days": "{{count}} days ago"
+  }
+}
