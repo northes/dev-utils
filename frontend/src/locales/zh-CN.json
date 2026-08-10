@@ -98,6 +98,7 @@
     "title": "时间转换器",
     "input": "输入",
     "placeholder": "时间戳或日期",
+    "refresh": "插入当前时间戳",
     "hint": "支持 Unix 秒、毫秒、ISO 8601 及常见日期字符串。",
     "detected": "检测到",
     "unixSec": "Unix 时间戳 · 秒",
