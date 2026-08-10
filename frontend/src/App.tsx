@@ -1,5 +1,5 @@
 import {useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react'
-import {AlertDialog, Button, Switch, ToastProvider, toast} from '@heroui/react'
+import {AlertDialog, Button, Switch} from '@heroui/react'
 import {Clipboard, Events} from '@wailsio/runtime'
 import {useTranslation} from 'react-i18next'
 import {pinyin} from 'pinyin-pro'
@@ -9,6 +9,7 @@ import JsonTool from './components/JsonTool'
 import TimeTool from './components/TimeTool'
 import TextTool from './components/TextTool'
 import {parseJsonLoose, Reveal, type Icon, type PendingAction, type ToolId} from './components/shared'
+import {AppToastProvider, toast} from './components/AppToast'
 import {Get as GetConfig, GetHistory, Save as SaveConfig, SaveHistory} from '../bindings/changeme/configservice'
 import type {Config as Settings, HistoryItem as StoredHistoryItem} from '../bindings/changeme/models'
 
@@ -66,7 +67,7 @@ function App(){
   const run=(item:IndexedItem)=>{setPaletteOpen(false);if(!item.tool){setPending(null);setPage(item.page??'home');return}const tool=item.tool;const action=item.action??'open';const needsInput=!!item.needsInput;const apply=async()=>{let input='';if(needsInput){input=(await Clipboard.Text().catch(()=>''))||'';if(!input.trim()){setPending(null);setPage(tool);toast(t('toast.clipboardEmpty'),{description:t('toast.clipboardEmptyDesc'),variant:'warning'});return}}setPending({tool,action,input});setPage(tool)};apply()}
   const analyzeClipboard=async()=>{if(!settings.trayMatchEnabled)return;const text=(await Clipboard.Text().catch(()=>''))||'';const s=text.trim();if(!s)return;let tool:ToolId|null=null;if(settings.detectJson){try{parseJsonLoose(s);tool='json'}catch{}}if(!tool&&settings.detectTimestamp&&(/^\d{10,13}$/.test(s)||(/[\s\-/:T]/.test(s)&&!Number.isNaN(new Date(s).getTime()))))tool='time';if(!tool&&settings.detectJwt&&/^eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(s))tool='text';if(!tool&&settings.detectUrl&&/^[a-z][a-z0-9+.-]*:\/\/\S+/i.test(s))tool='text';if(tool){if(settings.autoOverwrite){setPending({tool,action:'open',input:text});setPage(tool)}else setMatchDialog({tool,input:text})}}
   return <>
-    <ToastProvider placement="bottom"/>
+    <AppToastProvider/>
     <div className="app-shell">
       <div className="ambient"/>
       <header className="titlebar" data-wails-drag><button className="sidebar-toggle" onClick={cycleSidebar} aria-label={t('sidebar.toggle')} title={t('sidebar.toggle')}><SidebarSimple size={16} weight="duotone"/></button></header>

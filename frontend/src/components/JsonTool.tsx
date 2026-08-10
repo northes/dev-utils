@@ -1,5 +1,5 @@
 import {useEffect, useMemo, useRef, useState} from 'react'
-import {AlertDialog, Button, toast} from '@heroui/react'
+import {AlertDialog, Button} from '@heroui/react'
 import {useTranslation} from 'react-i18next'
 import CodeMirror from '@uiw/react-codemirror'
 import type {Extension} from '@codemirror/state'
@@ -11,6 +11,7 @@ import {tokyoNight} from '@uiw/codemirror-theme-tokyo-night'
 import {tokyoNightDay} from '@uiw/codemirror-theme-tokyo-night-day'
 import {Check, Copy, Trash, X} from '@phosphor-icons/react'
 import {formatJsonPreserve, hasComments, parseJsonLoose, Reveal, samples, stripJsonComments, ToolHeader, type PendingAction, type ToolId} from './shared'
+import {toast} from './AppToast'
 
 type PathToken={type:'key'|'index'|'all';value:string}
 function parsePath(p:string):PathToken[]{const tokens:PathToken[]=[];let s=p.trim();if(s.startsWith('$'))s=s.slice(1);let i=0;while(i<s.length){if(s[i]==='.'||s[i]==='/'){i++;continue}if(s[i]==='['){const end=s.indexOf(']',i);if(end<0)throw new Error('路径缺少 ]');const inner=s.slice(i+1,end).trim();if(inner==='*')tokens.push({type:'all',value:'*'});else if(/^-?\d+$/.test(inner))tokens.push({type:'index',value:inner});else if((inner.startsWith("'")&&inner.endsWith("'"))||(inner.startsWith('"')&&inner.endsWith('"')))tokens.push({type:'key',value:inner.slice(1,-1)});else throw new Error('路径段无效: '+inner);i=end+1}else if(/[A-Za-z0-9_$]/.test(s[i])){let j=i;while(j<s.length&&/[A-Za-z0-9_$-]/.test(s[j]))j++;tokens.push({type:'key',value:s.slice(i,j)});i=j}else throw new Error('路径字符无效: '+s[i])}return tokens}
