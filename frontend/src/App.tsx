@@ -1,121 +1,63 @@
-import { useState, useEffect, useRef } from 'react'
-import {Events, WML} from "@wailsio/runtime";
-import {GreetService} from "../bindings/changeme";
+import {useEffect, useMemo, useRef, useState} from 'react'
+import {Button, Switch} from '@heroui/react'
+import {Events} from '@wailsio/runtime'
+import {ArrowsLeftRight, BracketsCurly, CaretRight, Check, Clock, Copy, Gear, Hash, Heart, MagnifyingGlass, TextT, Trash, X} from '@phosphor-icons/react'
 
-// Show the actual Wails version this project was generated against.
-const wailsVersion = "v3.0.0-beta.4";
+type ToolId = 'json' | 'time' | 'text'
+type Page = 'home' | 'settings' | 'history' | ToolId
+type JsonMode = 'format' | 'minify' | 'compare'
+type HistoryItem = {id: number; tool: ToolId; action: string; detail: string; at: string}
+type Settings = {clipboardDetection:boolean;analyzeOnOpen:boolean;detectJson:boolean;detectTimestamp:boolean;detectUrl:boolean;detectJwt:boolean;neverStoreClipboard:boolean;clearAfterProcessing:boolean}
+const defaultSettings: Settings = {clipboardDetection:true,analyzeOnOpen:true,detectJson:true,detectTimestamp:true,detectUrl:true,detectJwt:true,neverStoreClipboard:true,clearAfterProcessing:false}
+const tools = [
+  {id:'json' as const,name:'JSON Workspace',description:'Format, minify, compare and inspect paths',icon:BracketsCurly,keywords:'json format minify compare schema path'},
+  {id:'time' as const,name:'Time Converter',description:'Unix, UTC, RFC3339 and ISO 8601',icon:Clock,keywords:'time timestamp date unix utc rfc iso'},
+  {id:'text' as const,name:'Text Toolkit',description:'Count, trim and normalize text',icon:TextT,keywords:'text count trim spaces lines bytes'},
+]
+const samples={json:'{"project":"DevUtils","version":1,"features":["search","clipboard","privacy"],"owner":{"team":"developer experience","active":true}}',text:'  Build tools that stay out of the way.\nShip faster, keep data local.  '}
+function loadValue<T>(key:string,fallback:T):T{try{return JSON.parse(localStorage.getItem(key)||'') as T}catch{return fallback}}
+function formatRelative(date:string){const minutes=Math.max(0,Math.round((Date.now()-new Date(date).getTime())/60000));if(minutes<1)return'just now';if(minutes<60)return`${minutes}m ago`;const hours=Math.round(minutes/60);return hours<24?`${hours}h ago`:`${Math.round(hours/24)}d ago`}
 
-function App() {
-  const [name, setName] = useState<string>('');
-  const [time, setTime] = useState<string>('Listening for Time event...');
-
-  const titleNameRef = useRef<HTMLSpanElement | null>(null);
-  const toastRef = useRef<HTMLDivElement | null>(null);
-  const resultRef = useRef<HTMLSpanElement | null>(null);
-  const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-
-  // Crossfade the framework word in the heading ("Wails + React") to the name
-  // the user entered ("Wails + <name>"): the old word fades out while the new one
-  // fades in over the same spot.
-  const swapTitleName = (name: string) => {
-    const titleNameElement = titleNameRef.current;
-    if (!titleNameElement) {
-      return;
-    }
-    const current = titleNameElement.querySelector('.title-name-text:not(.is-outgoing)');
-    if (!current || current.textContent === name) {
-      return;
-    }
-    const incoming = document.createElement('span');
-    incoming.className = 'title-name-text is-entering';
-    incoming.textContent = name;
-    current.classList.add('is-outgoing');
-    titleNameElement.appendChild(incoming);
-    // Force a reflow so the transitions run from the starting state.
-    void incoming.offsetWidth;
-    incoming.classList.remove('is-entering');
-    current.classList.add('is-leaving');
-    current.addEventListener('transitionend', () => current.remove(), {once: true});
-  };
-
-  // Pop the toast with the message Go returned, then auto-dismiss it.
-  const showToast = (message: string) => {
-    if (resultRef.current) {
-      resultRef.current.innerText = message;
-    }
-    if (toastRef.current) {
-      toastRef.current.classList.add('is-visible');
-    }
-    clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => {
-      if (toastRef.current) {
-        toastRef.current.classList.remove('is-visible');
-      }
-    }, 4000);
-  };
-
-  const doGreet = () => {
-    let n = name || 'anonymous';
-    swapTitleName(n);
-    GreetService.Greet(n).then(showToast).catch(console.error);
-  };
-
-  useEffect(() => {
-    Events.On('time', (timeValue: any) => {
-      // On a narrow screen the full RFC1123 stamp is too wide for the footer, so
-      // show just the clock time there (matching the CSS breakpoint).
-      const full = timeValue.data;
-      const compact = (full.match(/\d{1,2}:\d{2}:\d{2}/) || [full])[0];
-      setTime(window.matchMedia('(max-width: 640px)').matches ? compact : full);
-    });
-    // Reload WML so it picks up the wml tags
-    WML.Reload();
-  }, []);
-
-  return (
-    <>
-      <main className="container">
-        <header className="brand">
-          <a className="brand-mark" data-wml-openURL="https://v3.wails.io" aria-label="Wails website">
-            <img src="/wails.png" className="brand-logo" alt="Wails logo"/>
-          </a>
-          <a className="brand-badge" data-wml-openURL="https://reactjs.org" aria-label="React">
-            <img src="/react.svg" alt="React logo"/>
-          </a>
-        </header>
-
-        <h1 className="title"><span className="title-accent">Wails +</span> <span className="title-name" ref={titleNameRef}><span className="title-name-text">React</span></span></h1>
-        <p className="subtitle">Build beautiful cross-platform apps with Go and React.</p>
-
-        <div className="greet">
-          <div className="input-box">
-            <svg className="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-            <input aria-label="input" className="input" value={name} onChange={(e) => setName(e.target.value)} type="text" placeholder="Your name" autoComplete="off"/>
-            <button aria-label="greet-btn" className="btn" onClick={doGreet}>Greet
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-            </button>
-          </div>
-        </div>
-      </main>
-
-      <hr className="footer-divider"/>
-      <footer className="footer">
-        <span className="footer-version"><span>{wailsVersion}</span></span>
-        <span className="footer-time">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-          <span>{time}</span>
-        </span>
-        <a className="footer-docs" data-wml-openURL="https://v3.wails.io" aria-label="Wails documentation">Docs
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/></svg>
-        </a>
-      </footer>
-
-      <div className="toast" ref={toastRef} role="status" aria-live="polite">
-        <span className="toast-label">From Go</span>
-        <span aria-label="result" className="toast-msg" ref={resultRef}></span>
-      </div>
-    </>
-  )
+function App(){
+  const[page,setPage]=useState<Page>('home');const[query,setQuery]=useState('');const[favorites,setFavorites]=useState<ToolId[]>(()=>loadValue('devutils.favorites',['json']));const[history,setHistory]=useState<HistoryItem[]>(()=>loadValue('devutils.history',[]));const[settings,setSettings]=useState<Settings>(()=>loadValue('devutils.settings',defaultSettings));const searchRef=useRef<HTMLInputElement>(null)
+  useEffect(()=>{const onKey=(event:KeyboardEvent)=>{if((event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==='k'){event.preventDefault();setPage('home');requestAnimationFrame(()=>searchRef.current?.focus())}if(event.key==='Escape'){setQuery('');setPage('home')}};window.addEventListener('keydown',onKey);return()=>window.removeEventListener('keydown',onKey)},[])
+  useEffect(()=>Events.On('navigate',event=>setPage(event.data as Page)),[])
+  useEffect(()=>localStorage.setItem('devutils.favorites',JSON.stringify(favorites)),[favorites]);useEffect(()=>localStorage.setItem('devutils.history',JSON.stringify(history)),[history]);useEffect(()=>localStorage.setItem('devutils.settings',JSON.stringify(settings)),[settings])
+  const record=(tool:ToolId,action:string,detail:string)=>setHistory(current=>[{id:Date.now(),tool,action,detail,at:new Date().toISOString()},...current].slice(0,50));const openTool=(id:ToolId)=>{setPage(id);setQuery('')}
+  return <div className="app-shell dark">
+    <div className="titlebar" data-wails-drag><button className="wordmark" onClick={()=>setPage('home')} aria-label="DevUtils home"><span className="mark"><BracketsCurly size={14} weight="bold"/></span><span>DevUtils</span><span className="local-badge">LOCAL</span></button><nav aria-label="Application navigation"><button className={page==='history'?'active':''} onClick={()=>setPage('history')}>History</button><button className={page==='settings'?'active icon-nav':'icon-nav'} onClick={()=>setPage('settings')} aria-label="Settings"><Gear size={17}/></button></nav></div>
+    <main className="workspace">{page==='home'&&<Home query={query} setQuery={setQuery} searchRef={searchRef} favorites={favorites} history={history} openTool={openTool} toggleFavorite={id=>setFavorites(v=>v.includes(id)?v.filter(x=>x!==id):[...v,id])}/>} {page==='json'&&<JsonTool onBack={()=>setPage('home')} record={record}/>} {page==='time'&&<TimeTool onBack={()=>setPage('home')} record={record}/>} {page==='text'&&<TextTool onBack={()=>setPage('home')} record={record}/>} {page==='settings'&&<SettingsPage settings={settings} setSettings={setSettings} clearHistory={()=>setHistory([])}/>} {page==='history'&&<HistoryPage history={history} openTool={openTool} clear={()=>setHistory([])}/>}</main>
+    <footer className="statusbar"><span><span className="status-dot"/> Local processing only</span><span><kbd>{navigator.platform.includes('Mac')?'⌘':'Ctrl'}</kbd><kbd>K</kbd> Quick search</span></footer>
+  </div>
 }
 
+function Home({query,setQuery,searchRef,favorites,history,openTool,toggleFavorite}:{query:string;setQuery:(v:string)=>void;searchRef:React.RefObject<HTMLInputElement|null>;favorites:ToolId[];history:HistoryItem[];openTool:(id:ToolId)=>void;toggleFavorite:(id:ToolId)=>void}){
+  const results=useMemo(()=>{const q=query.trim().toLowerCase();return q?tools.filter(tool=>`${tool.name} ${tool.description} ${tool.keywords}`.toLowerCase().includes(q)):tools},[query])
+  return <section className="home-page"><div className="search-wrap"><MagnifyingGlass size={20}/><input ref={searchRef} autoFocus value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search tools and actions…" aria-label="Search tools"/>{query?<button className="clear-search" onClick={()=>setQuery('')} aria-label="Clear search"><X size={15}/></button>:<span className="search-shortcut">⌘ K</span>}</div>
+    {query?<ToolSection title="Results" subtitle={`${results.length} matching ${results.length===1?'tool':'tools'}`} toolsToShow={results} favorites={favorites} openTool={openTool} toggleFavorite={toggleFavorite}/>:<>{history.length>0&&<section className="recent-strip"><div className="section-heading"><span>Recent</span><span>Last actions</span></div>{history.slice(0,2).map(item=><button key={item.id} className="recent-row" onClick={()=>openTool(item.tool)}><span className="recent-icon">{item.tool==='json'?<BracketsCurly/>:item.tool==='time'?<Clock/>:<TextT/>}</span><span><strong>{item.action}</strong><small>{item.detail}</small></span><time>{formatRelative(item.at)}</time><CaretRight size={14}/></button>)}</section>}<ToolSection title="Tools" subtitle="Everything runs on this device" toolsToShow={tools} favorites={favorites} openTool={openTool} toggleFavorite={toggleFavorite}/></>}
+    {results.length===0&&<div className="empty-state"><MagnifyingGlass size={28}/><strong>No tools found</strong><span>Try “JSON”, “time”, or “text”.</span></div>}</section>
+}
+function ToolSection({title,subtitle,toolsToShow,favorites,openTool,toggleFavorite}:{title:string;subtitle:string;toolsToShow:typeof tools;favorites:ToolId[];openTool:(id:ToolId)=>void;toggleFavorite:(id:ToolId)=>void}){return <section className="tool-list"><div className="section-heading"><span>{title}</span><span>{subtitle}</span></div>{toolsToShow.map((tool,index)=><div className="tool-row" key={tool.id} style={{animationDelay:`${index*35}ms`}}><button className="tool-main" onClick={()=>openTool(tool.id)}><span className="tool-icon"><tool.icon size={21}/></span><span><strong>{tool.name}</strong><small>{tool.description}</small></span></button><button className={`favorite ${favorites.includes(tool.id)?'selected':''}`} onClick={()=>toggleFavorite(tool.id)} aria-label={`${favorites.includes(tool.id)?'Remove':'Add'} favorite`}><Heart size={16} weight={favorites.includes(tool.id)?'fill':'regular'}/></button><CaretRight className="row-caret" size={16}/></div>)}</section>}
+function ToolHeader({icon:Icon,title,subtitle,onBack}:{icon:typeof BracketsCurly;title:string;subtitle:string;onBack:()=>void}){return <header className="tool-header"><button className="back" onClick={onBack}>Tools</button><span>/</span><span className="tool-heading-icon"><Icon size={17}/></span><div><h1>{title}</h1><p>{subtitle}</p></div></header>}
+
+function JsonTool({onBack,record}:{onBack:()=>void;record:(tool:ToolId,action:string,detail:string)=>void}){
+  const[mode,setMode]=useState<JsonMode>('format');const[input,setInput]=useState(samples.json);const[compare,setCompare]=useState('{"project":"DevUtils","version":2,"features":["search","clipboard"]}');const[error,setError]=useState('');const[copied,setCopied]=useState(false);const parsed=useMemo(()=>{try{return JSON.parse(input)}catch{return null}},[input]);const output=useMemo(()=>parsed===null?'':mode==='minify'?JSON.stringify(parsed):JSON.stringify(parsed,null,2),[parsed,mode]);const stats={bytes:new TextEncoder().encode(input).length,lines:input.split('\n').length}
+  const process=()=>{try{const value=JSON.parse(input);setInput(mode==='minify'?JSON.stringify(value):JSON.stringify(value,null,2));setError('');record('json',mode==='minify'?'Minified JSON':'Formatted JSON',`${stats.bytes} bytes`)}catch(e){setError(e instanceof Error?e.message:'Invalid JSON')}};const copy=async()=>{await navigator.clipboard?.writeText(output);setCopied(true);setTimeout(()=>setCopied(false),1200)}
+  return <section className="tool-page"><ToolHeader icon={BracketsCurly} title="JSON Workspace" subtitle="Format, minify and compare structured data" onBack={onBack}/><div className="segmented" role="tablist">{(['format','minify','compare'] as JsonMode[]).map(value=><button key={value} className={mode===value?'active':''} onClick={()=>setMode(value)}>{value==='format'?'Format':value==='minify'?'Minify':'Compare'}</button>)}</div><div className={`editor-grid ${mode==='compare'?'compare':''}`}><Editor label={mode==='compare'?'Original':'Input'} value={input} onChange={setInput}/>{mode==='compare'?<Editor label="Modified" value={compare} onChange={setCompare}/>:<Editor label="Preview" value={output} readOnly/>}</div>{error?<div className="validation error"><X size={15}/><span>{error}</span></div>:parsed!==null?<div className="validation"><Check size={15} weight="bold"/><span>Valid JSON</span><span className="validation-meta">{stats.bytes.toLocaleString()} bytes · {stats.lines} lines · Root path $</span></div>:null}{mode==='compare'&&parsed!==null&&<DiffSummary left={input} right={compare}/>}<div className="tool-actions"><Button variant="primary" onPress={process}>{mode==='minify'?'Minify JSON':mode==='compare'?'Validate original':'Format JSON'}</Button>{mode!=='compare'&&<Button variant="secondary" onPress={copy}>{copied?<Check/>:<Copy/>}{copied?'Copied':'Copy output'}</Button>}</div></section>
+}
+function Editor({label,value,onChange,readOnly}:{label:string;value:string;onChange?:(v:string)=>void;readOnly?:boolean}){return <label className="editor"><span>{label}</span><textarea value={value} readOnly={readOnly} spellCheck={false} onChange={e=>onChange?.(e.target.value)}/></label>}
+function DiffSummary({left,right}:{left:string;right:string}){let text='Both documents are valid and identical.';let ok=true;try{if(JSON.stringify(JSON.parse(left))!==JSON.stringify(JSON.parse(right))){text='Documents differ. Review the modified value before using it.';ok=false}}catch{text='One or both documents contain invalid JSON.';ok=false}return <div className={`diff-summary ${ok?'':'changed'}`}><ArrowsLeftRight size={16}/><span>{text}</span></div>}
+
+function TimeTool({onBack,record}:{onBack:()=>void;record:(tool:ToolId,action:string,detail:string)=>void}){
+  const[input,setInput]=useState('1786358400');const parsed=useMemo(()=>{const raw=input.trim();if(!raw)return null;const numeric=Number(raw);const date=/^\d{10,13}$/.test(raw)?new Date(raw.length===10?numeric*1000:numeric):new Date(raw);return Number.isNaN(date.getTime())?null:date},[input]);const values=parsed?[['Local time',parsed.toLocaleString()],['UTC',parsed.toUTCString()],['RFC3339',parsed.toISOString()],['Unix seconds',Math.floor(parsed.getTime()/1000).toString()]]:[]
+  return <section className="tool-page"><ToolHeader icon={Clock} title="Time Converter" subtitle="Translate dates and timestamps without guessing formats" onBack={onBack}/><label className="field"><span>Input</span><div className="field-control"><Clock size={18}/><input value={input} onChange={e=>setInput(e.target.value)} placeholder="Timestamp or date"/></div><small>Accepts Unix seconds, milliseconds, ISO 8601 and common date strings.</small></label><div className={`detected ${parsed?'':'invalid'}`}><span>Detected</span><strong>{parsed?(/^\d{10}$/.test(input.trim())?'Unix timestamp · seconds':/^\d{13}$/.test(input.trim())?'Unix timestamp · milliseconds':'Date string'):'Unrecognized time value'}</strong></div>{parsed?<div className="conversion-list">{values.map(([label,value])=><div key={label}><span>{label}</span><code>{value}</code><button aria-label={`Copy ${label}`} onClick={()=>{navigator.clipboard?.writeText(value);record('time','Converted timestamp',label)}}><Copy size={15}/></button></div>)}</div>:<div className="empty-state compact"><Clock size={24}/><strong>Enter a valid time</strong><span>For example: 1786358400 or 2026-08-10T12:00:00Z</span></div>}</section>
+}
+function TextTool({onBack,record}:{onBack:()=>void;record:(tool:ToolId,action:string,detail:string)=>void}){
+  const[value,setValue]=useState(samples.text);const stats=useMemo(()=>({characters:[...value].length,words:value.trim()?value.trim().split(/\s+/).length:0,lines:value?value.split(/\r?\n/).length:0,bytes:new TextEncoder().encode(value).length}),[value]);const apply=(action:string,transform:(v:string)=>string)=>{setValue(transform(value));record('text',action,`${stats.characters} characters`)}
+  return <section className="tool-page"><ToolHeader icon={TextT} title="Text Toolkit" subtitle="Measure and normalize plain text" onBack={onBack}/><Editor label="Input" value={value} onChange={setValue}/><div className="stat-grid">{Object.entries(stats).map(([label,number])=><div key={label}><span>{label}</span><strong>{number.toLocaleString()}</strong></div>)}</div><div className="tool-actions wrap"><Button variant="primary" onPress={()=>apply('Trimmed text',v=>v.trim())}>Trim</Button><Button variant="secondary" onPress={()=>apply('Removed spaces',v=>v.replace(/[ \t]+/g,''))}>Remove spaces</Button><Button variant="secondary" onPress={()=>apply('Compressed whitespace',v=>v.replace(/\s+/g,' ').trim())}>Compress whitespace</Button><Button variant="tertiary" onPress={()=>{setValue('');record('text','Cleared text','Input cleared')}}><Trash/>Clear</Button></div></section>
+}
+function SettingsPage({settings,setSettings,clearHistory}:{settings:Settings;setSettings:React.Dispatch<React.SetStateAction<Settings>>;clearHistory:()=>void}){const update=(key:keyof Settings,value:boolean)=>setSettings(current=>({...current,[key]:value}));return <section className="settings-page"><header className="page-title"><h1>Settings</h1><p>Control context detection and local data.</p></header><SettingsGroup title="Clipboard" subtitle="Clipboard content is analyzed only when you ask."><Setting label="Enable clipboard detection" description="Allow DevUtils to inspect the clipboard on demand"><Switch isSelected={settings.clipboardDetection} onChange={v=>update('clipboardDetection',v)}/></Setting><Setting label="Analyze when tray opens" description="Suggest actions after opening the tray menu"><Switch isSelected={settings.analyzeOnOpen} onChange={v=>update('analyzeOnOpen',v)}/></Setting></SettingsGroup><SettingsGroup title="Supported detection" subtitle="Choose which content types are recognized.">{([['detectJson','JSON'],['detectTimestamp','Timestamp'],['detectUrl','URL'],['detectJwt','JWT']] as [keyof Settings,string][]).map(([key,label])=><Setting key={key} label={label}><Switch isSelected={settings[key]} onChange={v=>update(key,v)}/></Setting>)}</SettingsGroup><SettingsGroup title="Privacy" subtitle="Clipboard values are never written to history."><Setting label="Never store clipboard content" description="Only the tool name and action are retained"><Switch isSelected={settings.neverStoreClipboard} onChange={v=>update('neverStoreClipboard',v)}/></Setting><Setting label="Clear after processing" description="Clear the clipboard after an action completes"><Switch isSelected={settings.clearAfterProcessing} onChange={v=>update('clearAfterProcessing',v)}/></Setting><Setting label="History" description="Remove all recent activity from this device"><Button variant="danger-soft" onPress={clearHistory}>Clear history</Button></Setting></SettingsGroup></section>}
+function SettingsGroup({title,subtitle,children}:{title:string;subtitle:string;children:React.ReactNode}){return <section className="settings-group"><div><h2>{title}</h2><p>{subtitle}</p></div><div className="settings-list">{children}</div></section>}
+function Setting({label,description,children}:{label:string;description?:string;children:React.ReactNode}){return <div className="setting"><span><strong>{label}</strong>{description&&<small>{description}</small>}</span>{children}</div>}
+function HistoryPage({history,openTool,clear}:{history:HistoryItem[];openTool:(id:ToolId)=>void;clear:()=>void}){return <section className="history-page"><header className="page-title row"><div><h1>History</h1><p>Actions only. Input content is never retained.</p></div>{history.length>0&&<Button variant="tertiary" onPress={clear}><Trash/>Clear</Button>}</header>{history.length?<div className="history-list">{history.map(item=><button key={item.id} onClick={()=>openTool(item.tool)}><span className="history-tool">{item.tool==='json'?<BracketsCurly/>:item.tool==='time'?<Clock/>:<TextT/>}</span><span><strong>{item.action}</strong><small>{item.detail}</small></span><time>{formatRelative(item.at)}</time><CaretRight/></button>)}</div>:<div className="empty-state history-empty"><Hash size={28}/><strong>No activity yet</strong><span>Run a tool and its action will appear here.</span></div>}</section>}
 export default App

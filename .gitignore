@@ -11,3 +11,4 @@ build/ios/xcode/gen/
 build/android/overlay.json
 build/android/gen/
 .wails-docs
+.playwright-cli/
