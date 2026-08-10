@@ -57,9 +57,11 @@ func saveWindowState(s *windowState) {
 	_ = os.WriteFile(p, b, 0o600)
 }
 
+const appName = "DevUtils"
+
 func main() {
 	app := application.New(application.Options{
-		Name:        "DevUtils",
+		Name:        appName,
 		Description: "Local-first developer utility launcher",
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),
@@ -73,8 +75,8 @@ func main() {
 	})
 
 	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Name:             "DevUtils",
-		Title:            "DevUtils",
+		Name:             appName,
+		Title:            appName,
 		Width:            720,
 		Height:           520,
 		MinWidth:         640,
@@ -91,7 +93,7 @@ func main() {
 			// 	HideTitle:          true,
 			// 	FullSizeContent:    false,
 			// },
-			TitleBar: application.MacTitleBarHidden,
+			TitleBar: application.MacTitleBarHiddenInset,
 		},
 	})
 

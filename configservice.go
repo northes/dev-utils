@@ -53,6 +53,8 @@ func NewConfigService() *ConfigService {
 
 func (s *ConfigService) ServiceName() string { return "ConfigService" }
 
+func (s *ConfigService) GetAppName() string { return appName }
+
 func (s *ConfigService) Get() Config {
 	s.mu.Lock()
 	defer s.mu.Unlock()
