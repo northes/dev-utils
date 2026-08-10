@@ -9,8 +9,7 @@
     "nav": "应用导航"
   },
   "statusbar": {
-    "local": "仅本地处理",
-    "paletteHint": "命令面板"
+    "openPalette": "打开命令面板"
   },
   "palette": {
     "searchLabel": "搜索",
