@@ -8,7 +8,7 @@ import i18n, {SUPPORTED_LANGUAGES} from './i18n'
 import JsonTool from './components/JsonTool'
 import TimeTool from './components/TimeTool'
 import TextTool from './components/TextTool'
-import {Reveal, type Icon, type PendingAction, type ToolId} from './components/shared'
+import {parseJsonLoose, Reveal, type Icon, type PendingAction, type ToolId} from './components/shared'
 
 type Page = 'home' | 'settings' | 'history' | ToolId
 type HistoryItem = {id:number;tool:ToolId;action:string;detail:string;at:string}
@@ -42,9 +42,7 @@ function loadValue<T>(key:string,fallback:T):T{try{return JSON.parse(localStorag
 function formatRelative(date:string,t:(k:string,o?:Record<string,unknown>)=>string){const minutes=Math.max(0,Math.round((Date.now()-new Date(date).getTime())/60000));if(minutes<1)return t('timeAgo.justNow');if(minutes<60)return t('timeAgo.minutes',{count:minutes});const hours=Math.round(minutes/60);return hours<24?t('timeAgo.hours',{count:hours}):t('timeAgo.days',{count:Math.round(hours/24)})}
 function fuzzyScore(text:string,q:string):number{let m=0,score=0,streak=0,prev=-1;for(let i=0;i<q.length;i++){const idx=text.indexOf(q[i],m);if(idx<0)return -1;if(prev!==-1&&idx===prev+1){streak++;score+=3+streak*2}else{streak=0;score+=1+(idx===0?4:0)}prev=idx;m=idx+1}return score+(m===text.length?2:0)}
 function buildIndex(items:TranslatablePaletteItem[]):IndexedItem[]{return items.map(item=>{const text=(`${item.label} ${item.keywords}`).toLowerCase().replace(/\s+/g,'');let initials='';for(const c of text){if(/[\u4e00-\u9fff]/.test(c)){const s=pinyin(c,{toneType:'none',type:'array'})[0]??'';if(s)initials+=s[0]}else if(/[a-z0-9]/.test(c))initials+=c}return{...item,text,pinyin:pinyin(text,{toneType:'none',type:'array'}).join('').replace(/\s+/g,'').toLowerCase(),initials}})}
-function stripJsonComments(s:string){let out='',inStr=false,esc=false;for(let i=0;i<s.length;i++){const c=s[i];if(inStr){out+=c;if(esc)esc=false;else if(c==='\\')esc=true;else if(c==='"')inStr=false;continue}if(c==='"'){inStr=true;out+=c;continue}if(c==='/'&&s[i+1]==='/'){while(i<s.length&&s[i]!=='\n')i++;out+='\n';continue}if(c==='/'&&s[i+1]==='*'){i+=2;while(i<s.length&&!(s[i]==='*'&&s[i+1]==='/'))i++;i++;continue}out+=c}return out}
-function stripTrailingCommas(s:string){let out='',inStr=false,esc=false;for(let i=0;i<s.length;i++){const c=s[i];if(inStr){out+=c;if(esc)esc=false;else if(c==='\\')esc=true;else if(c==='"')inStr=false;continue}if(c==='"'){inStr=true;out+=c;continue}if(c===','){let j=i+1;while(j<s.length&&/\s/.test(s[j]))j++;if(s[j]==='}'||s[j]===']')continue}out+=c}return out}
-function parseJsonLoose(s:string){return JSON.parse(stripTrailingCommas(stripJsonComments(s)))}
+
 
 function App(){
   const{t,i18n}=useTranslation();const workspaceRef=useRef<HTMLElement>(null)
