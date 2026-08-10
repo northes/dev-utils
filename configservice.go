@@ -8,28 +8,24 @@ import (
 )
 
 type Config struct {
-	TrayMatchEnabled     bool   `json:"trayMatchEnabled"`
-	AutoOverwrite        bool   `json:"autoOverwrite"`
-	DetectJson           bool   `json:"detectJson"`
-	DetectTimestamp      bool   `json:"detectTimestamp"`
-	DetectUrl            bool   `json:"detectUrl"`
-	DetectJwt            bool   `json:"detectJwt"`
-	NeverStoreClipboard  bool   `json:"neverStoreClipboard"`
-	ClearAfterProcessing bool   `json:"clearAfterProcessing"`
-	Language             string `json:"language"`
+	TrayMatchEnabled bool   `json:"trayMatchEnabled"`
+	AutoOverwrite    bool   `json:"autoOverwrite"`
+	DetectJson       bool   `json:"detectJson"`
+	DetectTimestamp  bool   `json:"detectTimestamp"`
+	DetectUrl        bool   `json:"detectUrl"`
+	DetectJwt        bool   `json:"detectJwt"`
+	Language         string `json:"language"`
 }
 
 func defaultConfig() Config {
 	return Config{
-		TrayMatchEnabled:     true,
-		AutoOverwrite:        true,
-		DetectJson:           true,
-		DetectTimestamp:      true,
-		DetectUrl:            true,
-		DetectJwt:            true,
-		NeverStoreClipboard:  true,
-		ClearAfterProcessing: false,
-		Language:             "zh-CN",
+		TrayMatchEnabled: true,
+		AutoOverwrite:    true,
+		DetectJson:       true,
+		DetectTimestamp:  true,
+		DetectUrl:        true,
+		DetectJwt:        true,
+		Language:         "zh-CN",
 	}
 }
 
