@@ -32,7 +32,7 @@
   "tools": {
     "json": {
       "name": "JSON 工作区",
-      "description": "格式化、压缩、对比并检查路径"
+      "description": "格式化、压缩并检查路径"
     },
     "time": {
       "name": "时间转换器",
@@ -50,7 +50,6 @@
     "format": "格式化 JSON",
     "minify": "压缩 JSON",
     "validate": "校验 JSON",
-    "compare": "对比 JSON",
     "convert": "转换时间戳",
     "trim": "修剪文本",
     "removeSpaces": "删除空格",
@@ -67,32 +66,20 @@
   },
   "jsonTool": {
     "title": "JSON 工作区",
-    "subtitle": "格式化、压缩并对比结构化数据",
+    "subtitle": "格式化与压缩结构化数据",
+    "placeholder": "粘贴 JSON 或直接输入…",
     "format": "格式化",
     "minify": "压缩",
-    "compare": "对比",
-    "original": "原始",
-    "input": "输入",
-    "modified": "修改后",
-    "preview": "预览",
+    "copy": "复制",
     "valid": "JSON 有效",
     "bytes": "字节",
     "lines": "行",
     "rootPath": "根路径",
-    "minifyAction": "压缩 JSON",
-    "validateOriginal": "校验原始",
-    "formatAction": "格式化 JSON",
     "copied": "已复制",
-    "copyOutput": "复制输出",
     "invalid": "JSON 无效",
     "validated": "校验 JSON",
-    "compared": "对比 JSON",
-    "loadedOriginal": "已载入原始文档",
     "minified": "压缩 JSON",
-    "formatted": "格式化 JSON",
-    "diffIdentical": "两份文档均有效且相同。",
-    "diffDifferent": "文档存在差异，使用修改后的值前请先检查。",
-    "diffInvalid": "其中一份或多份文档包含无效 JSON。"
+    "formatted": "格式化 JSON"
   },
   "timeTool": {
     "title": "时间转换器",

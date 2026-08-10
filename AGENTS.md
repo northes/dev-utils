@@ -29,11 +29,13 @@ Wails v3(beta)桌面托盘应用:Go 后端 + React 19 前端。本地优先的�
 
 ## 前端约定
 
-- 所有 UI 在 `frontend/src/App.tsx`,刻意保持压缩单行风格(每个组件一行、最少空格)。不要重新格式化或美化;编辑时匹配这种紧凑风格。
+- UI 分层:根布局与状态(`App.tsx`:页面路由、侧栏、命令面板、持久化)与工具组件分离。**每个工具封装为独立组件文件** `frontend/src/components/`(如 `JsonTool.tsx`、`TimeTool.tsx`、`TextTool.tsx`),在 `App.tsx` 引入;共享 UI 原语与类型(`Reveal`/`ToolHeader`/`Editor`/`samples`/`ToolId`/`PendingAction`/`Icon`)集中在 `frontend/src/components/shared.tsx`。
+- 代码刻意保持压缩单行风格(每个组件一行、最少空格)。不要重新格式化或美化;编辑时匹配这种紧凑风格。
 - 所有样式在 `frontend/src/index.css`,使用 CSS 自定义属性(仅暗色主题:`--bg`、`--surface`、`--accent` …)。body 为 `user-select:none`。
 - HeroUI(`@heroui/react`):用 HeroUI props 而非标准 DOM — `Button` 触发 `onPress`,`Switch` 用 `isSelected` + `onChange`。使用其他 HeroUI 组件前先查阅 `frontend/.agents/skills/heroui-react/SKILL.md`。
 - 图标来自 `@phosphor-icons/react`(统一 `weight="bold"` 粗笔画)。字体用系统默认栈,`frontend/public/` 内的 Inter TTF 未引用,勿在 CSS 引入。
 - 窗口拖拽区域由 `--wails-draggable: drag/no-drag` CSS 控制(titlebar 用 `data-wails-drag`),不用 JS。
+- **工具页面扁平化,禁止圆角卡片**:不要用带边框/圆角/独立背景的卡片包裹工具内容;工具栏与状态栏用顶部/底部边框线分隔,内容直接落在页面背景上。
 - 持久化状态用 localStorage key:`devutils.favorites`、`devutils.history`、`devutils.settings`。
 - `frontend/.npmrc` 设置 `minimum-release-age=10080`(供应链策略;pnpm/bun 生效,npm 忽略)。
 
