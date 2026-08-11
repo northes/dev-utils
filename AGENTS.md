@@ -46,6 +46,7 @@ Wails v3(beta)桌面托盘应用:Go 后端 + React 19 前端。本地优先的�
 ### 页面切换与状态保留
 - 工具页**常驻挂载**,隐藏用 `position:absolute;inset:0;visibility:hidden;pointer-events:none`(不要 `display:none`)——保留布局与尺寸,避免 CodeMirror 塌陷/重测量,也保住撤销历史与滚动状态。
 - CodeMirror 的原生撤销/重做历史绑定在编辑器实例上:实例不卸载则历史天然保留。JSON 左区/路径/右区各是独立实例 → 各自独立撤销重做,聚焦哪个区就撤销哪个。**不要在切页或 schema 开关时重建编辑器。**
+- 文本工具的主输入也使用 CodeMirror,沿用其实例级原生撤销/重做;不要再为该输入接入 `Editor` textarea、`useHistory` 或手写 `onKeyDown` 撤销拦截。文本变换和外部恢复通过受控 `value` 更新,编辑器保持常驻挂载。
 - 纯 textarea/input 的浏览器原生撤销不可靠(程序化 `setValue` 后失效):用 `useHistory`(shared.tsx)自研撤销栈——600ms 窗口内键入合并成一步,工具栏/粘贴等程序化变更用 `{isolate:true}` 独立入栈;快捷键在元素 `onKeyDown` 拦截(`Mod/Ctrl+Z`、`Shift+Mod/Ctrl+Z` / `Ctrl+Y`),`event.nativeEvent.isComposing` 时放行 IME。
 - 常驻后所有工具页都会收到同一个 `pending` action,**effect 必须校验 `pending.tool === 自身 id`**,否则多个工具会互相抢走剪贴板命令。
 
@@ -56,8 +57,27 @@ Wails v3(beta)桌面托盘应用:Go 后端 + React 19 前端。本地优先的�
 
 ### 扁平化与分隔线
 - 工具页内容直接落在页面背景,不用带边框/圆角/独立背景的卡片包裹;层次用 1px 顶/底边框线表达。
+- 成组展示的统计项使用一个整体卡片:容器保留一圈细边框和小圆角,内部用 grid gap:1px 加边框色背景绘制分隔线;统计项本身不再带独立外框。避免用 :nth-child() 修补特定位置的边线。
 - 分隔线按视觉密度取舍:标题-编辑区、编辑区-底部按钮栏之间若显紧贴,直接去掉边框,不要保留多余线条。
 - 工具页标题:字号小(≈14px)、贴近左上角、与左侧 sidebar 顶沿对齐;不放副标题。开关式布局(如 JSON schema)开/关状态下边距必须一致。
+- 组件样式必须以组件根类和明确的元素类收敛(如 `.text-stat-grid`/`.text-stat-item`),不要用通用容器选择器、裸子元素选择器或 `:nth-child()` 表达组件结构。重复分隔线优先用 grid `gap:1px` + 容器背景实现,避免项目新增元素后意外改变边框。
+
+### 工具页公共布局
+- 所有工具页(JSON、时间、文本、Base64 及后续新增工具)必须使用 `shared.tsx` 的 `ToolLayout`,禁止在工具组件里自行创建 `.tool-page` 外壳或重复实现 header/content/footer 布局。
+- `ToolLayout` 固定为三行网格:`header auto / content minmax(0,1fr) / footer auto`;header 始终在顶部,content 必须占满所有剩余空间,footer 始终在底部。这里的“固定”是网格布局位置固定,禁止用 `position:fixed/sticky/absolute` 叠加页面内容。
+- 工具对应的 `Reveal` 必须启用 `fill`,`.tool-slot` 必须占满 workspace 高度;高度链上的每一层都要有 `height:100%`/`min-height:0`,否则 `1fr` 无法正确收缩,CodeMirror 也会测量错误。
+- content 默认使用自身滚动(`contentMode="scroll"`),页面 footer 不随内容滚动;CodeMirror 等必须吃满可用高度且自行管理内部滚动的工具使用 `contentMode="fixed"`。不要恢复 workspace 级工具页滚动。
+- content 内需要铺满剩余高度的主编辑区继续使用 `height:100%`、`min-height:0` 与 `minmax(0,1fr)`,禁止写死编辑区像素高度。响应式切换分栏方向时同时切换 grid rows:宽屏左右分栏共用一行,窄屏上下分栏平分可用高度。
+- `ToolLayout` 负责渲染唯一的语义化 footer;`ToolActionBar` 只是 footer 内的 `role="toolbar"` 操作组,禁止嵌套 `<footer>`。没有底部动作的工具也使用同一布局并保留空 footer 行。
+- JSON Schema 等存在多个动作作用域时,content 仍只放编辑内容,各作用域的 `ToolActionBar` 在 `ToolLayout.footer` 中用与 content 一致的网格对齐;不要把按钮重新塞回 content。
+
+### 工具底部操作栏
+- JSON、文本、Base64 等工具的底部操作统一使用 `shared.tsx` 的 `ToolActionBar`,禁止各工具自行拼装 `.tool-actions` 或重复定义按钮尺寸、间距和对齐方式。
+- 操作栏在 `ToolLayout.footer` 内整体右对齐:仅作用于单个编辑器的动作在 footer 中按对应 content 列对齐(JSON Schema 左右编辑器各自一组),页面级动作使用单组操作栏。不要为了视觉统一混淆动作作用域。
+- 操作顺序固定为「dismissive/清空 → secondary → primary」,主操作位于最右侧;每个作用域最多一个 `primary`,可以没有 `primary`。窄窗口允许从右侧自然换行,不能压扁按钮。
+- 语义层级统一:推进核心结果的动作使用 `primary`(如 JSON 格式化、Base64 复制结果),替代变换与普通工具动作使用 `secondary`,清空编辑内容使用 `tertiary`;只有不可恢复的破坏性操作才使用 `danger` 并二次确认。
+- 操作栏保持扁平,不加卡片、独立背景或阴影;标准为按钮高 30px、间距 6px、上边距 12px、字号 11px、图标 14px,具体样式只在 `index.css` 的 `.tool-action-bar` 中维护。
+- 变换类动作默认只显示文字;复制、保存、清空等通用动作使用 Phosphor duotone 图标。复制成功统一短暂切换为 `Check` +「已复制」,空内容对应动作使用 `isDisabled`,不要通过隐藏按钮造成布局跳动。
 
 ### CodeMirror 与 JSON
 - CodeMirror 基础主题给聚焦编辑器 `outline:1px dotted`(虚线);统一加 `.cm-editor.cm-focused{outline:none}`,用容器 `:focus-within` 实线边框表示聚焦,否则 `overflow:visible` 的编辑器会露出虚线。
