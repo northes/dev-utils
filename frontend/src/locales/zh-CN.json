@@ -30,7 +30,8 @@
     "tools": "工具",
     "json": "JSON 命令",
     "time": "时间命令",
-    "text": "文本命令"
+    "text": "文本命令",
+    "base64": "Base64 命令"
   },
   "tools": {
     "json": {
@@ -44,12 +45,16 @@
     "text": {
       "name": "文本工具集",
       "description": "统计、修剪与规范化文本"
-    }
+    },
+    "base64": {"name":"Base64 编解码","description":"文本与图片的 Base64 转换"}
   },
   "commands": {
     "openJson": "打开 JSON 工具",
     "openTime": "打开时间转换",
     "openText": "打开文本工具",
+    "openBase64": "打开 Base64 工具",
+    "base64Encode": "Base64 编码",
+    "base64Decode": "Base64 解码",
     "format": "格式化 JSON",
     "minify": "压缩 JSON",
     "validate": "校验 JSON",
@@ -151,6 +156,7 @@
     "copied": "复制统计项",
     "subtitle": "测量与规范化纯文本"
   },
+  "base64Tool": {"title":"Base64 编解码","subtitle":"自动识别文本、图片与文件","input":"文本输入","fileInput":"文件输入","output":"文本结果","imageOutput":"图片结果","fileOutput":"文件结果","text":"文本","image":"图片","file":"文件","copy":"复制结果","clear":"清空","chooseFile":"选择文件","fileHint":"拖入、粘贴或选择文件","detected":"识别结果","encoded":"Base64 编码","invalid":"无法转换内容","tooLarge":"文件超过 {{size}} 上限","binaryFile":"检测到二进制文件","save":"保存","saveTitle":"保存解码文件","saved":"已保存 {{name}}","saveFailed":"保存文件失败"},
   "settings": {
  "title": "设置",
  "subtitle": "控制上下文检测与本地数据。",
@@ -181,7 +187,7 @@
   },
   "history": {
     "title": "历史记录",
-    "subtitle": "仅操作记录，不保留输入内容。",
+    "subtitle": "完整内容保存在本机；大内容按需加载。",
     "clear": "清空",
     "emptyTitle": "暂无活动",
     "emptyHint": "运行工具后，其操作会显示在这里。"
@@ -190,14 +196,16 @@
     "json": "JSON",
     "timestamp": "时间戳",
     "url": "URL",
-    "jwt": "JWT"
+    "jwt": "JWT",
+    "base64": "Base64（严格匹配）"
   },
   "toast": {
     "region": "通知",
     "close": "关闭通知",
     "clipboardEmpty": "剪贴板内容为空",
     "clipboardEmptyDesc": "请先复制内容后再执行该命令",
-    "copied": "已复制 {{value}}"
+    "copied": "已复制 {{value}}",
+    "historyFailed": "历史记录操作失败"
   },
   "matchDialog": {
     "title": "匹配到内容",

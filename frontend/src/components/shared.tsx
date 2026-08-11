@@ -2,8 +2,8 @@ import {useEffect, useRef, useState} from 'react'
 import {Switch} from '@heroui/react'
 import {BracketsCurly} from '@phosphor-icons/react'
 
-export type ToolId = 'json' | 'time' | 'text'
-export type PendingAction = {tool:ToolId;action:string;input:string}
+export type ToolId = 'json' | 'time' | 'text' | 'base64'
+export type PendingAction = {tool:ToolId;action:string;input:string;output?:string;mode?:string}
 export type Icon = typeof BracketsCurly
 export function stripJsonComments(s:string){let out='',inStr=false,esc=false;for(let i=0;i<s.length;i++){const c=s[i];if(inStr){out+=c;if(esc)esc=false;else if(c==='\\')esc=true;else if(c==='"')inStr=false;continue}if(c==='"'){inStr=true;out+=c;continue}if(c==='/'&&s[i+1]==='/'){while(i<s.length&&s[i]!=='\n')i++;out+='\n';continue}if(c==='/'&&s[i+1]==='*'){i+=2;while(i<s.length&&!(s[i]==='*'&&s[i+1]==='/'))i++;i++;continue}out+=c}return out}
 export function stripTrailingCommas(s:string){let out='',inStr=false,esc=false;for(let i=0;i<s.length;i++){const c=s[i];if(inStr){out+=c;if(esc)esc=false;else if(c==='\\')esc=true;else if(c==='"')inStr=false;continue}if(c==='"'){inStr=true;out+=c;continue}if(c===','){let j=i+1;while(j<s.length&&/\s/.test(s[j]))j++;if(s[j]==='}'||s[j]===']')continue}out+=c}return out}

@@ -30,7 +30,8 @@
     "tools": "Tools",
     "json": "JSON commands",
     "time": "Time commands",
-    "text": "Text commands"
+    "text": "Text commands",
+    "base64": "Base64 commands"
   },
   "tools": {
     "json": {
@@ -44,12 +45,16 @@
     "text": {
       "name": "Text Toolkit",
       "description": "Count, trim and normalize text"
-    }
+    },
+    "base64": {"name":"Base64","description":"Convert Base64 text and images"}
   },
   "commands": {
     "openJson": "Open JSON tool",
     "openTime": "Open time converter",
     "openText": "Open text tool",
+    "openBase64": "Open Base64",
+    "base64Encode": "Base64 encode",
+    "base64Decode": "Base64 decode",
     "format": "Format JSON",
     "minify": "Minify JSON",
     "validate": "Validate JSON",
@@ -151,6 +156,7 @@
     "copied": "Copy statistic",
     "subtitle": "Measure and normalize plain text"
   },
+  "base64Tool": {"title":"Base64","subtitle":"Automatically recognizes text, images, and files","input":"Text input","fileInput":"File input","output":"Text result","imageOutput":"Image result","fileOutput":"File result","text":"Text","image":"Image","file":"File","copy":"Copy result","clear":"Clear","chooseFile":"Choose file","fileHint":"Drop, paste, or choose a file","detected":"Detected","encoded":"Base64 encoded","invalid":"Unable to convert content","tooLarge":"File exceeds the {{size}} limit","binaryFile":"Binary file detected","save":"Save","saveTitle":"Save decoded file","saved":"Saved {{name}}","saveFailed":"Failed to save file"},
   "settings": {
     "title": "Settings",
     "subtitle": "Control context detection and local data.",
@@ -181,7 +187,7 @@
   },
   "history": {
     "title": "History",
-    "subtitle": "Only records actions, does not store input content.",
+    "subtitle": "Content is stored on this device and large entries load on demand.",
     "clear": "Clear",
     "emptyTitle": "No activity yet",
     "emptyHint": "After you run a tool, its actions will show here."
@@ -190,14 +196,16 @@
     "json": "JSON",
     "timestamp": "Timestamp",
     "url": "URL",
-    "jwt": "JWT"
+    "jwt": "JWT",
+    "base64": "Base64 (strict match)"
   },
   "toast": {
     "region": "Notifications",
     "close": "Close notification",
     "clipboardEmpty": "Clipboard is empty",
     "clipboardEmptyDesc": "Copy some content before running this command",
-    "copied": "Copied {{value}}"
+    "copied": "Copied {{value}}",
+    "historyFailed": "History operation failed"
   },
   "matchDialog": {
     "title": "Content matched",
