@@ -35,6 +35,7 @@ Wails v3(beta)桌面托盘应用:Go 后端 + React 19 前端。本地优先的�
 - 所有样式在 `frontend/src/index.css`,使用 CSS 自定义属性(仅暗色主题:`--bg`、`--surface`、`--accent` …)。body 为 `user-select:none`。
 - HeroUI(`@heroui/react`):用 HeroUI props 而非标准 DOM — `Button` 触发 `onPress`,`Switch` 用 `isSelected` + `onChange`。使用其他 HeroUI 组件前先查阅 `frontend/.agents/skills/heroui-react/SKILL.md`。
 - 图标来自 `@phosphor-icons/react`,统一 `weight="duotone"` 双色风格(收藏等状态区分除外,如 Heart 选中态用 `fill`)。字体用系统默认栈,`frontend/public/` 内的 Inter TTF 未引用,勿在 CSS 引入。
+- 图标按钮位于 flex 布局(尤其输入框右侧操作区)时,必须显式设置相等的 `width` 与 `min-width`、`flex:none`/`flex-shrink:0`，并按需要清除横向 padding；否则长输入或窄窗口会把按钮左右压扁。
 - 窗口拖拽区域由 `--wails-draggable: drag/no-drag` CSS 控制(titlebar 用 `data-wails-drag`),不用 JS。
 - **工具页面扁平化,禁止圆角卡片**:不要用带边框/圆角/独立背景的卡片包裹工具内容;内容直接落在页面背景上,层次用 1px 顶/底边框线表达,并按视觉密度取舍(标题-编辑区、编辑区-底部按钮栏之间若显紧贴就去掉边框)。
 - 持久化状态用 localStorage key:`devutils.favorites`、`devutils.history`(设置页配置由 Go `ConfigService` 管理,不走 localStorage)。
