@@ -99,7 +99,10 @@
     "input": "输入",
     "placeholder": "时间戳或日期",
     "refresh": "插入当前时间戳",
-    "hint": "支持 Unix 秒、毫秒、ISO 8601 及常见日期字符串。",
+    "timezone": "解析时区",
+    "timezonePlaceholder": "搜索时区",
+    "useSystemTimezone": "使用本机时区",
+    "hint": "支持 Unix、ISO 8601、中英文日期及常见年月日格式。无年份时使用当前年份。",
     "detected": "检测到",
     "unixSec": "Unix 时间戳 · 秒",
     "unixMs": "Unix 时间戳 · 毫秒",
@@ -113,7 +116,7 @@
     "copy": "复制 {{label}}",
     "converted": "转换时间戳",
     "emptyTitle": "请输入有效时间",
-    "emptyHint": "例如：1786358400 或 2026-08-10T12:00:00Z",
+    "emptyHint": "例如：1786358400、08/07 13:54:10 或 2026-08-10T12:00:00Z",
     "subtitle": "无需猜测格式即可转换日期与时间戳"
   },
   "textTool": {
@@ -129,9 +132,16 @@
     "cleared": "清空文本",
     "count": "统计文本",
     "characters": "字符",
+    "chinese": "中文字符",
+    "english": "英文字符",
+    "digits": "数字字符",
     "words": "单词",
+    "punctuation": "标点数",
     "lines": "行",
     "bytes": "字节",
+    "showDetails": "查看{{label}}明细",
+    "detailTitle": "{{label}}明细",
+    "noDetails": "暂无内容",
     "subtitle": "测量与规范化纯文本"
   },
   "settings": {

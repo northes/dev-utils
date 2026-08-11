@@ -9,6 +9,7 @@ import JsonTool from './components/JsonTool'
 import TimeTool from './components/TimeTool'
 import TextTool from './components/TextTool'
 import {parseJsonLoose, Reveal, type Icon, type PendingAction, type ToolId} from './components/shared'
+import {parseTimeInput} from './utils/time'
 import {AppToastProvider, toast} from './components/AppToast'
 import {Get as GetConfig, GetHistory, Save as SaveConfig, SaveHistory} from '../bindings/changeme/configservice'
 import type {Config as Settings, HistoryItem as StoredHistoryItem} from '../bindings/changeme/models'
@@ -66,7 +67,7 @@ function App(){
   const indexed=useMemo(()=>buildIndex(paletteItems.map(item=>({...item,label:t(item.labelKey),group:t(item.groupKey)}))),[t])
   const record=(tool:ToolId,action:string,detail:string,input:string)=>setHistory(current=>[{id:Date.now(),tool,action,detail:normalizeHistoryDetail(detail),input,at:new Date().toISOString()},...current].slice(0,50));const openTool=(id:ToolId,input?:string)=>{setPage(id);setPending(input===undefined?null:{tool:id,action:'restore',input})};const cycleSidebar=()=>setSettings(s=>({...s,sidebarMode:s.sidebarMode==='full'?'icon':s.sidebarMode==='icon'?'hidden':'full'}))
   const run=(item:IndexedItem)=>{setPaletteOpen(false);if(!item.tool){setPending(null);setPage(item.page??'home');return}const tool=item.tool;const action=item.action??'open';const needsInput=!!item.needsInput;const apply=async()=>{let input='';if(needsInput){input=(await Clipboard.Text().catch(()=>''))||'';if(!input.trim()){setPending(null);setPage(tool);toast(t('toast.clipboardEmpty'),{description:t('toast.clipboardEmptyDesc'),variant:'warning'});return}}setPending({tool,action,input});setPage(tool)};apply()}
-  const analyzeClipboard=async()=>{if(!settings.trayMatchEnabled)return;const text=(await Clipboard.Text().catch(()=>''))||'';const s=text.trim();if(!s)return;let tool:ToolId|null=null;if(settings.detectJson){try{parseJsonLoose(s);tool='json'}catch{}}if(!tool&&settings.detectTimestamp&&(/^\d{10,13}$/.test(s)||(/[\s\-/:T]/.test(s)&&!Number.isNaN(new Date(s).getTime()))))tool='time';if(!tool&&settings.detectJwt&&/^eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(s))tool='text';if(!tool&&settings.detectUrl&&/^[a-z][a-z0-9+.-]*:\/\/\S+/i.test(s))tool='text';if(tool){if(settings.autoOverwrite){setPending({tool,action:'open',input:text});setPage(tool)}else setMatchDialog({tool,input:text})}}
+  const analyzeClipboard=async()=>{if(!settings.trayMatchEnabled)return;const text=(await Clipboard.Text().catch(()=>''))||'';const s=text.trim();if(!s)return;let tool:ToolId|null=null;if(settings.detectJson){try{parseJsonLoose(s);tool='json'}catch{}}if(!tool&&settings.detectTimestamp&&parseTimeInput(s))tool='time';if(!tool&&settings.detectJwt&&/^eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(s))tool='text';if(!tool&&settings.detectUrl&&/^[a-z][a-z0-9+.-]*:\/\/\S+/i.test(s))tool='text';if(tool){if(settings.autoOverwrite){setPending({tool,action:'open',input:text});setPage(tool)}else setMatchDialog({tool,input:text})}}
   return <>
     <AppToastProvider/>
     <div className="app-shell">
