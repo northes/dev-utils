@@ -39,7 +39,8 @@ const paletteItems: PaletteItem[] = [
   {id:'time:convert',labelKey:'commands.convert',groupKey:'groups.time',icon:Clock,keywords:'timestamp convert unix seconds 时间戳 转换',tool:'time',action:'convert',needsInput:true},
   {id:'text:trim',labelKey:'commands.trim',groupKey:'groups.text',icon:TextT,keywords:'trim whitespace 修剪 去除首尾空白',tool:'text',action:'trim',needsInput:true},
   {id:'text:removeSpaces',labelKey:'commands.removeSpaces',groupKey:'groups.text',icon:TextT,keywords:'remove spaces 删除 空格',tool:'text',action:'removeSpaces',needsInput:true},
-  {id:'text:compress',labelKey:'commands.compress',groupKey:'groups.text',icon:TextT,keywords:'compress whitespace collapse 压缩 合并空白',tool:'text',action:'compress',needsInput:true},
+  {id:'text:compress',labelKey:'commands.compress',groupKey:'groups.text',icon:TextT,keywords:'compress spaces collapse 修剪 空格',tool:'text',action:'compress',needsInput:true},
+  {id:'text:compressLine',labelKey:'commands.compressLine',groupKey:'groups.text',icon:TextT,keywords:'line newline one line 压缩 换行 一行',tool:'text',action:'compressLine',needsInput:true},
   {id:'text:count',labelKey:'commands.count',groupKey:'groups.text',icon:TextT,keywords:'count characters words lines 统计 字数 行数 字节',tool:'text',action:'count',needsInput:true},
 ]
 function loadValue<T>(key:string,fallback:T):T{try{return JSON.parse(localStorage.getItem(key)||'') as T}catch{return fallback}}
