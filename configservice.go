@@ -15,16 +15,17 @@ import (
 )
 
 type Config struct {
-	TrayMatchEnabled bool   `json:"trayMatchEnabled"`
-	AutoOverwrite    bool   `json:"autoOverwrite"`
-	DetectJson       bool   `json:"detectJson"`
-	DetectTimestamp  bool   `json:"detectTimestamp"`
-	DetectUrl        bool   `json:"detectUrl"`
-	DetectJwt        bool   `json:"detectJwt"`
-	DetectBase64     bool   `json:"detectBase64"`
-	Language         string `json:"language"`
-	SidebarMode      string `json:"sidebarMode"`
-	Theme            string `json:"theme"`
+	TrayMatchEnabled  bool   `json:"trayMatchEnabled"`
+	AutoOverwrite     bool   `json:"autoOverwrite"`
+	DetectJson        bool   `json:"detectJson"`
+	DetectTimestamp   bool   `json:"detectTimestamp"`
+	DetectUrl         bool   `json:"detectUrl"`
+	DetectJwt         bool   `json:"detectJwt"`
+	DetectBase64      bool   `json:"detectBase64"`
+	Language          string `json:"language"`
+	SidebarMode       string `json:"sidebarMode"`
+	Theme             string `json:"theme"`
+	DiffHighlightMode string `json:"diffHighlightMode"`
 }
 type HistoryItem struct {
 	ID        int64  `json:"id"`
@@ -58,7 +59,15 @@ type historyStored struct {
 }
 
 func defaultConfig() Config {
-	return Config{TrayMatchEnabled: true, AutoOverwrite: true, DetectJson: true, DetectTimestamp: true, DetectUrl: true, DetectJwt: true, DetectBase64: true, Language: "zh-CN", SidebarMode: "full", Theme: "dark"}
+	return Config{TrayMatchEnabled: true, AutoOverwrite: true, DetectJson: true, DetectTimestamp: true, DetectUrl: true, DetectJwt: true, DetectBase64: true, Language: "zh-CN", SidebarMode: "full", Theme: "dark", DiffHighlightMode: "word-alt"}
+}
+func normalizeConfig(cfg Config) Config {
+	switch cfg.DiffHighlightMode {
+	case "word-alt", "word", "character", "none":
+	default:
+		cfg.DiffHighlightMode = "word-alt"
+	}
+	return cfg
 }
 func appDataDir() string {
 	if dir, err := os.UserConfigDir(); err == nil {
@@ -85,6 +94,7 @@ func NewConfigService() *ConfigService {
 	if b, err := os.ReadFile(path); err == nil {
 		_ = json.Unmarshal(b, &cfg)
 	}
+	cfg = normalizeConfig(cfg)
 	s := &ConfigService{path: path, historyPath: historyPath(), historyDir: historyDataDir(), cfg: cfg}
 	if b, err := os.ReadFile(s.historyPath); err == nil {
 		_ = json.Unmarshal(b, &s.history)
@@ -95,6 +105,7 @@ func (s *ConfigService) ServiceName() string { return "ConfigService" }
 func (s *ConfigService) GetAppName() string  { return appName }
 func (s *ConfigService) Get() Config         { s.mu.Lock(); defer s.mu.Unlock(); return s.cfg }
 func (s *ConfigService) Save(cfg Config) {
+	cfg = normalizeConfig(cfg)
 	s.mu.Lock()
 	s.cfg = cfg
 	path := s.path
