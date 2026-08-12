@@ -42,8 +42,9 @@ Wails v3(beta)桌面托盘应用:Go 后端 + React 19 前端。本地优先的�
 - `frontend/.npmrc` 设置 `minimum-release-age=10080`(供应链策略;pnpm/bun 生效,npm 忽略)。
 
 ### 命令面板(`paletteItems` / `CommandPalette`)
-- item 由 `id`/`labelKey`/`groupKey`/`subgroupKey?`/`icon`/`keywords`/`tool?`/`action?`/`mode?`/`target?`/`needsInput?` 构成,定义在 `App.tsx`;索引 `buildIndex` 把 label + group + subgroup + keywords 一并纳入(含拼音/首字母),搜索「剪贴板」「大小写」等子分组词也要命中。
+- item 由 `id`/`labelKey`/`groupKey`/`subgroupKey?`/`icon`/`keywords`/`tool?`/`action?`/`mode?`/`target?`/`needsInput?`/`whenSortOpen?` 构成,定义在 `App.tsx`;索引 `buildIndex` 把 label + group + subgroup + keywords 一并纳入(含拼音/首字母),搜索「剪贴板」「大小写」等子分组词也要命中。
 - **命令名必须与工具界面按钮文案完全一致**:`labelKey` 直接复用工具组件的 locale key(如 `jsonTool.copy`、`textTool.caseModes.upper`),禁止另造带工具名的文案(不要写成「复制 JSON」)。
+- **切换/开关型命令例外**:面板/模式开关类命令(如 JSON 的 Schema、排序规则)在命令面板中命名为「切换 xxx」/「Toggle xxx」——`labelKey` 用独立的 `commands.toggleXxx` key(如 `commands.toggleSchema`、`commands.toggleSortRules`),不直接复用工具按钮文案;工具界面按钮文案保持「Schema」「排序规则」不变,中英文均按此规则。
 - 右侧归属为两级:**`工具名 - 子分组`**(如「差异对比 - 剪贴板填入」);子分组通过 `subgroupKey` 表达(如 `diffTool.clipboardTarget`、`textTool.case`),无子分组的命令只显示工具名。
 - **命令必须与界面功能一一对应**:界面不存在对应按钮/功能(如 Base64 编码/解码、JSON 校验、时间转换——这些是自动/实时行为,无按钮)的命令不要保留在 `paletteItems`。
 - 列表排序组优先于匹配分数:当前工具的功能(`tool===当前页`) → 打开其他工具/导航(`page` 存在) → 其他工具的功能;组内再按分数。`CommandPalette` 接收 `page` prop 判定。
