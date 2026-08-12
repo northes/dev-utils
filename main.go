@@ -83,6 +83,9 @@ func main() {
 			ActivationPolicy: application.ActivationPolicyAccessory,
 		},
 	})
+	app.Event.On("log", func(e *application.CustomEvent) {
+		log.Printf("[frontend] %v", e.Data)
+	})
 
 	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:             appName,
