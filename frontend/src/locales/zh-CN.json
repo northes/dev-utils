@@ -6,6 +6,8 @@
     "home": "首页",
     "history": "历史记录",
     "settings": "设置",
+    "back": "后退",
+    "forward": "前进",
     "nav": "系统设置"
   },
   "sidebar": {

@@ -107,6 +107,9 @@ func main() {
 			// 	FullSizeContent:    false,
 			// },
 			TitleBar: application.MacTitleBarHiddenInset,
+			WebviewPreferences: application.MacWebviewPreferences{
+				AllowsBackForwardNavigationGestures: application.Enabled,
+			},
 		},
 	})
 
