@@ -139,6 +139,8 @@
     "title": "文本工具集",
     "actions": "文本操作",
     "input": "输入",
+    "case": "大小写",
+    "caseModes": {"upper":"全部大写","lower":"全部小写","lineUpper":"行首大写","lineLower":"行首小写","wordUpper":"词首大写","wordLower":"词首小写"},
     "trim": "修剪首末空白",
     "removeSpaces": "移除空格",
     "compressSpaces": "修剪空格",
@@ -168,7 +170,7 @@
     "subtitle": "测量与规范化纯文本"
   },
   "base64Tool": {"title":"Base64 编解码","subtitle":"自动识别文本、图片与文件","actions":"Base64 操作","input":"文本输入","fileInput":"文件输入","output":"文本结果","imageOutput":"图片结果","fileOutput":"文件结果","text":"文本","image":"图片","file":"文件","copy":"复制结果","copied":"已复制","clear":"清空","chooseFile":"选择文件","fileHint":"拖入、粘贴或选择文件","detected":"识别结果","encoded":"Base64 编码","invalid":"无法转换内容","tooLarge":"文件超过 {{size}} 上限","binaryFile":"检测到二进制文件","save":"保存","saveTitle":"保存解码文件","saved":"已保存 {{name}}","saveFailed":"保存文件失败"},
-  "diffTool": {"title":"差异对比","actions":"差异对比操作","before":"原始内容","after":"修改后","clear":"清空","swap":"交换内容","sample":"写入示例","highlightMode":"高亮范围","modes":{"word-alt":"Word-Alt","word":"Word","character":"Character","none":"None"}},
+  "diffTool": {"title":"差异对比","actions":"差异对比操作","before":"原始内容","after":"修改后","clear":"清空","swap":"交换内容","sample":"写入示例","clipboardTarget":"剪贴板填入","targets":{"alternate":"交替填入","before":"总是原始内容","after":"总是修改后"},"filled":{"before":"已填入原始内容","after":"已填入修改后"},"highlightMode":"高亮范围","modes":{"word-alt":"按词交替","word":"按词","character":"按字符","none":"关闭"}},
   "settings": {
  "title": "设置",
  "subtitle": "控制上下文检测与本地数据。",
@@ -189,9 +191,7 @@
     "trayMatchDesc": "点击托盘图标时自动匹配剪贴板内容",
     "autoOverwrite": "自动覆盖",
     "autoOverwriteDesc": "匹配后自动填入对应工具；关闭时每次询问",
-    "detection": "支持的检测类型",
-    "detectionSubtitle": "选择可识别的内容类型。",
-    "privacy": "隐私",
+    "editor":"代码编辑器","editorSubtitle":"调整所有代码编辑器的显示。","editorFontSize":"字体大小","privacy": "隐私",
     "privacySubtitle": "管理本机历史记录。",
     "history": "历史记录",
     "historyDesc": "清除本机所有最近活动",
@@ -221,7 +221,8 @@
   },
   "matchDialog": {
     "title": "匹配到内容",
-    "body": "剪贴板匹配到 {{tool}}，是否填入？",
+    "bodyPrefix": "剪贴板匹配到 ",
+    "bodySuffix": "，是否填入？",
     "confirm": "填入",
     "cancel": "取消"
   },

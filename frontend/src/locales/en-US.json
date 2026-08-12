@@ -139,6 +139,8 @@
     "title": "Text Toolkit",
     "actions": "Text actions",
     "input": "Input",
+    "case": "Case",
+    "caseModes": {"upper":"UPPERCASE","lower":"lowercase","lineUpper":"Sentence case","lineLower":"sentence case","wordUpper":"Title Case","wordLower":"camel case"},
     "trim": "Trim leading and trailing whitespace",
     "removeSpaces": "Remove spaces",
     "compressSpaces": "Trim spaces",
@@ -168,7 +170,7 @@
     "subtitle": "Measure and normalize plain text"
   },
   "base64Tool": {"title":"Base64","subtitle":"Automatically recognizes text, images, and files","actions":"Base64 actions","input":"Text input","fileInput":"File input","output":"Text result","imageOutput":"Image result","fileOutput":"File result","text":"Text","image":"Image","file":"File","copy":"Copy result","copied":"Copied","clear":"Clear","chooseFile":"Choose file","fileHint":"Drop, paste, or choose a file","detected":"Detected","encoded":"Base64 encoded","invalid":"Unable to convert content","tooLarge":"File exceeds {{size}}","binaryFile":"Binary file detected","save":"Save","saveTitle":"Save decoded file","saved":"Saved {{name}}","saveFailed":"Failed to save file"},
-  "diffTool": {"title":"Diff Compare","actions":"Diff compare actions","before":"Original","after":"Modified","clear":"Clear","swap":"Swap","sample":"Write sample","highlightMode":"Highlight scope","modes":{"word-alt":"Word-Alt","word":"Word","character":"Character","none":"None"}},
+  "diffTool": {"title":"Diff Compare","actions":"Diff compare actions","before":"Original","after":"Modified","clear":"Clear","swap":"Swap","sample":"Write sample","clipboardTarget":"Clipboard target","targets":{"alternate":"Alternate","before":"Always original","after":"Always modified"},"filled":{"before":"Filled original","after":"Filled modified"},"highlightMode":"Highlight scope","modes":{"word-alt":"Word-Alt","word":"Word","character":"Character","none":"None"}},
   "settings": {
     "title": "Settings",
     "subtitle": "Control context detection and local data.",
@@ -189,9 +191,7 @@
     "trayMatchDesc": "Automatically match clipboard content when clicking the tray icon",
     "autoOverwrite": "Auto overwrite",
     "autoOverwriteDesc": "Fill the matching tool automatically after matching; ask each time when off",
-    "detection": "Supported detection types",
-    "detectionSubtitle": "Choose recognizable content types.",
-    "privacy": "Privacy",
+    "editor":"Code editor","editorSubtitle":"Adjust all code editors.","editorFontSize":"Font size","privacy": "Privacy",
     "privacySubtitle": "Manage local history.",
     "history": "History",
     "historyDesc": "Clear all recent activity on this device",
