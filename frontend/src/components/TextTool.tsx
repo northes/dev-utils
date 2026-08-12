@@ -72,8 +72,11 @@ export default function TextTool({active, theme, record, pending, clearPending}:
         if (!pending || pending.tool !== 'text' || consumed.current === pending) return;
         consumed.current = pending;
         clearPending();
-        setValue(pending.input);
-        if (pending.action === 'restore') return;
+        if (pending.action === 'clear') {
+            setValue('');
+            record('text', t('textTool.cleared'), t('textTool.cleared'), '');
+            return
+        }
         const labels: Record<string, string> = {
             trim: t('textTool.trimmed'),
             removeSpaces: t('textTool.removedSpaces'),
@@ -102,10 +105,12 @@ export default function TextTool({active, theme, record, pending, clearPending}:
         };
         const transform = transforms[pending.action];
         if (transform) {
-            const next = transform(pending.input);
-            if (next !== pending.input) setValue(next);
-            record('text', labels[pending.action] ?? pending.action, `${[...next].length} ${t('textTool.characters')}`, next)
+            const next = transform(value);
+            if (next !== value) setValue(next);
+            record('text', labels[pending.action] ?? pending.action, `${[...next].length} ${t('textTool.characters')}`, next);
+            return
         }
+        setValue(pending.input)
     }, [pending])
     return <Reveal index={0} fill active={active}><ToolLayout title={t('textTool.title')} desc={t('textTool.subtitle')}
                                                               className="text-page"
