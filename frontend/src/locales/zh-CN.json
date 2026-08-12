@@ -63,12 +63,19 @@
     "format": "格式化 JSON",
     "minify": "压缩 JSON",
     "validate": "校验 JSON",
+    "copyJson": "复制 JSON",
+    "sortJsonAsc": "按 key 排序（升序）",
+    "sortJsonDesc": "按 key 排序（降序）",
     "convert": "转换时间戳",
     "trim": "修剪首末空白",
     "removeSpaces": "移除空格",
     "compress": "修剪空格",
     "compressLine": "压缩为一行",
-    "count": "统计文本"
+    "count": "统计文本",
+    "toUpper": "转换为大写",
+    "toLower": "转换为小写",
+    "diffSwap": "交换对比内容",
+    "diffClear": "清空对比内容"
   },
   "home": {
     "recent": "最近使用",
