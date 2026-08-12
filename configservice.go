@@ -17,15 +17,12 @@ import (
 type Config struct {
 	TrayMatchEnabled  bool   `json:"trayMatchEnabled"`
 	AutoOverwrite     bool   `json:"autoOverwrite"`
-	DetectJson        bool   `json:"detectJson"`
-	DetectTimestamp   bool   `json:"detectTimestamp"`
-	DetectUrl         bool   `json:"detectUrl"`
-	DetectJwt         bool   `json:"detectJwt"`
-	DetectBase64      bool   `json:"detectBase64"`
 	Language          string `json:"language"`
 	SidebarMode       string `json:"sidebarMode"`
 	Theme             string `json:"theme"`
 	DiffHighlightMode string `json:"diffHighlightMode"`
+	DiffClipboardTargetMode string `json:"diffClipboardTargetMode"`
+	CodeEditorFontSize int `json:"codeEditorFontSize"`
 }
 type HistoryItem struct {
 	ID        int64  `json:"id"`
@@ -59,14 +56,20 @@ type historyStored struct {
 }
 
 func defaultConfig() Config {
-	return Config{TrayMatchEnabled: true, AutoOverwrite: true, DetectJson: true, DetectTimestamp: true, DetectUrl: true, DetectJwt: true, DetectBase64: true, Language: "zh-CN", SidebarMode: "full", Theme: "dark", DiffHighlightMode: "word-alt"}
+	return Config{TrayMatchEnabled: true, AutoOverwrite: true, Language: "zh-CN", SidebarMode: "full", Theme: "dark", DiffHighlightMode: "character", DiffClipboardTargetMode: "alternate", CodeEditorFontSize: 12}
 }
 func normalizeConfig(cfg Config) Config {
 	switch cfg.DiffHighlightMode {
 	case "word-alt", "word", "character", "none":
 	default:
-		cfg.DiffHighlightMode = "word-alt"
+		cfg.DiffHighlightMode = "character"
 	}
+	switch cfg.DiffClipboardTargetMode {
+	case "alternate", "before", "after":
+	default:
+		cfg.DiffClipboardTargetMode = "alternate"
+	}
+	if cfg.CodeEditorFontSize < 10 || cfg.CodeEditorFontSize > 24 { cfg.CodeEditorFontSize = 12 }
 	return cfg
 }
 func appDataDir() string {
