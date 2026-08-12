@@ -80,6 +80,10 @@ export default function TextTool({active, theme, record, pending, clearPending}:
             compress: t('textTool.compressedSpaces'),
             compressLine: t('textTool.compressedLine'),
             count: t('textTool.count'),
+            lineUpper: t('textTool.caseModes.lineUpper'),
+            lineLower: t('textTool.caseModes.lineLower'),
+            wordUpper: t('textTool.caseModes.wordUpper'),
+            wordLower: t('textTool.caseModes.wordLower'),
             upper: t('textTool.caseModes.upper'),
             lower: t('textTool.caseModes.lower')
         };
@@ -90,6 +94,10 @@ export default function TextTool({active, theme, record, pending, clearPending}:
             compressLine: s => s.replace(/\r\n?|\n/g, ' '),
             upper: s => transformCase(s, 'upper'),
             lower: s => transformCase(s, 'lower'),
+            lineUpper: s => transformCase(s, 'lineUpper'),
+            lineLower: s => transformCase(s, 'lineLower'),
+            wordUpper: s => transformCase(s, 'wordUpper'),
+            wordLower: s => transformCase(s, 'wordLower'),
             count: s => s
         };
         const transform = transforms[pending.action];
