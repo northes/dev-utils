@@ -1,5 +1,5 @@
 import {useEffect, useMemo, useRef, useState} from 'react'
-import {Button, Popover, type SortDescriptor, Table} from '@heroui/react'
+import {Popover, type SortDescriptor, Table} from '@heroui/react'
 import {useTranslation} from 'react-i18next'
 import {Trash} from '@phosphor-icons/react'
 import CodeMirror from '@uiw/react-codemirror'
