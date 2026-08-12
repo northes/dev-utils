@@ -103,6 +103,10 @@
     "formatted": "格式化 JSON",
     "formatFailed": "格式化失败",
     "minifyFailed": "压缩失败",
+    "sortDefault": "按 key 排序(默认)",
+    "sortAsc": "按 key 排序(升序)",
+    "sortDesc": "按 key 排序(降序)",
+    "sortFailed": "排序失败",
     "invalidJsonDesc": "内容不是有效的 JSON，无法继续",
     "subtitle": "格式化、压缩、校验与路径提取"
   },
@@ -164,7 +168,7 @@
     "subtitle": "测量与规范化纯文本"
   },
   "base64Tool": {"title":"Base64 编解码","subtitle":"自动识别文本、图片与文件","actions":"Base64 操作","input":"文本输入","fileInput":"文件输入","output":"文本结果","imageOutput":"图片结果","fileOutput":"文件结果","text":"文本","image":"图片","file":"文件","copy":"复制结果","copied":"已复制","clear":"清空","chooseFile":"选择文件","fileHint":"拖入、粘贴或选择文件","detected":"识别结果","encoded":"Base64 编码","invalid":"无法转换内容","tooLarge":"文件超过 {{size}} 上限","binaryFile":"检测到二进制文件","save":"保存","saveTitle":"保存解码文件","saved":"已保存 {{name}}","saveFailed":"保存文件失败"},
-  "diffTool": {"title":"差异对比","actions":"差异对比操作","before":"原始内容","after":"修改后","clear":"清空","swap":"交换内容","sample":"写入示例","highlightMode":"高亮方式","modes":{"word-alt":"Word-Alt","word":"Word","character":"Character","none":"None"}},
+  "diffTool": {"title":"差异对比","actions":"差异对比操作","before":"原始内容","after":"修改后","clear":"清空","swap":"交换内容","sample":"写入示例","highlightMode":"高亮范围","modes":{"word-alt":"Word-Alt","word":"Word","character":"Character","none":"None"}},
   "settings": {
  "title": "设置",
  "subtitle": "控制上下文检测与本地数据。",
