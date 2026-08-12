@@ -170,12 +170,6 @@ func main() {
 
 	menu := app.Menu.New()
 	if en {
-		menu.Add("Clipboard detection ready").SetEnabled(false)
-	} else {
-		menu.Add("剪贴板检测就绪").SetEnabled(false)
-	}
-	menu.AddSeparator()
-	if en {
 		menu.Add("Open DevUtils").OnClick(func(_ *application.Context) { analyzeClipboard() })
 		menu.Add("Settings").OnClick(func(_ *application.Context) {
 			showFromTray()
