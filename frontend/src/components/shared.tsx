@@ -403,3 +403,13 @@ export function undoRedoKey(e: React.KeyboardEvent, undo: () => void, redo: () =
     }
     return false
 }
+
+export function useFocusOnActivate(active: boolean, focus: () => void) {
+    const prev = useRef(active);
+    const focusRef = useRef(focus);
+    focusRef.current = focus;
+    useEffect(() => {
+        if (active && !prev.current) focusRef.current();
+        prev.current = active
+    }, [active])
+}

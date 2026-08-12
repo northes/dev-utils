@@ -6,7 +6,7 @@ import CodeMirror from '@uiw/react-codemirror'
 import {EditorView} from '@codemirror/view'
 import {tokyoNight} from '@uiw/codemirror-theme-tokyo-night'
 import {tokyoNightDay} from '@uiw/codemirror-theme-tokyo-night-day'
-import {type PendingAction, Reveal, ToolActionBar, type ToolId, ToolLayout} from './shared'
+import {type PendingAction, Reveal, ToolActionBar, type ToolId, ToolLayout, useFocusOnActivate} from './shared'
 import {toast} from './AppToast'
 
 const countDetails = (characters: string[]) => Array.from(characters.reduce((counts, character) => counts.set(character, (counts.get(character) ?? 0) + 1), new Map<string, number>())).sort(([left], [right]) => left.localeCompare(right, 'zh-CN'))
@@ -25,6 +25,8 @@ export default function TextTool({active, theme, record, pending, clearPending}:
     const {t} = useTranslation();
     const [value, setValue] = useState('');
     const consumed = useRef<PendingAction | null>(null);
+    const inputView = useRef<EditorView | null>(null);
+    useFocusOnActivate(active, () => inputView.current?.focus());
     const [sortDescriptor, setSortDescriptor] = useState<SortDescriptor>({column: 'count', direction: 'descending'});
     const cmTheme = theme === 'light' ? tokyoNightDay : tokyoNight;
     const extensions = useMemo(() => [EditorView.lineWrapping], []);
@@ -77,13 +79,17 @@ export default function TextTool({active, theme, record, pending, clearPending}:
             removeSpaces: t('textTool.removedSpaces'),
             compress: t('textTool.compressedSpaces'),
             compressLine: t('textTool.compressedLine'),
-            count: t('textTool.count')
+            count: t('textTool.count'),
+            upper: t('textTool.caseModes.upper'),
+            lower: t('textTool.caseModes.lower')
         };
         const transforms: Record<string, (s: string) => string> = {
             trim: s => s.trim(),
             removeSpaces: s => s.replace(/[ \t]+/g, ''),
             compress: s => s.replace(/ {2,}/g, ' '),
             compressLine: s => s.replace(/\r\n?|\n/g, ' '),
+            upper: s => transformCase(s, 'upper'),
+            lower: s => transformCase(s, 'lower'),
             count: s => s
         };
         const transform = transforms[pending.action];
@@ -144,8 +150,12 @@ export default function TextTool({active, theme, record, pending, clearPending}:
                                                                                          onPress: () => apply(t('textTool.compressedLine'), v => v.replace(/\r\n?|\n/g, ' '))
                                                                                      }]}/>}>
         <div className="editor text-cm-pane"><span>{t('textTool.input')}</span><CodeMirror className="text-cm"
-                                                                                           height="100%" value={value}
+                                                                                           height="100%"
+                                                                                           value={value}
                                                                                            onChange={setValue}
+                                                                                           onCreateEditor={view => {
+                                                                                               inputView.current = view
+                                                                                           }}
                                                                                            theme={cmTheme}
                                                                                            extensions={extensions}
                                                                                            basicSetup={{
