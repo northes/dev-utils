@@ -41,6 +41,16 @@ Wails v3(beta)桌面托盘应用:Go 后端 + React 19 前端。本地优先的�
 - 持久化状态用 localStorage key:`devutils.favorites`、`devutils.history`(设置页配置由 Go `ConfigService` 管理,不走 localStorage)。
 - `frontend/.npmrc` 设置 `minimum-release-age=10080`(供应链策略;pnpm/bun 生效,npm 忽略)。
 
+### 命令面板(`paletteItems` / `CommandPalette`)
+- item 由 `id`/`labelKey`/`groupKey`/`subgroupKey?`/`icon`/`keywords`/`tool?`/`action?`/`mode?`/`target?`/`needsInput?` 构成,定义在 `App.tsx`;索引 `buildIndex` 把 label + group + subgroup + keywords 一并纳入(含拼音/首字母),搜索「剪贴板」「大小写」等子分组词也要命中。
+- **命令名必须与工具界面按钮文案完全一致**:`labelKey` 直接复用工具组件的 locale key(如 `jsonTool.copy`、`textTool.caseModes.upper`),禁止另造带工具名的文案(不要写成「复制 JSON」)。
+- 右侧归属为两级:**`工具名 - 子分组`**(如「差异对比 - 剪贴板填入」);子分组通过 `subgroupKey` 表达(如 `diffTool.clipboardTarget`、`textTool.case`),无子分组的命令只显示工具名。
+- **命令必须与界面功能一一对应**:界面不存在对应按钮/功能(如 Base64 编码/解码、JSON 校验、时间转换——这些是自动/实时行为,无按钮)的命令不要保留在 `paletteItems`。
+- 列表排序组优先于匹配分数:当前工具的功能(`tool===当前页`) → 打开其他工具/导航(`page` 存在) → 其他工具的功能;组内再按分数。`CommandPalette` 接收 `page` prop 判定。
+- 命令通过 `PendingAction` 派发给工具组件 pending effect 执行;带 `mode`/`target` 的命令由 `run()` 透传。diff「剪贴板填入-交替」在 App 层用 `nextDiffTarget` 解析成具体 before/after 后再派发。
+- **不消费输入的切换型命令**(schema 开关、sortDefault 恢复、插入时间戳、使用本机时区、diff 高亮模式)必须在 pending effect 中**先于 `setInput/changeInput(pending.input)` 分支处理并 `return`**,否则会拿空/剪贴板内容清空编辑器。
+- 新增命令若复用已有按钮文案,则 locale 零新增;删除命令时同步清理不再引用的 locale 键。
+
 ## UI 与布局经验(通用原则,自本项目实践沉淀)
 
 ### 页面切换与状态保留
