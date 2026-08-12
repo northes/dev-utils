@@ -56,6 +56,9 @@
     "openText": "Open text tool",
     "openBase64": "Open Base64",
     "openDiff": "Open diff compare",
+    "toggleSchema": "Toggle schema",
+    "toggleSortRules": "Toggle sort rules",
+    "paste": "Paste",
     "base64Encode": "Base64 encode",
     "base64Decode": "Base64 decode",
     "format": "Format JSON",
@@ -233,7 +236,8 @@
     "clipboardEmpty": "Clipboard is empty",
     "clipboardEmptyDesc": "Copy some content before running this command",
     "copied": "Copied {{value}}",
-    "historyFailed": "History operation failed"
+    "historyFailed": "History operation failed",
+    "pasteTarget": "Focus an input to paste into"
   },
   "matchDialog": {
     "title": "Content matched",

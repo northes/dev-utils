@@ -52,7 +52,10 @@
     "openTime": "打开时间转换",
     "openText": "打开文本工具",
     "openBase64": "打开 Base64 工具",
-    "openDiff": "打开差异对比"
+    "openDiff": "打开差异对比",
+    "toggleSchema": "切换 schema",
+    "toggleSortRules": "切换排序规则",
+    "paste": "粘贴"
   },
   "home": {
     "recent": "最近使用",
@@ -219,7 +222,8 @@
     "clipboardEmpty": "剪贴板内容为空",
     "clipboardEmptyDesc": "请先复制内容后再执行该命令",
     "copied": "已复制 {{value}}",
-    "historyFailed": "历史记录操作失败"
+    "historyFailed": "历史记录操作失败",
+    "pasteTarget": "请先聚焦要粘贴的输入框"
   },
   "matchDialog": {
     "title": "匹配到内容",
