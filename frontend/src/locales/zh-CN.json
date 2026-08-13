@@ -53,7 +53,7 @@
     "openText": "打开文本工具",
     "openBase64": "打开 Base64 工具",
     "openDiff": "打开差异对比",
-    "toggleSchema": "切换 schema",
+    "toggleSchema": "切换 Schema",
     "toggleSortRules": "切换排序规则",
     "paste": "粘贴"
   },
@@ -81,6 +81,8 @@
     "clearComments": "清除注释",
     "minifyClear": "清除",
     "bytes": "字节",
+    "lines": "行",
+    "characters": "字符",
     "copied": "已复制",
     "invalid": "JSON 无效",
     "schema": "Schema",

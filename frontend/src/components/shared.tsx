@@ -9,7 +9,8 @@ export type PendingAction = {
     input: string;
     output?: string;
     mode?: string;
-    target?: 'before' | 'after'
+    target?: 'before' | 'after';
+    pane?: 'input' | 'result'
 }
 export type Icon = typeof BracketsCurly
 
