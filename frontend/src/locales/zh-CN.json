@@ -55,6 +55,7 @@
     "openDiff": "打开差异对比",
     "toggleSchema": "切换 Schema",
     "toggleSortRules": "切换排序规则",
+    "toggleConcat": "切换拼接",
     "paste": "粘贴"
   },
   "home": {
@@ -87,6 +88,12 @@
     "invalid": "JSON 无效",
     "schema": "Schema",
     "schemaPathPlaceholder": "输入 JSONPath，例如 $.owner.team",
+    "concat": "拼接",
+    "concatTemplatePlaceholder": "输入模板，例如 {$.aaa}?token={$.bbb}",
+    "concatOutputActions": "拼接输出操作",
+    "wrap": "换行",
+    "unwrap": "取消换行",
+    "foldedCopy": "折叠后复制",
     "foldObject": "{… {{count}} 个键}",
     "foldArray": "[… {{count}} 项]",
     "validated": "校验 JSON",
