@@ -15,14 +15,16 @@ import (
 )
 
 type Config struct {
-	TrayMatchEnabled  bool   `json:"trayMatchEnabled"`
-	AutoOverwrite     bool   `json:"autoOverwrite"`
-	Language          string `json:"language"`
-	SidebarMode       string `json:"sidebarMode"`
-	Theme             string `json:"theme"`
-	DiffHighlightMode string `json:"diffHighlightMode"`
-	DiffClipboardTargetMode string `json:"diffClipboardTargetMode"`
-	CodeEditorFontSize int `json:"codeEditorFontSize"`
+	TrayMatchEnabled        bool     `json:"trayMatchEnabled"`
+	AutoOverwrite           bool     `json:"autoOverwrite"`
+	Language                string   `json:"language"`
+	SidebarMode             string   `json:"sidebarMode"`
+	Theme                   string   `json:"theme"`
+	DiffHighlightMode       string   `json:"diffHighlightMode"`
+	DiffClipboardTargetMode string   `json:"diffClipboardTargetMode"`
+	CodeEditorFontSize      int      `json:"codeEditorFontSize"`
+	TimeResultOrder         []string `json:"timeResultOrder"`
+	HiddenTimeResults       []string `json:"hiddenTimeResults"`
 }
 type HistoryItem struct {
 	ID        int64  `json:"id"`
@@ -56,7 +58,7 @@ type historyStored struct {
 }
 
 func defaultConfig() Config {
-	return Config{TrayMatchEnabled: true, AutoOverwrite: true, Language: "zh-CN", SidebarMode: "full", Theme: "dark", DiffHighlightMode: "character", DiffClipboardTargetMode: "alternate", CodeEditorFontSize: 12}
+	return Config{TrayMatchEnabled: true, AutoOverwrite: true, Language: "zh-CN", SidebarMode: "full", Theme: "dark", DiffHighlightMode: "character", DiffClipboardTargetMode: "alternate", CodeEditorFontSize: 12, TimeResultOrder: []string{"local", "dateTime", "dateOnly", "timeOnly", "zonedIso8601", "rfc3339", "utc", "compact", "underscore", "unixSeconds", "unixMilliseconds", "unixNanoseconds"}}
 }
 func normalizeConfig(cfg Config) Config {
 	switch cfg.DiffHighlightMode {
@@ -69,7 +71,37 @@ func normalizeConfig(cfg Config) Config {
 	default:
 		cfg.DiffClipboardTargetMode = "alternate"
 	}
-	if cfg.CodeEditorFontSize < 10 || cfg.CodeEditorFontSize > 24 { cfg.CodeEditorFontSize = 12 }
+	if cfg.CodeEditorFontSize < 10 || cfg.CodeEditorFontSize > 24 {
+		cfg.CodeEditorFontSize = 12
+	}
+	timeResults := []string{"local", "dateTime", "dateOnly", "timeOnly", "zonedIso8601", "rfc3339", "utc", "compact", "underscore", "unixSeconds", "unixMilliseconds", "unixNanoseconds"}
+	validTimeResult := make(map[string]bool, len(timeResults))
+	for _, id := range timeResults {
+		validTimeResult[id] = true
+	}
+	seenTimeResult := make(map[string]bool, len(timeResults))
+	order := make([]string, 0, len(timeResults))
+	for _, id := range cfg.TimeResultOrder {
+		if validTimeResult[id] && !seenTimeResult[id] {
+			order = append(order, id)
+			seenTimeResult[id] = true
+		}
+	}
+	for _, id := range timeResults {
+		if !seenTimeResult[id] {
+			order = append(order, id)
+		}
+	}
+	cfg.TimeResultOrder = order
+	hidden := make([]string, 0, len(cfg.HiddenTimeResults))
+	seenHidden := make(map[string]bool, len(timeResults))
+	for _, id := range cfg.HiddenTimeResults {
+		if validTimeResult[id] && !seenHidden[id] {
+			hidden = append(hidden, id)
+			seenHidden[id] = true
+		}
+	}
+	cfg.HiddenTimeResults = hidden
 	return cfg
 }
 func appDataDir() string {
@@ -135,10 +167,12 @@ func (s *ConfigService) GetHistory() []HistoryItem {
 	}
 	return items
 }
+
 type HistoryPage struct {
 	Items []HistoryItem `json:"items"`
 	Total int           `json:"total"`
 }
+
 func (s *ConfigService) GetHistoryPage(offset int, limit int) (HistoryPage, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
