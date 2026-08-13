@@ -14,6 +14,7 @@ function makeDate(year:number,month:number,day:number,hour=0,minute=0,second=0,m
 function fractionMilliseconds(value:string|undefined){return value?Number((value+'000').slice(0,3)):0}
 
 export function parseTimeInput(rawInput:string,now=new Date(),timeZone=getSystemTimeZone()){const raw=rawInput.trim();if(!raw)return null;let match:RegExpMatchArray|null
+  if((match=raw.match(/^(\d{4})_(\d{2})_(\d{2})_(\d{2})_(\d{2})_(\d{2})$/)))return makeDate(Number(match[1]),Number(match[2]),Number(match[3]),Number(match[4]),Number(match[5]),Number(match[6]),0,undefined,timeZone)
   if((match=raw.match(/^(\d{4})(\d{2})(\d{2})(?:(\d{2})(\d{2})(\d{2}))?$/)))return makeDate(Number(match[1]),Number(match[2]),Number(match[3]),Number(match[4]||0),Number(match[5]||0),Number(match[6]||0),0,undefined,timeZone)
   if((match=raw.match(/^([+-]?\d+)(?:\.(\d{1,9}))?$/))){const digits=match[1].replace(/^[+-]/,'').length;if(match[2]){if(digits>10)return null;const date=new Date(Number(raw)*1000);return Number.isNaN(date.getTime())?null:date}if(digits<=10){const date=new Date(Number(match[1])*1000);return Number.isNaN(date.getTime())?null:date}if(digits<=13){const date=new Date(Number(match[1]));return Number.isNaN(date.getTime())?null:date}return null}
   if((match=raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,9}))?)?(?:\s?(Z|[+-]\d{2}:?\d{2}|UTC|GMT(?:[+-]\d{4})?))?)?$/i)))return makeDate(Number(match[1]),Number(match[2]),Number(match[3]),Number(match[4]||0),Number(match[5]||0),Number(match[6]||0),fractionMilliseconds(match[7]),match[8],timeZone)
