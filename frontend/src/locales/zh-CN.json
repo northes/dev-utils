@@ -207,7 +207,9 @@
     "subtitle": "完整内容保存在本机；大内容按需加载。",
     "clear": "清空",
     "emptyTitle": "暂无活动",
-    "emptyHint": "运行工具后，其操作会显示在这里。"
+    "emptyHint": "运行工具后，其操作会显示在这里。",
+    "loadFailed": "加载失败",
+    "loadFailedHint": "点击重试"
   },
   "types": {
     "json": "JSON",

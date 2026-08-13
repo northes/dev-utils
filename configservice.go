@@ -135,9 +135,39 @@ func (s *ConfigService) GetHistory() []HistoryItem {
 	}
 	return items
 }
+type HistoryPage struct {
+	Items []HistoryItem `json:"items"`
+	Total int           `json:"total"`
+}
+func (s *ConfigService) GetHistoryPage(offset int, limit int) (HistoryPage, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if offset < 0 {
+		offset = 0
+	}
+	if limit < 1 || limit > 100 {
+		limit = 20
+	}
+	total := len(s.history)
+	if offset >= total {
+		return HistoryPage{Items: []HistoryItem{}, Total: total}, nil
+	}
+	end := offset + limit
+	if end > total {
+		end = total
+	}
+	items := make([]HistoryItem, end-offset)
+	for i, v := range s.history[offset:end] {
+		items[i] = v.Item
+	}
+	return HistoryPage{Items: items, Total: total}, nil
+}
 func (s *ConfigService) AppendHistory(entry HistoryEntry) (HistoryItem, error) {
 	if entry.Tool == "" {
 		return HistoryItem{}, errors.New("missing history tool")
+	}
+	if detail := []rune(entry.Detail); len(detail) > 120 {
+		entry.Detail = string(detail[:120])
 	}
 	id := time.Now().UnixNano()
 	item := HistoryItem{ID: id, Tool: entry.Tool, Action: entry.Action, Detail: entry.Detail, At: time.Now().UTC().Format(time.RFC3339Nano), Mode: entry.Mode, MediaType: entry.MediaType, Name: entry.Name, Bytes: entry.Bytes}
