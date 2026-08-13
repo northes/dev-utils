@@ -216,6 +216,8 @@
     "clipboardSubtitle": "仅在您请求时分析剪贴板内容。",
     "trayMatch": "托盘图标匹配",
     "trayMatchDesc": "点击托盘图标时自动匹配剪贴板内容",
+    "trayMatchTools": "匹配工具",
+    "trayMatchToolsDesc": "选择允许托盘自动打开的工具",
     "autoOverwrite": "自动覆盖",
     "autoOverwriteDesc": "匹配后自动填入对应工具；关闭时每次询问",
     "editor":"代码编辑器","editorSubtitle":"调整所有代码编辑器的显示。","editorFontSize":"字体大小","privacy": "隐私",

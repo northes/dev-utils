@@ -16,6 +16,7 @@ import (
 
 type Config struct {
 	TrayMatchEnabled        bool     `json:"trayMatchEnabled"`
+	TrayMatchTools          []string `json:"trayMatchTools"`
 	AutoOverwrite           bool     `json:"autoOverwrite"`
 	Language                string   `json:"language"`
 	SidebarMode             string   `json:"sidebarMode"`
@@ -58,9 +59,27 @@ type historyStored struct {
 }
 
 func defaultConfig() Config {
-	return Config{TrayMatchEnabled: true, AutoOverwrite: true, Language: "zh-CN", SidebarMode: "full", Theme: "dark", DiffHighlightMode: "character", DiffClipboardTargetMode: "alternate", CodeEditorFontSize: 12, TimeResultOrder: []string{"local", "dateTime", "dateOnly", "timeOnly", "zonedIso8601", "rfc3339", "utc", "compact", "underscore", "unixSeconds", "unixMilliseconds", "unixNanoseconds"}}
+	return Config{TrayMatchEnabled: true, TrayMatchTools: []string{"json", "time", "text", "base64", "diff"}, AutoOverwrite: true, Language: "zh-CN", SidebarMode: "full", Theme: "dark", DiffHighlightMode: "character", DiffClipboardTargetMode: "alternate", CodeEditorFontSize: 12, TimeResultOrder: []string{"local", "dateTime", "dateOnly", "timeOnly", "zonedIso8601", "rfc3339", "utc", "compact", "underscore", "unixSeconds", "unixMilliseconds", "unixNanoseconds"}}
 }
 func normalizeConfig(cfg Config) Config {
+	trayTools := []string{"json", "time", "text", "base64", "diff"}
+	validTrayTool := make(map[string]bool, len(trayTools))
+	for _, id := range trayTools {
+		validTrayTool[id] = true
+	}
+	if cfg.TrayMatchTools == nil {
+		cfg.TrayMatchTools = append([]string(nil), trayTools...)
+	} else {
+		matched := make([]string, 0, len(cfg.TrayMatchTools))
+		seen := make(map[string]bool, len(trayTools))
+		for _, id := range cfg.TrayMatchTools {
+			if validTrayTool[id] && !seen[id] {
+				matched = append(matched, id)
+				seen[id] = true
+			}
+		}
+		cfg.TrayMatchTools = matched
+	}
 	switch cfg.DiffHighlightMode {
 	case "word-alt", "word", "character", "none":
 	default:
