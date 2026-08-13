@@ -157,8 +157,14 @@ func main() {
 		tray.SetIcon(trayLight)
 	}
 	showFromTray := func() {
-		window.Show().Focus()
 		window.SetAlwaysOnTop(false)
+		window.Show()
+		window.Focus()
+	}
+	isQuitting := false
+	quit := func() {
+		isQuitting = true
+		app.Quit()
 	}
 	analyzeClipboard := func() {
 		showFromTray()
@@ -167,29 +173,33 @@ func main() {
 
 	menu := app.Menu.New()
 	if en {
-		menu.Add("Open DevUtils").OnClick(func(_ *application.Context) { analyzeClipboard() })
+		menu.Add("Open DevUtils").OnClick(func(_ *application.Context) { showFromTray() })
 		menu.Add("Settings").OnClick(func(_ *application.Context) {
 			showFromTray()
 			app.Event.Emit("navigate", "settings")
 		})
 		menu.AddSeparator()
-		menu.Add("Quit").OnClick(func(_ *application.Context) { app.Quit() })
+		menu.Add("Quit").OnClick(func(_ *application.Context) { quit() })
 	} else {
-		menu.Add("打开 DevUtils").OnClick(func(_ *application.Context) { analyzeClipboard() })
+		menu.Add("打开 DevUtils").OnClick(func(_ *application.Context) { showFromTray() })
 		menu.Add("设置").OnClick(func(_ *application.Context) {
 			showFromTray()
 			app.Event.Emit("navigate", "settings")
 		})
 		menu.AddSeparator()
-		menu.Add("退出").OnClick(func(_ *application.Context) { app.Quit() })
+		menu.Add("退出").OnClick(func(_ *application.Context) { quit() })
 	}
-	tray.AttachWindow(window).SetMenu(menu)
+	tray.SetMenu(menu)
 	tray.OnClick(func() { analyzeClipboard() })
+	tray.OnRightClick(func() { tray.OpenMenu() })
 
 	window.RegisterHook(events.Common.WindowClosing, func(event *application.WindowEvent) {
 		x, y := window.Position()
 		w, h := window.Size()
 		saveWindowState(&windowState{X: x, Y: y, W: w, H: h})
+		if isQuitting {
+			return
+		}
 		window.Hide()
 		event.Cancel()
 	})
