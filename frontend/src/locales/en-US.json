@@ -233,6 +233,7 @@
   "toast": {
     "region": "Notifications",
     "close": "Close notification",
+    "trayAutoFilled": "Automatically filled {{tool}}",
     "clipboardEmpty": "Clipboard is empty",
     "clipboardEmptyDesc": "Copy some content before running this command",
     "copied": "Copied {{value}}",

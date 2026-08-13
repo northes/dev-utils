@@ -223,6 +223,7 @@
   "toast": {
     "region": "通知",
     "close": "关闭通知",
+    "trayAutoFilled": "已自动填入{{tool}}",
     "clipboardEmpty": "剪贴板内容为空",
     "clipboardEmptyDesc": "请先复制内容后再执行该命令",
     "copied": "已复制 {{value}}",
