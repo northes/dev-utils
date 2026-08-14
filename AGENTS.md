@@ -126,4 +126,4 @@ Wails v3(beta)桌面托盘应用:Go 后端 + React 19 前端。本地优先的�
 
 ## 工具约束
 
-- **禁止使用 Playwright**(含 `playwright-cli` 及任何浏览器自动化)做测试或验证。全局配置中虽存在 playwright 相关技能,本项目一律不使用。
+- **禁止使用 Playwright**(含 `playwright-cli` 及任何浏览器自动化) 和 **Computer Use** 做测试或验证。全局配置中虽存在 **playwright** 和 **Computer Use** 相关技能,本项目一律不使用。
