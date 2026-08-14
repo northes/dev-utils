@@ -7,10 +7,13 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
+	"github.com/wailsapp/wails/v3/pkg/updater"
+	githubprovider "github.com/wailsapp/wails/v3/pkg/updater/providers/github"
 )
 
 //go:embed all:frontend/dist
@@ -18,6 +21,9 @@ var assets embed.FS
 
 //go:embed assets/tray/*.png
 var trayAssets embed.FS
+
+//go:embed assets/updater/window.html
+var updaterWindowHTML string
 
 type windowState struct {
 	X int `json:"x"`
@@ -59,6 +65,17 @@ func saveWindowState(s *windowState) {
 
 const appName = "DevUtils"
 
+var currentVersion = "0.1.0"
+
+func matchGitHubUpdateAsset(req updater.CheckRequest, assets []githubprovider.ReleaseAsset) int {
+	for i, asset := range assets {
+		if strings.HasSuffix(strings.ToLower(asset.Name), ".zip") && githubprovider.DefaultAssetMatcher(req, []githubprovider.ReleaseAsset{asset}) == 0 {
+			return i
+		}
+	}
+	return -1
+}
+
 func main() {
 	saved := loadWindowState()
 	width, height := 720, 520
@@ -69,6 +86,7 @@ func main() {
 	}
 
 	cfgService := NewConfigService()
+	updateService := NewUpdateService(currentVersion)
 
 	app := application.New(application.Options{
 		Name:        appName,
@@ -78,11 +96,33 @@ func main() {
 		},
 		Services: []application.Service{
 			application.NewService(cfgService),
+			application.NewService(updateService),
 		},
 		Mac: application.MacOptions{
 			ActivationPolicy: application.ActivationPolicyAccessory,
 		},
 	})
+
+	gh, err := githubprovider.New(githubprovider.Config{
+		Repository:    "northes/dev-utils",
+		ChecksumAsset: "SHA256SUMS",
+		AssetMatcher:  matchGitHubUpdateAsset,
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	if err := app.Updater.Init(updater.Config{
+		CurrentVersion: currentVersion,
+		Providers:      []updater.Provider{gh},
+		Window: &updater.BuiltinWindow{
+			HTML:    updaterWindowHTML,
+			Options: updater.WindowOptions{Title: "软件更新", Width: 520, Height: 390},
+		},
+	}); err != nil {
+		log.Fatal(err)
+	}
+	updateService.start(app.Updater, cfgService.Get().AutoCheckUpdates)
+	app.OnShutdown(updateService.stopScheduler)
 
 	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:             appName,

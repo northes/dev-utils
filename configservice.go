@@ -18,6 +18,7 @@ type Config struct {
 	TrayMatchEnabled        bool     `json:"trayMatchEnabled"`
 	TrayMatchTools          []string `json:"trayMatchTools"`
 	AutoOverwrite           bool     `json:"autoOverwrite"`
+	AutoCheckUpdates        bool     `json:"autoCheckUpdates"`
 	Language                string   `json:"language"`
 	SidebarMode             string   `json:"sidebarMode"`
 	Theme                   string   `json:"theme"`
@@ -59,7 +60,7 @@ type historyStored struct {
 }
 
 func defaultConfig() Config {
-	return Config{TrayMatchEnabled: true, TrayMatchTools: []string{"json", "time", "text", "base64", "diff"}, AutoOverwrite: true, Language: "zh-CN", SidebarMode: "full", Theme: "dark", DiffHighlightMode: "character", DiffClipboardTargetMode: "alternate", CodeEditorFontSize: 12, TimeResultOrder: []string{"local", "dateTime", "dateOnly", "timeOnly", "zonedIso8601", "rfc3339", "utc", "compact", "underscore", "unixSeconds", "unixMilliseconds", "unixNanoseconds"}}
+	return Config{TrayMatchEnabled: true, TrayMatchTools: []string{"json", "time", "text", "base64", "diff"}, AutoOverwrite: true, AutoCheckUpdates: true, Language: "zh-CN", SidebarMode: "full", Theme: "dark", DiffHighlightMode: "character", DiffClipboardTargetMode: "alternate", CodeEditorFontSize: 12, TimeResultOrder: []string{"local", "dateTime", "dateOnly", "timeOnly", "zonedIso8601", "rfc3339", "utc", "compact", "underscore", "unixSeconds", "unixMilliseconds", "unixNanoseconds"}}
 }
 func normalizeConfig(cfg Config) Config {
 	trayTools := []string{"json", "time", "text", "base64", "diff"}
