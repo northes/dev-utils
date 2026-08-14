@@ -72,6 +72,18 @@ export function parseJsonLoose(s: string) {
     return JSON.parse(stripTrailingCommas(stripJsonComments(s)))
 }
 
+export function decodeBase64(raw: string): string | null {
+    const padded = raw.replace(/-/g, '+').replace(/_/g, '/');
+    if (padded.length % 4 === 1) return null;
+    try {
+        const decoded = atob(padded.padEnd(Math.ceil(padded.length / 4) * 4, '='));
+        const norm = (x: string) => x.replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
+        return norm(btoa(decoded)) === norm(raw) ? decoded : null
+    } catch {
+        return null
+    }
+}
+
 export function hasComments(s: string) {
     return stripJsonComments(s) !== s
 }
