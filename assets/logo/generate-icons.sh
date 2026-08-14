@@ -22,5 +22,4 @@ rsvg-convert -w 128 -h 128 "$tray_svg" -o "$root_dir/assets/tray/tray-mac-templa
   cd "$root_dir/build"
   wails3 generate icons -input appicon.png -macfilename darwin/icons.icns -windowsfilename windows/icon.ico -iconcomposerinput appicon.icon -macassetdir darwin
 )
-
-echo "已更新托盘图标与各平台 App 图标。"
+echo "已更新托盘图标与各平台 App 图标；DMG 复用 macOS App 图标。"
