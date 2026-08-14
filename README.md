@@ -57,3 +57,27 @@ Take a moment to familiarize yourself with your project structure:
 4. When ready, build your application with `wails3 build`.
 
 Happy coding with Wails3! If you encounter any issues or have questions, don't hesitate to consult the documentation or reach out to the Wails community.
+
+## 发布 macOS 版本
+
+推送语义化版本标签即可触发 `.github/workflows/release-macos.yml`：
+
+```bash
+git tag v0.2.0
+git push github v0.2.0
+```
+
+工作流会分别构建 Apple Silicon 与 Intel 包，并在同一个 GitHub Release 中上传：
+
+- `DevUtils-<version>-darwin-<arch>.dmg`：用于首次安装；
+- `DevUtils-<version>-darwin-<arch>.zip`：用于 Wails 应用内更新；
+- `SHA256SUMS`：供应用下载后校验文件完整性。
+
+仓库未配置 Apple 凭据时会生成 ad-hoc 签名包，仅适合测试。正式分发前请在 GitHub Actions Secrets 中配置：
+
+- `APPLE_CERTIFICATE`：Developer ID Application 的 P12 Base64；
+- `APPLE_CERTIFICATE_PASSWORD`：P12 密码；
+- `APPLE_SIGNING_IDENTITY`：Developer ID Application 证书名称；
+- `APPLE_ID`、`APPLE_APP_PASSWORD`、`APPLE_TEAM_ID`：Apple 公证凭据。
+
+也可以从 Actions 页面手动运行工作流并输入 `v0.2.0` 形式的标签。应用内更新固定读取公开仓库 `northes/dev-utils` 的最新 GitHub Release。

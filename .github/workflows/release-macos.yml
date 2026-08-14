@@ -1,0 +1,146 @@
+name: 发布 macOS 安装包
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 版本标签（例如 v0.2.0）
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: 构建 ${{ matrix.arch }}
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [arm64, amd64]
+    steps:
+      - name: 检出源码
+        uses: actions/checkout@v4
+
+      - name: 解析版本
+        id: version
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+        run: |
+          version="${RELEASE_TAG#v}"
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "无效的语义化版本: $RELEASE_TAG" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+
+      - name: 安装 Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: 安装 Wails CLI
+        run: go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.4
+
+      - name: 构建应用包
+        run: wails3 task darwin:package ARCH=${{ matrix.arch }} APP_VERSION=${{ steps.version.outputs.version }}
+
+      - name: 写入应用版本
+        run: |
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${{ steps.version.outputs.version }}" bin/dev-utils.app/Contents/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${{ steps.version.outputs.version }}" bin/dev-utils.app/Contents/Info.plist
+
+      - name: 导入 Apple 签名证书
+        if: ${{ env.APPLE_CERTIFICATE != '' }}
+        uses: apple-actions/import-codesign-certs@v3
+        with:
+          p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
+          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+
+      - name: 签名应用
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          if [ -n "$APPLE_SIGNING_IDENTITY" ]; then
+            codesign --force --deep --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" bin/dev-utils.app
+          else
+            codesign --force --deep --sign - bin/dev-utils.app
+          fi
+
+      - name: 公证并装订应用
+        if: ${{ env.APPLE_ID != '' && env.APPLE_APP_PASSWORD != '' && env.APPLE_TEAM_ID != '' }}
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          ditto -c -k --sequesterRsrc --keepParent bin/dev-utils.app bin/notarize.zip
+          xcrun notarytool submit bin/notarize.zip --apple-id "$APPLE_ID" --password "$APPLE_APP_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
+          xcrun stapler staple bin/dev-utils.app
+
+      - name: 生成 ZIP 更新包与 DMG 安装包
+        shell: bash
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          arch="${{ matrix.arch }}"
+          zip="DevUtils-${version}-darwin-${arch}.zip"
+          dmg="DevUtils-${version}-darwin-${arch}.dmg"
+          ditto -c -k --sequesterRsrc --keepParent bin/dev-utils.app "bin/$zip"
+          wails3 task darwin:create:dmg
+          mv bin/dev-utils.dmg "bin/$dmg"
+          mkdir -p release
+          mv "bin/$zip" "bin/$dmg" release/
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-${{ matrix.arch }}
+          path: release/*
+          if-no-files-found: error
+
+  release:
+    name: 发布 GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: 下载全部构建产物
+        uses: actions/download-artifact@v4
+        with:
+          pattern: macos-*
+          path: release
+          merge-multiple: true
+
+      - name: 解析标签并生成校验文件
+        id: release
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+        run: |
+          version="${RELEASE_TAG#v}"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          cd release
+          sha256sum DevUtils-* > SHA256SUMS
+
+      - name: 创建或更新 Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release.outputs.tag }}
+          generate_release_notes: true
+          files: |
+            release/DevUtils-*
+            release/SHA256SUMS
