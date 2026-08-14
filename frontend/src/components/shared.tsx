@@ -2,7 +2,7 @@ import {useEffect, useRef, useState} from 'react'
 import {Button, ListBox, Select, Switch} from '@heroui/react'
 import {BracketsCurly} from '@phosphor-icons/react'
 
-export type ToolId = 'json' | 'time' | 'text' | 'base64' | 'diff'
+export type ToolId = 'json' | 'time' | 'text' | 'base64' | 'diff' | 'jwt'
 export type PendingAction = {
     tool: ToolId;
     action: string;
