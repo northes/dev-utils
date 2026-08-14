@@ -34,11 +34,11 @@ Wails v3(beta)桌面托盘应用:Go 后端 + React 19 前端。本地优先的�
 - 代码刻意保持压缩单行风格(每个组件一行、最少空格)。不要重新格式化或美化;编辑时匹配这种紧凑风格。
 - 所有样式在 `frontend/src/index.css`,使用 CSS 自定义属性(仅暗色主题:`--bg`、`--surface`、`--accent` …)。body 为 `user-select:none`。
 - HeroUI(`@heroui/react`):用 HeroUI props 而非标准 DOM — `Button` 触发 `onPress`,`Switch` 用 `isSelected` + `onChange`。使用其他 HeroUI 组件前先查阅 `frontend/.agents/skills/heroui-react/SKILL.md`。
-- 图标来自 `@phosphor-icons/react`,统一 `weight="duotone"` 双色风格(收藏等状态区分除外,如 Heart 选中态用 `fill`)。字体用系统默认栈,`frontend/public/` 内的 Inter TTF 未引用,勿在 CSS 引入。
+- 图标来自 `@phosphor-icons/react`,统一 `weight="duotone"` 双色风格(状态区分除外,如选中态用 `fill`)。字体用系统默认栈,`frontend/public/` 内的 Inter TTF 未引用,勿在 CSS 引入。
 - 图标按钮位于 flex 布局(尤其输入框右侧操作区)时,必须显式设置相等的 `width` 与 `min-width`、`flex:none`/`flex-shrink:0`，并按需要清除横向 padding；否则长输入或窄窗口会把按钮左右压扁。
 - 窗口拖拽区域由 `--wails-draggable: drag/no-drag` CSS 控制(titlebar 用 `data-wails-drag`),不用 JS。
 - **工具页面扁平化,禁止圆角卡片**:不要用带边框/圆角/独立背景的卡片包裹工具内容;内容直接落在页面背景上,层次用 1px 顶/底边框线表达,并按视觉密度取舍(标题-编辑区、编辑区-底部按钮栏之间若显紧贴就去掉边框)。
-- 持久化状态用 localStorage key:`devutils.favorites`、`devutils.history`(设置页配置由 Go `ConfigService` 管理,不走 localStorage)。
+- 持久化状态用 localStorage key:`devutils.lastPage`(重启后恢复上次打开的工具/页面;设置页配置由 Go `ConfigService` 管理,不走 localStorage)。
 - `frontend/.npmrc` 设置 `minimum-release-age=10080`(供应链策略;pnpm/bun 生效,npm 忽略)。
 
 ### 命令面板(`paletteItems` / `CommandPalette`)
@@ -102,7 +102,7 @@ Wails v3(beta)桌面托盘应用:Go 后端 + React 19 前端。本地优先的�
 
 1. `shared.tsx`:`ToolId` 联合类型加新 id。
 2. 新组件 `frontend/src/components/JwtTool.tsx`:用 `ToolLayout`(contentMode="fixed")+ `ToolActionBar`;pending effect 必须校验 `pending.tool === 'jwt'`。
-3. `App.tsx`:`tools` 数组(侧栏/首页/路由)+ `tool-slot` 常驻渲染 + `paletteItems`(`open:<id>` 导航命令 + 工具动作命令,labelKey 复用界面按钮文案)。
+3. `App.tsx`:`tools` 数组(侧栏/路由)+ `tool-slot` 常驻渲染 + `paletteItems`(`open:<id>` 导航命令 + 工具动作命令,labelKey 复用界面按钮文案)。
 4. `HistoryPage.tsx`:`toHistoryItem`、`HistoryIcon`、`historyTools` 三处加新 id(否则 `record('<id>')` 的历史被过滤/无图标)。
 5. locale 两文件(`zh-CN.json`/`en-US.json`):`tools.<id>`、`commands.open<X>`、`<tool>Tool.*`。
 6. 托盘/剪贴板自动匹配(若接入):Go `configservice.go` 的 `defaultConfig` 与 `normalizeConfig` 的 `trayTools` 列表、前端 `App.tsx` 的 `defaultSettings.trayMatchTools` 与 `analyzeClipboard` 检测链 + 检测 helper、`SettingsPage` 的 `trayTools`/`toggleTrayTool` 兜底集合,三处 id 列表保持一致。
@@ -125,7 +125,7 @@ Wails v3(beta)桌面托盘应用:Go 后端 + React 19 前端。本地优先的�
 
 ### 托盘与窗口、配置持久化
 - 托盘附件窗口:显示时**不要**用 `tray.ShowWindow()`(会强制定位到托盘图标下并置顶),直接 `window.Show().Focus()` + `SetAlwaysOnTop(false)`,窗口才回到上次位置。
-- 窗口位置/大小(`window-state.json`)与用户配置(`config.json`)都由 Go 持久化,前端不写 localStorage(收藏/历史除外);Go 退出前用 `app.OnShutdown` flush 防抖中的保存。
+- 窗口位置/大小(`window-state.json`)与用户配置(`config.json`)都由 Go 持久化,前端不写 localStorage(上次打开页面 `devutils.lastPage` 除外);Go 退出前用 `app.OnShutdown` flush 防抖中的保存。
 - Go 结构体经 `wails3 generate bindings -clean=true -ts -i` 直接生成 TS 模型与方法绑定,前端 `type Settings = Config` 直接复用;**改动 Go 结构体后必须重新生成 bindings**。
 
 ## HeroUI 设计原则

@@ -3,7 +3,6 @@
     "name": "DevUtils"
   },
   "titlebar": {
-    "home": "首页",
     "history": "历史记录",
     "settings": "设置",
     "back": "后退",
@@ -23,7 +22,6 @@
     "empty": "未找到匹配命令"
   },
   "nav": {
-    "home": "打开首页",
     "settings": "打开设置",
     "history": "打开历史"
   },
@@ -59,12 +57,6 @@
     "toggleSortRules": "切换排序规则",
     "toggleConcat": "切换拼接",
     "paste": "粘贴"
-  },
-  "home": {
-    "recent": "最近使用",
-    "tools": "工具",
-    "addFavorite": "添加收藏",
-    "removeFavorite": "取消收藏"
   },
   "jsonTool": {
     "title": "JSON 工作区",

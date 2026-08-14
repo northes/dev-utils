@@ -3,7 +3,6 @@
     "name": "DevUtils"
   },
   "titlebar": {
-    "home": "Home",
     "history": "History",
     "settings": "Settings",
     "nav": "System"
@@ -21,7 +20,6 @@
     "empty": "No matching commands"
   },
   "nav": {
-    "home": "Open home",
     "settings": "Open settings",
     "history": "Open history"
   },
@@ -73,12 +71,6 @@
     "compress": "Trim spaces",
     "compressLine": "Flatten to one line",
     "count": "Count text"
-  },
-  "home": {
-    "recent": "Recent",
-    "tools": "Tools",
-    "addFavorite": "Add favorite",
-    "removeFavorite": "Remove favorite"
   },
   "jsonTool": {
     "title": "JSON Workspace",
