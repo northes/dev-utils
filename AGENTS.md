@@ -96,6 +96,25 @@ Wails v3(beta)桌面托盘应用:Go 后端 + React 19 前端。本地优先的�
 - 支持注释的 JSON:语法高亮用 `codemirror-json5`(节点名与 lezer-json 一致,折叠可用);解析前用 shared.tsx 的 `stripJsonComments`/`stripTrailingCommas`/`parseJsonLoose`(字符串感知)剥离注释与尾逗号。
 - 带注释内容执行格式化/压缩:先弹 AlertDialog 询问(格式化:尝试保留/清除注释/取消;压缩:清除/取消);失败用 toast 提示,不静默忽略。
 
+### 新增工具接线清单(JWT 等)
+
+新增工具(以 JWT 为例)必须在以下位置同步接线,缺一会导致类型报错、历史记录被过滤或托盘匹配丢失:
+
+1. `shared.tsx`:`ToolId` 联合类型加新 id。
+2. 新组件 `frontend/src/components/JwtTool.tsx`:用 `ToolLayout`(contentMode="fixed")+ `ToolActionBar`;pending effect 必须校验 `pending.tool === 'jwt'`。
+3. `App.tsx`:`tools` 数组(侧栏/首页/路由)+ `tool-slot` 常驻渲染 + `paletteItems`(`open:<id>` 导航命令 + 工具动作命令,labelKey 复用界面按钮文案)。
+4. `HistoryPage.tsx`:`toHistoryItem`、`HistoryIcon`、`historyTools` 三处加新 id(否则 `record('<id>')` 的历史被过滤/无图标)。
+5. locale 两文件(`zh-CN.json`/`en-US.json`):`tools.<id>`、`commands.open<X>`、`<tool>Tool.*`。
+6. 托盘/剪贴板自动匹配(若接入):Go `configservice.go` 的 `defaultConfig` 与 `normalizeConfig` 的 `trayTools` 列表、前端 `App.tsx` 的 `defaultSettings.trayMatchTools` 与 `analyzeClipboard` 检测链 + 检测 helper、`SettingsPage` 的 `trayTools`/`toggleTrayTool` 兜底集合,三处 id 列表保持一致。
+7. 工具专属样式内聚在组件旁(如 `JwtTool.css`,组件顶部 `import`),不写 `index.css`;`.cm-*` 覆盖必须收敛在工具根类作用域下。
+
+### JWT 工具
+
+- 纯前端解码,无新依赖:复用 `shared.tsx` 的 `decodeBase64`(已兼容 base64url)解 header/payload,`JSON.stringify(v,null,2)` 格式化。
+- 布局:左侧可编辑输入(CodeMirror),右侧上下两栏只读 header / payload;**不展示 signature**;底部单组 `ToolActionBar`:`清空`(tertiary)→`复制 Header`(secondary)→`复制 Payload`(primary)。
+- 托盘匹配判定:三段 `a.b.c`(base64url)且 header、payload 均可解为非空 JSON 对象才命中 `jwt`;检测优先级在 time 之后、base64/json/text 之前。
+- 样式在 `frontend/src/components/JwtTool.css`,与组件同目录。
+
 ### 弹层(AlertDialog)
 - HeroUI AlertDialog portal 到 body、脱离 `.app-shell`:`--accent`/`--cta-*` 等作用域变量不可用。必须在 `index.css` 用 `:root` 变量或显式色值补齐对话框背景、标题、body、Footer 按钮(primary/secondary/tertiary/danger)与关闭按钮样式,否则会继承 HeroUI 浅色主题 token 而配色异常。
 - 破坏性操作(清空历史等)执行前必须 AlertDialog 二次确认,确认按钮用 `danger`。
