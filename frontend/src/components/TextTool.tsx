@@ -1,7 +1,7 @@
 import {useEffect, useMemo, useRef, useState} from 'react'
 import {Popover, type SortDescriptor, Table} from '@heroui/react'
 import {useTranslation} from 'react-i18next'
-import {Trash} from '@phosphor-icons/react'
+import {Copy, Trash} from '@phosphor-icons/react'
 import CodeMirror from '@uiw/react-codemirror'
 import {EditorView} from '@codemirror/view'
 import {tokyoNight} from '@uiw/codemirror-theme-tokyo-night'
@@ -56,6 +56,11 @@ export default function TextTool({active, theme, record, pending, clearPending}:
         toast(t('toast.copied', {value: copied}));
         record('text', t('textTool.copied'), copied, value)
     };
+    const copy = () => {
+        navigator.clipboard?.writeText(value);
+        toast(t('toast.copied', {value: `${[...value].length} ${t('textTool.characters')}`}));
+        record('text', t('textTool.copy'), `${[...value].length} ${t('textTool.characters')}`, value)
+    };
     const apply = (action: string, transform: (v: string) => string) => {
         const next = transform(value);
         setValue(next);
@@ -75,6 +80,17 @@ export default function TextTool({active, theme, record, pending, clearPending}:
         if (pending.action === 'clear') {
             setValue('');
             record('text', t('textTool.cleared'), t('textTool.cleared'), '');
+            return
+        }
+        if (pending.action === 'copy') {
+            const toCopy = value.trim() || pending.input;
+            if (!toCopy.trim()) {
+                toast(t('toast.clipboardEmpty'), {description: t('toast.clipboardEmptyDesc'), variant: 'warning'});
+                return
+            }
+            navigator.clipboard?.writeText(toCopy);
+            toast(t('toast.copied', {value: `${[...toCopy].length} ${t('textTool.characters')}`}));
+            record('text', t('textTool.copy'), `${[...toCopy].length} ${t('textTool.characters')}`, toCopy);
             return
         }
         const labels: Record<string, string> = {
@@ -160,8 +176,15 @@ export default function TextTool({active, theme, record, pending, clearPending}:
                                                                                          label: t('textTool.compressLine'),
                                                                                          variant: 'secondary',
                                                                                          disabled: !value,
-                                                                                         onPress: () => apply(t('textTool.compressedLine'), v => v.replace(/\r\n?|\n/g, ' '))
-                                                                                     }]}/>}>
+                                                                                          onPress: () => apply(t('textTool.compressedLine'), v => v.replace(/\r\n?|\n/g, ' '))
+                                                                                      }, {
+                                                                                          key: 'copy',
+                                                                                          label: t('textTool.copy'),
+                                                                                          icon: Copy,
+                                                                                          variant: 'primary',
+                                                                                          disabled: !value,
+                                                                                          onPress: copy
+                                                                                      }]}/>}>
         <div className="editor text-cm-pane"><span>{t('textTool.input')}</span><CodeMirror className="text-cm"
                                                                                            height="100%"
                                                                                            value={value}

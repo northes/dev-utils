@@ -178,6 +178,7 @@
     "removeSpaces": "Remove spaces",
     "compressSpaces": "Trim spaces",
     "compressLine": "Flatten to one line",
+    "copy": "Copy",
     "clear": "Clear",
     "trimmed": "Trim leading and trailing whitespace",
     "removedSpaces": "Remove spaces",

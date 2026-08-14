@@ -166,6 +166,7 @@
     "removeSpaces": "移除空格",
     "compressSpaces": "修剪空格",
     "compressLine": "压缩为一行",
+    "copy": "复制",
     "clear": "清空",
     "trimmed": "修剪首末空白",
     "removedSpaces": "移除空格",

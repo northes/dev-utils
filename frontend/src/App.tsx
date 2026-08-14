@@ -61,6 +61,7 @@ const paletteItems: PaletteItem[] = [
   {id:'json:concat:copy',labelKey:'jsonTool.copy',groupKey:'tools.json.name',subgroupKey:'jsonTool.concat',icon:BracketsCurly,keywords:'concat template output result 复制 拼接 模板 输出',tool:'json',action:'concatCopy',context:'json.concat'},
   {id:'time:refresh',labelKey:'timeTool.refresh',groupKey:'tools.time.name',icon:Clock,keywords:'time timestamp now refresh 时间戳 当前 插入 刷新',tool:'time',action:'refresh'},
   {id:'time:timezone',labelKey:'timeTool.useSystemTimezone',groupKey:'tools.time.name',icon:Clock,keywords:'time timezone system local 时区 系统 本机',tool:'time',action:'timezone'},
+  {id:'text:copy',labelKey:'textTool.copy',groupKey:'tools.text.name',icon:TextT,keywords:'copy text clipboard 复制 拷贝 剪贴板',tool:'text',action:'copy'},
   {id:'text:clear',labelKey:'textTool.clear',groupKey:'tools.text.name',icon:TextT,keywords:'clear reset empty 清空 重置',tool:'text',action:'clear'},
   {id:'text:trim',labelKey:'textTool.trim',groupKey:'tools.text.name',icon:TextT,keywords:'trim whitespace 修剪 去除首尾空白',tool:'text',action:'trim'},
   {id:'text:removeSpaces',labelKey:'textTool.removeSpaces',groupKey:'tools.text.name',icon:TextT,keywords:'remove spaces 删除 空格',tool:'text',action:'removeSpaces'},
