@@ -25,6 +25,9 @@ var trayAssets embed.FS
 //go:embed assets/updater/window.html
 var updaterWindowHTML string
 
+//go:embed frontend/src/locales/*.json
+var updaterLocaleAssets embed.FS
+
 type windowState struct {
 	X int `json:"x"`
 	Y int `json:"y"`
@@ -65,7 +68,7 @@ func saveWindowState(s *windowState) {
 
 const appName = "DevUtils"
 
-var currentVersion = "0.1.0"
+var currentVersion = "0.0.0"
 
 func matchGitHubUpdateAsset(req updater.CheckRequest, assets []githubprovider.ReleaseAsset) int {
 	for i, asset := range assets {
@@ -87,6 +90,10 @@ func main() {
 
 	cfgService := NewConfigService()
 	updateService := NewUpdateService(currentVersion)
+	updaterWindow, err := buildUpdaterWindow(updaterWindowHTML, cfgService.Get())
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	app := application.New(application.Options{
 		Name:        appName,
@@ -115,12 +122,22 @@ func main() {
 		CurrentVersion: currentVersion,
 		Providers:      []updater.Provider{gh},
 		Window: &updater.BuiltinWindow{
-			HTML:    updaterWindowHTML,
-			Options: updater.WindowOptions{Title: "软件更新", Width: 520, Height: 390},
+			HTML: updaterWindow.HTML,
+			Options: updater.WindowOptions{
+				Title:  updaterWindow.Title,
+				Width:  520,
+				Height: 720,
+			},
 		},
 	}); err != nil {
 		log.Fatal(err)
 	}
+	app.Event.On(updater.EventWindowReady, func(*application.CustomEvent) {
+		app.Event.Emit(updaterPreferencesEvent, updaterPreferencesFromConfig(cfgService.Get()))
+	})
+	cfgService.setOnChange(func(cfg Config) {
+		app.Event.Emit(updaterPreferencesEvent, updaterPreferencesFromConfig(cfg))
+	})
 	updateService.start(app.Updater, cfgService.Get().AutoCheckUpdates)
 	app.OnShutdown(updateService.stopScheduler)
 

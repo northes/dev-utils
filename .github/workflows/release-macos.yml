@@ -118,6 +118,11 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - name: 检出提交历史
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: 下载全部构建产物
         uses: actions/download-artifact@v4
         with:
@@ -125,14 +130,39 @@ jobs:
           path: release
           merge-multiple: true
 
-      - name: 解析标签并生成校验文件
+      - name: 生成更新日志与校验文件
         id: release
         shell: bash
         env:
           RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
         run: |
           version="${RELEASE_TAG#v}"
-          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          tag="v$version"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+          target="$GITHUB_SHA"
+          if git rev-parse --verify --quiet "${tag}^{commit}" >/dev/null; then
+            target="$tag"
+          fi
+          previous_tag="$(git describe --tags --abbrev=0 "${target}^" 2>/dev/null || true)"
+          range="$target"
+          if [ -n "$previous_tag" ]; then
+            range="$previous_tag..$target"
+          fi
+
+          commit_count=0
+          {
+            echo "## Changes"
+            echo
+            while IFS=$'\t' read -r hash short subject; do
+              printf -- '- %s ([`%s`](https://github.com/%s/commit/%s))\n' "$subject" "$short" "$GITHUB_REPOSITORY" "$hash"
+              commit_count=$((commit_count + 1))
+            done < <(git log --no-merges --pretty=format:'%H%x09%h%x09%s' "$range")
+            if [ "$commit_count" -eq 0 ]; then
+              echo "- No changes recorded."
+            fi
+          } > release/RELEASE_NOTES.md
+
           cd release
           sha256sum DevUtils-* > SHA256SUMS
 
@@ -140,7 +170,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.release.outputs.tag }}
-          generate_release_notes: true
+          body_path: release/RELEASE_NOTES.md
           files: |
             release/DevUtils-*
             release/SHA256SUMS

@@ -141,6 +141,7 @@ type ConfigService struct {
 	historyDir  string
 	cfg         Config
 	history     []historyStored
+	onChange    func(Config)
 }
 
 func NewConfigService() *ConfigService {
@@ -159,15 +160,24 @@ func NewConfigService() *ConfigService {
 func (s *ConfigService) ServiceName() string { return "ConfigService" }
 func (s *ConfigService) GetAppName() string  { return appName }
 func (s *ConfigService) Get() Config         { s.mu.Lock(); defer s.mu.Unlock(); return s.cfg }
+func (s *ConfigService) setOnChange(callback func(Config)) {
+	s.mu.Lock()
+	s.onChange = callback
+	s.mu.Unlock()
+}
 func (s *ConfigService) Save(cfg Config) {
 	cfg = normalizeConfig(cfg)
 	s.mu.Lock()
 	s.cfg = cfg
 	path := s.path
+	onChange := s.onChange
 	s.mu.Unlock()
 	if b, err := json.Marshal(cfg); err == nil {
 		_ = os.MkdirAll(filepath.Dir(path), 0o755)
 		_ = os.WriteFile(path, b, 0o600)
+	}
+	if onChange != nil {
+		onChange(cfg)
 	}
 }
 func (s *ConfigService) writeIndexLocked() {
