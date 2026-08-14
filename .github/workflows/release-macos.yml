@@ -60,8 +60,8 @@ jobs:
 
       - name: 写入应用版本
         run: |
-          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${{ steps.version.outputs.version }}" bin/dev-utils.app/Contents/Info.plist
-          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${{ steps.version.outputs.version }}" bin/dev-utils.app/Contents/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${{ steps.version.outputs.version }}" bin/DevUtils.app/Contents/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${{ steps.version.outputs.version }}" bin/DevUtils.app/Contents/Info.plist
 
       - name: 导入 Apple 签名证书
         if: ${{ env.APPLE_CERTIFICATE != '' }}
@@ -77,9 +77,9 @@ jobs:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
         run: |
           if [ -n "$APPLE_SIGNING_IDENTITY" ]; then
-            codesign --force --deep --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" bin/dev-utils.app
+            codesign --force --deep --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" bin/DevUtils.app
           else
-            codesign --force --deep --sign - bin/dev-utils.app
+            codesign --force --deep --sign - bin/DevUtils.app
           fi
 
       - name: 公证并装订应用
@@ -89,9 +89,9 @@ jobs:
           APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          ditto -c -k --sequesterRsrc --keepParent bin/dev-utils.app bin/notarize.zip
+          ditto -c -k --sequesterRsrc --keepParent bin/DevUtils.app bin/notarize.zip
           xcrun notarytool submit bin/notarize.zip --apple-id "$APPLE_ID" --password "$APPLE_APP_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
-          xcrun stapler staple bin/dev-utils.app
+          xcrun stapler staple bin/DevUtils.app
 
       - name: 生成 ZIP 更新包与 DMG 安装包
         shell: bash
@@ -100,9 +100,9 @@ jobs:
           arch="${{ matrix.arch }}"
           zip="DevUtils-${version}-darwin-${arch}.zip"
           dmg="DevUtils-${version}-darwin-${arch}.dmg"
-          ditto -c -k --sequesterRsrc --keepParent bin/dev-utils.app "bin/$zip"
+          ditto -c -k --sequesterRsrc --keepParent bin/DevUtils.app "bin/$zip"
           wails3 task darwin:create:dmg
-          mv bin/dev-utils.dmg "bin/$dmg"
+          mv bin/DevUtils.dmg "bin/$dmg"
           mkdir -p release
           mv "bin/$zip" "bin/$dmg" release/
 

@@ -5,7 +5,7 @@
 		<key>CFBundleDisplayName</key>
 		<string>DevUtils</string>
 		<key>CFBundleExecutable</key>
-		<string>dev-utils</string>
+		<string>DevUtils</string>
 		<key>CFBundleGetInfoString</key>
 		<string>Local-first developer utility launcher</string>
 		<key>CFBundleIdentifier</key>

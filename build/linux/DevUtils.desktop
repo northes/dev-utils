@@ -3,11 +3,11 @@ Version=1.0
 Name=DevUtils
 Comment=Local-first developer utility launcher
 # The Exec line includes %u to pass the URL to the application
-Exec=/usr/local/bin/dev-utils %u
+Exec=/usr/local/bin/DevUtils %u
 Terminal=false
 Type=Application
-Icon=dev-utils
+Icon=DevUtils
 Categories=Utility;
-StartupWMClass=dev-utils
+StartupWMClass=DevUtils
 
  

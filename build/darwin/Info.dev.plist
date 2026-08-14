@@ -3,7 +3,7 @@
 <plist version="1.0">
 	<dict>
 		<key>CFBundleExecutable</key>
-		<string>dev-utils</string>
+		<string>DevUtils</string>
 		<key>CFBundleGetInfoString</key>
 		<string>Local-first developer utility launcher</string>
 		<key>CFBundleIconFile</key>

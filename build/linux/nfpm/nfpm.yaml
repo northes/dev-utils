@@ -3,7 +3,7 @@
 #
 # The lines below are called `modelines`. See `:help modeline`
 
-name: "dev-utils"
+name: "DevUtils"
 arch: ${GOARCH}
 platform: "linux"
 version: "0.1.0"
@@ -17,12 +17,12 @@ license: "MIT"
 release: "1"
 
 contents:
-  - src: "./bin/dev-utils"
-    dst: "/usr/local/bin/dev-utils"
+  - src: "./bin/DevUtils"
+    dst: "/usr/local/bin/DevUtils"
   - src: "./build/appicon.png"
-    dst: "/usr/share/icons/hicolor/128x128/apps/dev-utils.png"
-  - src: "./build/linux/dev-utils.desktop"
-    dst: "/usr/share/applications/dev-utils.desktop"
+    dst: "/usr/share/icons/hicolor/128x128/apps/DevUtils.png"
+  - src: "./build/linux/DevUtils.desktop"
+    dst: "/usr/share/applications/DevUtils.desktop"
 
 # Default dependencies for the GTK4 + WebKitGTK 6.0 stack (Ubuntu 24.04+ / Debian 13+)
 depends:
