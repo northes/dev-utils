@@ -15,6 +15,7 @@ import {parseJsonLoose, Reveal, type Icon, type PendingAction, type ToolId} from
 import {parseTimeInput} from './utils/time'
 import {AppToastProvider, toast} from './components/AppToast'
 import {AppendHistory, ClearHistory, Get as GetConfig, GetHistoryContent, GetHistoryPage, Save as SaveConfig} from '../bindings/changeme/configservice'
+import {SetAutoCheckEnabled} from '../bindings/changeme/updateservice'
 import type {Config as Settings} from '../bindings/changeme/models'
 
 type Page = 'home' | 'settings' | 'history' | ToolId
@@ -23,7 +24,7 @@ type PaletteContext = string
 type PaletteItem = {id:string;labelKey:string;groupKey:string;icon:Icon;keywords:string;page?:Page;tool?:ToolId;action?:string;mode?:string;target?:'before'|'after'|'alternate';pane?:'input'|'result';subgroupKey?:string;needsInput?:boolean;context?:PaletteContext}
 type TranslatablePaletteItem = PaletteItem & {label:string;group:string;subgroup:string}
 type IndexedItem = TranslatablePaletteItem & {text:string;pinyin:string;initials:string}
-const defaultSettings: Settings = {trayMatchEnabled:true,trayMatchTools:['json','time','text','base64','diff'],autoOverwrite:true,language:'zh-CN',sidebarMode:'full',theme:'dark',diffHighlightMode:'character',diffClipboardTargetMode:'alternate',codeEditorFontSize:12,timeResultOrder:['local','dateTime','dateOnly','timeOnly','zonedIso8601','rfc3339','utc','compact','underscore','unixSeconds','unixMilliseconds','unixNanoseconds'],hiddenTimeResults:[]}
+const defaultSettings: Settings = {trayMatchEnabled:true,trayMatchTools:['json','time','text','base64','diff'],autoOverwrite:true,autoCheckUpdates:true,language:'zh-CN',sidebarMode:'full',theme:'dark',diffHighlightMode:'character',diffClipboardTargetMode:'alternate',codeEditorFontSize:12,timeResultOrder:['local','dateTime','dateOnly','timeOnly','zonedIso8601','rfc3339','utc','compact','underscore','unixSeconds','unixMilliseconds','unixNanoseconds'],hiddenTimeResults:[]}
 const tools:ToolDefinition[] = [
   {id:'json' as const,nameKey:'tools.json.name',descriptionKey:'tools.json.description',icon:BracketsCurly,keywords:'json format minify compare schema path'},
   {id:'time' as const,nameKey:'tools.time.name',descriptionKey:'tools.time.description',icon:Clock,keywords:'time timestamp date unix utc rfc iso'},
@@ -104,7 +105,7 @@ function App(){
   useEffect(()=>Events.On('tray:analyze',()=>{void analyzeClipboard()}),[settings])
   useLayoutEffect(()=>workspaceRef.current?.scrollTo(0,0),[page])
   useEffect(()=>{GetConfig().then(c=>{settingsReady.current=true;setSettings(c)}).catch(()=>{settingsReady.current=true})},[])
-  useEffect(()=>{if(!settingsReady.current)return;void SaveConfig(settings)},[settings])
+  useEffect(()=>{if(!settingsReady.current)return;void SaveConfig(settings);void SetAutoCheckEnabled(settings.autoCheckUpdates)},[settings])
   useEffect(()=>{GetHistoryPage(0,10).then(page=>{historyReady.current=true;setHistory((page.items??[]).map(toHistoryItem).filter((x):x is HistoryItem=>x!==null))}).catch(()=>{historyReady.current=true})},[])
   useEffect(()=>localStorage.setItem('devutils.favorites',JSON.stringify(favorites)),[favorites])
   const sidebarMode=(settings.sidebarMode as SidebarMode)||'full'
