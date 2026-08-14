@@ -241,7 +241,18 @@
     "subtitle": "Content is stored on this device and large entries load on demand.",
     "clear": "Clear",
     "emptyTitle": "No activity yet",
-    "emptyHint": "After you run a tool, its actions will show here."
+    "emptyHint": "After you run a tool, its actions will show here.",
+    "filterTool": "Tool",
+    "filterRange": "Date range",
+    "allTools": "All tools",
+    "clearRange": "Clear date range",
+    "columnTool": "Tool",
+    "columnAction": "Action",
+    "columnDetail": "Detail",
+    "columnTime": "Time",
+    "summary": "{{start}}–{{end}} of {{total}}",
+    "prev": "Previous",
+    "next": "Next"
   },
   "types": {
     "json": "JSON",

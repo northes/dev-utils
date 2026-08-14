@@ -233,7 +233,18 @@
     "emptyTitle": "暂无活动",
     "emptyHint": "运行工具后，其操作会显示在这里。",
     "loadFailed": "加载失败",
-    "loadFailedHint": "点击重试"
+    "loadFailedHint": "点击重试",
+    "filterTool": "工具",
+    "filterRange": "时间范围",
+    "allTools": "全部工具",
+    "clearRange": "清除时间范围",
+    "columnTool": "工具",
+    "columnAction": "操作",
+    "columnDetail": "详情",
+    "columnTime": "时间",
+    "summary": "第 {{start}}–{{end}} 条 / 共 {{total}} 条",
+    "prev": "上一页",
+    "next": "下一页"
   },
   "types": {
     "json": "JSON",

@@ -215,6 +215,52 @@ func (s *ConfigService) GetHistoryPage(offset int, limit int) (HistoryPage, erro
 	}
 	return HistoryPage{Items: items, Total: total}, nil
 }
+
+type HistoryFilter struct {
+	Tool string `json:"tool"`
+	From int64  `json:"from"`
+	To   int64  `json:"to"`
+}
+
+func (s *ConfigService) QueryHistory(offset int, limit int, filter HistoryFilter) (HistoryPage, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if offset < 0 {
+		offset = 0
+	}
+	if limit < 1 || limit > 100 {
+		limit = 20
+	}
+	filtered := make([]HistoryItem, 0, len(s.history))
+	for _, v := range s.history {
+		if filter.Tool != "" && v.Item.Tool != filter.Tool {
+			continue
+		}
+		if filter.From != 0 || filter.To != 0 {
+			t, err := time.Parse(time.RFC3339Nano, v.Item.At)
+			if err != nil {
+				continue
+			}
+			ms := t.UnixMilli()
+			if filter.From != 0 && ms < filter.From {
+				continue
+			}
+			if filter.To != 0 && ms > filter.To {
+				continue
+			}
+		}
+		filtered = append(filtered, v.Item)
+	}
+	total := len(filtered)
+	if offset >= total {
+		return HistoryPage{Items: []HistoryItem{}, Total: total}, nil
+	}
+	end := offset + limit
+	if end > total {
+		end = total
+	}
+	return HistoryPage{Items: filtered[offset:end], Total: total}, nil
+}
 func (s *ConfigService) AppendHistory(entry HistoryEntry) (HistoryItem, error) {
 	if entry.Tool == "" {
 		return HistoryItem{}, errors.New("missing history tool")
@@ -232,11 +278,6 @@ func (s *ConfigService) AppendHistory(entry HistoryEntry) (HistoryItem, error) {
 	}
 	s.history = append([]historyStored{{Item: item, File: file}}, s.history...)
 	sort.SliceStable(s.history, func(i, j int) bool { return s.history[i].Item.ID > s.history[j].Item.ID })
-	for len(s.history) > 100 {
-		last := s.history[len(s.history)-1]
-		_ = os.Remove(last.File)
-		s.history = s.history[:len(s.history)-1]
-	}
 	s.writeIndexLocked()
 	return item, nil
 }
