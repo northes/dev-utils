@@ -95,6 +95,13 @@ func normalizeConfig(cfg Config) Config {
 		}
 		cfg.URLTrayMatchMigrated = true
 	}
+	switch cfg.Theme {
+	case "light", "dark":
+	case "ink":
+		cfg.Theme = "light"
+	default:
+		cfg.Theme = "dark"
+	}
 	switch cfg.DiffHighlightMode {
 	case "word-alt", "word", "character", "none":
 	default:
