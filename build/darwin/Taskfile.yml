@@ -16,6 +16,7 @@ tasks:
           ARCH: '{{.ARCH}}'
           DEV: '{{.DEV}}'
           OUTPUT: '{{.OUTPUT}}'
+          PREBUILT_FRONTEND: '{{.PREBUILT_FRONTEND}}'
           EXTRA_TAGS: '{{.EXTRA_TAGS}}'
           OBFUSCATED: '{{.OBFUSCATED}}'
           GARBLE_ARGS: '{{.GARBLE_ARGS}}'
@@ -27,8 +28,7 @@ tasks:
     summary: Builds the application natively on macOS
     internal: true
     deps:
-      - task: common:go:mod:tidy
-      - task: common:build:frontend
+      - task: '{{if eq .PREBUILT_FRONTEND "true"}}verify:prebuilt:frontend{{else}}common:build:frontend{{end}}'
         vars:
           BUILD_FLAGS:
             ref: .BUILD_FLAGS
@@ -53,6 +53,13 @@ tasks:
       CGO_CFLAGS: "-mmacosx-version-min=12.0"
       CGO_LDFLAGS: "-mmacosx-version-min=12.0"
       MACOSX_DEPLOYMENT_TARGET: "12.0"
+
+  verify:prebuilt:frontend:
+    summary: 检查预构建前端产物是否可用
+    internal: true
+    preconditions:
+      - sh: test -f frontend/dist/index.html
+        msg: "PREBUILT_FRONTEND=true 需要 frontend/dist/index.html"
 
   build:docker:
     summary: Cross-compiles for macOS using Docker (for Linux/Windows hosts)
