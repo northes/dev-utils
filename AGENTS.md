@@ -105,7 +105,7 @@ Wails v3(beta)桌面托盘应用:Go 后端 + React 19 前端。本地优先的�
 3. `App.tsx`:`tools` 数组(侧栏/路由)+ `tool-slot` 常驻渲染 + `paletteItems`(`open:<id>` 导航命令 + 工具动作命令,labelKey 复用界面按钮文案)。
 4. `HistoryPage.tsx`:`toHistoryItem`、`HistoryIcon`、`historyTools` 三处加新 id(否则 `record('<id>')` 的历史被过滤/无图标)。
 5. locale 两文件(`zh-CN.json`/`en-US.json`):`tools.<id>`、`commands.open<X>`、`<tool>Tool.*`。
-6. 托盘/剪贴板自动匹配(若接入):Go `configservice.go` 的 `defaultConfig` 与 `normalizeConfig` 的 `trayTools` 列表、前端 `App.tsx` 的 `defaultSettings.trayMatchTools` 与 `analyzeClipboard` 检测链 + 检测 helper、`SettingsPage` 的 `trayTools`/`toggleTrayTool` 兜底集合,三处 id 列表保持一致。
+6. 托盘/剪贴板自动匹配(若接入):Go `configservice.go` 的 `defaultConfig` 与 `normalizeConfig` 的 `trayTools` 列表、前端 `App.tsx` 的 `defaultSettings.trayMatchTools` 与 `analyzeClipboard` 检测链 + 检测 helper、`SettingsPage` 的 `trayTools`/`toggleTrayTool` 兜底集合,三处 id 列表保持一致。**凡是支持托盘识别的新工具默认开启**:必须同步加入 Go 默认配置、前端默认配置和设置页兜底集合;已有用户配置需通过一次性迁移加入新工具,迁移完成后用户手动关闭必须持久化且不得在下次启动被重新开启。
 7. 工具专属样式内聚在组件旁(如 `JwtTool.css`,组件顶部 `import`),不写 `index.css`;`.cm-*` 覆盖必须收敛在工具根类作用域下。
 
 ### JWT 工具
