@@ -4,7 +4,7 @@
 
 ## Platform
 
-adaptive
+web
 
 ## Users
 
@@ -29,7 +29,7 @@ DevUtils 通过桌面端、本地执行、命令面板和剪贴板联动，把�
 - 纯本地运行，用户数据不得上传到远程服务。
 - 前端使用 React + TypeScript，桌面壳使用 Wails，Go 后端保持薄层职责。
 - 当前界面以简体中文为主，并通过国际化资源保持可扩展性。
-- 当前以 macOS 为主要运行平台，未来计划支持 Windows 和 Linux。
+- 产品是运行在 Wails WebView 中的桌面 Web UI，当前以 macOS 为主要运行平台，未来计划支持 Windows 和 Linux。
 
 ## Brand Commitments
 
@@ -50,5 +50,4 @@ DevUtils 通过桌面端、本地执行、命令面板和剪贴板联动，把�
 - 快速完成：常见开发调试任务应减少切换和重复操作。
 - 工具集中：相关的小工具应在统一工作台中保持一致体验。
 - 可恢复：工具输入、历史和页面状态应尽量避免意外丢失。
-- 跨平台演进：macOS 优先，但产品能力和交互应为 Windows/Linux 支持保留空间。
-
+- 桌面跨平台演进：macOS 优先，但产品能力和交互应为 Windows/Linux 支持保留空间。

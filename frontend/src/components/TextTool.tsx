@@ -4,8 +4,7 @@ import {useTranslation} from 'react-i18next'
 import {Copy, Trash} from '@phosphor-icons/react'
 import CodeMirror from '@uiw/react-codemirror'
 import {EditorView} from '@codemirror/view'
-import {tokyoNight} from '@uiw/codemirror-theme-tokyo-night'
-import {tokyoNightDay} from '@uiw/codemirror-theme-tokyo-night-day'
+import {quietEditorTheme} from './codeMirrorTheme'
 import {type PendingAction, Reveal, ToolActionBar, type ToolId, ToolLayout, useFocusOnActivate} from './shared'
 import {toast} from './AppToast'
 
@@ -28,7 +27,7 @@ export default function TextTool({active, theme, record, pending, clearPending}:
     const inputView = useRef<EditorView | null>(null);
     useFocusOnActivate(active, () => inputView.current?.focus());
     const [sortDescriptor, setSortDescriptor] = useState<SortDescriptor>({column: 'count', direction: 'descending'});
-    const cmTheme = theme === 'light' ? tokyoNightDay : tokyoNight;
+    const cmTheme = quietEditorTheme;
     const extensions = useMemo(() => [EditorView.lineWrapping], []);
     const stats = useMemo(() => {
         const characters = [...value];

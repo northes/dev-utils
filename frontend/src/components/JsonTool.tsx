@@ -7,8 +7,7 @@ import {json5} from 'codemirror-json5'
 import {codeFolding, syntaxTree} from '@codemirror/language'
 import {EditorView,keymap} from '@codemirror/view'
 import {autocompletion,type CompletionContext,type CompletionResult,acceptCompletion,startCompletion} from '@codemirror/autocomplete'
-import {tokyoNight} from '@uiw/codemirror-theme-tokyo-night'
-import {tokyoNightDay} from '@uiw/codemirror-theme-tokyo-night-day'
+import {quietEditorTheme} from './codeMirrorTheme'
 import {ArrowDown,ArrowUp,Copy,CurrencyDollar,DotsSixVertical,Plus,Trash,X} from '@phosphor-icons/react'
 import {formatJsonPreserve,hasComments,parseJsonLoose,Reveal,ToolActionBar,ToolLayout,useFocusOnActivate,type PendingAction,type ToolId} from './shared'
 import {toast} from './AppToast'
@@ -44,7 +43,7 @@ function SortPanel({rules,onChange,onRemove,onMove,onAdd,canRestore,onRestore}:{
 
 export default function JsonTool({active,theme,record,pending,clearPending,onSortOpenChange,onConcatOpenChange}:{active:boolean;theme:string;record:(tool:ToolId,action:string,detail:string,input:string)=>void;pending:PendingAction|null;clearPending:()=>void;onSortOpenChange?:(open:boolean)=>void;onConcatOpenChange?:(open:boolean)=>void}){
   const{t}=useTranslation();const[schema,setSchema]=useState(false);const[sortMode,setSortMode]=useState(false);const[concatMode,setConcatMode]=useState(false);const[input,setInput]=useState('');const[path,setPath]=useState('$');const[result,setResult]=useState('');const[pathError,setPathError]=useState('');const[template,setTemplate]=useState('');const[concatResult,setConcatResult]=useState('');const[concatError,setConcatError]=useState('');const[concatWrap,setConcatWrap]=useState(false);const[sortRules,setSortRules]=useState<SortRule[]>([{mode:'key',path:'',dir:'asc'}]);const[sortSource,setSortSource]=useState<string|null>(null);const[commentDialog,setCommentDialog]=useState<null|{mode:'format'|'minify';pane:'input'|'result'}>(null);const consumed=useRef<PendingAction|null>(null);const views=useRef(new Map<string,EditorView>());useFocusOnActivate(active,()=>views.current.get('input')?.focus())
-  const cmTheme=theme==='light'?tokyoNightDay:tokyoNight
+  const cmTheme=quietEditorTheme
   const jsonValue=useMemo(()=>{try{return parseJsonLoose(input)}catch{return null}},[input])
   const pathExt=useMemo(()=>[EditorView.lineWrapping,jsonValue?pathCompletions(jsonValue):autocompletion({override:[]}),keymap.of([{key:'Tab',run:v=>{acceptCompletion(v);return true}}])],[jsonValue])
   const templatePathExt=useMemo(()=>[EditorView.lineWrapping,jsonValue?pathCompletions(jsonValue,true):autocompletion({override:[]}),keymap.of([{key:'Tab',run:v=>{acceptCompletion(v);return true}}])],[jsonValue])
