@@ -214,9 +214,12 @@ func main() {
 		tray.SetIcon(trayLight)
 	}
 	showFromTray := func() {
-		window.SetAlwaysOnTop(false)
+		// 临时提升窗口层级，确保从托盘菜单唤回时能越过当前前台窗口；
+		// 聚焦后恢复普通层级，避免 DevUtils 变成永久置顶窗口。
+		window.SetAlwaysOnTop(true)
 		window.Show()
 		window.Focus()
+		window.SetAlwaysOnTop(false)
 	}
 	isQuitting := false
 	quit := func() {
