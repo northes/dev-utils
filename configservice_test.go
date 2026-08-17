@@ -8,12 +8,14 @@ func TestNormalizeConfigTheme(t *testing.T) {
 		in   string
 		want string
 	}{
-		{name: "浅色", in: "light", want: "light"},
-		{name: "深色", in: "dark", want: "dark"},
-		{name: "旧墨色迁移为浅色", in: "ink", want: "light"},
-		{name: "旧松绿色迁移为深色", in: "pine", want: "dark"},
-		{name: "空值回退为深色", in: "", want: "dark"},
-		{name: "未知值回退为深色", in: "custom", want: "dark"},
+		{name: "默认浅色", in: "default-light", want: "default-light"},
+		{name: "默认深色", in: "default-dark", want: "default-dark"},
+		{name: "旧浅色名称回退为深色", in: "light", want: "default-dark"},
+		{name: "旧深色名称回退为深色", in: "dark", want: "default-dark"},
+		{name: "未知墨色主题回退为深色", in: "ink", want: "default-dark"},
+		{name: "未知松绿色主题回退为深色", in: "pine", want: "default-dark"},
+		{name: "空值回退为深色", in: "", want: "default-dark"},
+		{name: "未知值回退为深色", in: "custom", want: "default-dark"},
 	}
 
 	for _, test := range tests {

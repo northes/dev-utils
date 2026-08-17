@@ -92,7 +92,7 @@ DevUtils 采用 Operate 模式：它是一台长期使用的本地调试仪器�
 
 - Operate 优先的紧凑工作台，而非展示型界面。
 - 扁平工作面、细分隔线和明确的内容作用域。
-- 默认浅色/深色双主题，共用蓝色焦点与克制的状态色。
+- 当前内置 `default-light` / `default-dark` 双主题，共用蓝色焦点与克制的状态色；未来主题遵循 `<name>-light` / `<name>-dark` 命名。
 - 系统 UI 字体承载界面，等宽字体承载代码和技术值。
 - 默认无过渡、无入场动画；状态变化立即发生。
 
@@ -117,7 +117,7 @@ DevUtils 采用 Operate 模式：它是一台长期使用的本地调试仪器�
 - **Foreground / Muted / Border：** 正文、辅助信息和 1px 结构边界必须使用当前主题对应角色，不直接写颜色常量。
 - **Overlay：** 浮层使用当前主题的实体 overlay 表面，保持与页面内容的可读分离。
 
-**The Single Theme Authority Rule.** `themes.css` 是完整 OKLCH 主题变量的唯一运行时权威；消费层不得建立另一套色板。
+**The Single Theme Authority Rule.** `themes.css` 是完整 OKLCH 主题变量的唯一运行时权威；主题 ID 使用 `<name>-light` / `<name>-dark` 约定，消费层不得建立另一套色板。
 
 **The Derived Token Ownership Rule.** HeroUI 负责 `surface-hover`、soft colors、二级边框、滚动条和半径阶梯等派生 token；项目不得用同名变量覆盖它们，只能消费。
 

@@ -28,8 +28,8 @@ func updaterPreferencesFromConfig(cfg Config) updaterPreferences {
 		language = "zh-CN"
 	}
 	theme := cfg.Theme
-	if theme != "light" {
-		theme = "dark"
+	if theme != "default-light" && theme != "default-dark" {
+		theme = "default-dark"
 	}
 	return updaterPreferences{Language: language, Theme: theme}
 }

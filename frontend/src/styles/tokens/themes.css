@@ -1,8 +1,6 @@
 :root,
-.light,
-.default,
-[data-theme="light"],
-[data-theme="default"] {
+.default-light,
+[data-theme="default-light"] {
   color-scheme: light;
 
   /* Theme Colors (Light Mode) */
@@ -46,8 +44,8 @@
   --font-sans: var(--font-inter);
 }
 
-.dark,
-[data-theme="dark"] {
+.default-dark,
+[data-theme="default-dark"] {
   color-scheme: dark;
 
   /* Theme Colors (Dark Mode) */

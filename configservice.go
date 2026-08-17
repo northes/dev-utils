@@ -61,7 +61,7 @@ type historyStored struct {
 }
 
 func defaultConfig() Config {
-	return Config{TrayMatchEnabled: true, TrayMatchTools: []string{"json", "time", "text", "base64", "diff", "jwt", "url"}, AutoOverwrite: true, AutoCheckUpdates: true, Language: "zh-CN", SidebarMode: "full", Theme: "dark", DiffHighlightMode: "character", DiffClipboardTargetMode: "alternate", CodeEditorFontSize: 12, TimeResultOrder: []string{"local", "dateTime", "dateOnly", "timeOnly", "zonedIso8601", "rfc3339", "utc", "compact", "underscore", "unixSeconds", "unixMilliseconds", "unixNanoseconds"}}
+	return Config{TrayMatchEnabled: true, TrayMatchTools: []string{"json", "time", "text", "base64", "diff", "jwt", "url"}, AutoOverwrite: true, AutoCheckUpdates: true, Language: "zh-CN", SidebarMode: "full", Theme: "default-dark", DiffHighlightMode: "character", DiffClipboardTargetMode: "alternate", CodeEditorFontSize: 12, TimeResultOrder: []string{"local", "dateTime", "dateOnly", "timeOnly", "zonedIso8601", "rfc3339", "utc", "compact", "underscore", "unixSeconds", "unixMilliseconds", "unixNanoseconds"}}
 }
 func normalizeConfig(cfg Config) Config {
 	trayTools := []string{"json", "time", "text", "base64", "diff", "jwt", "url"}
@@ -96,11 +96,9 @@ func normalizeConfig(cfg Config) Config {
 		cfg.URLTrayMatchMigrated = true
 	}
 	switch cfg.Theme {
-	case "light", "dark":
-	case "ink":
-		cfg.Theme = "light"
+	case "default-light", "default-dark":
 	default:
-		cfg.Theme = "dark"
+		cfg.Theme = "default-dark"
 	}
 	switch cfg.DiffHighlightMode {
 	case "word-alt", "word", "character", "none":
