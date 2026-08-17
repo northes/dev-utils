@@ -1,4 +1,4 @@
-.update-pill{position:absolute;top:50%;right:16px;transform:translateY(-50%);z-index:3;display:flex;align-items:center;gap:5px;height:24px;max-width:min(340px,calc(100vw - 220px));padding:0 8px 0 9px;border:1px solid var(--border);border-radius:999px;background:var(--surface);color:var(--foreground);--wails-draggable:no-drag}
+.update-pill{position:relative;top:1px;z-index:3;display:flex;align-items:center;align-self:center;flex:none;gap:5px;height:24px;max-width:min(340px,calc(100vw - 220px));margin-left:auto;padding:0 8px 0 9px;border:1px solid var(--border);border-radius:999px;background:var(--surface);color:var(--foreground);--wails-draggable:no-drag}
 .update-pill--available{cursor:pointer}.update-pill--available:hover{border-color:var(--text-muted);background:var(--surface-tertiary)}
 .update-pill--working{display:grid;grid-template-columns:14px minmax(0,auto);align-items:center;gap:6px;padding-inline:8px}
 .update-pill__action{display:flex;align-items:center;gap:6px;min-width:0;height:100%;padding:0;border:0;background:none;color:inherit;cursor:pointer}
