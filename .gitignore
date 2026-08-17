@@ -13,6 +13,32 @@ build/android/gen/
 .wails-docs
 .playwright-cli/
 
+# Local OS and editor metadata
+.DS_Store
+.claude/
+.codex/
+.cursor/
+.impeccable/
+.github/hooks/
+
+# Local Wails/Vite generated temporary files
+frontend/.bindings-tmp-*/
+
+# Frontend tooling output
+frontend/.vite/
+frontend/coverage/
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+frontend/pnpm-debug.log*
+
+# Local environment files (keep committed examples/templates)
+*.local
+*.local.*
+.env
+.env.*
+!.env.example
+
 changeme
 
 iconsax/
