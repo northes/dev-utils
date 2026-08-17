@@ -12,6 +12,19 @@ build/android/overlay.json
 build/android/gen/
 .wails-docs
 .playwright-cli/
+.playwright-mcp/
+
+# Go build and local runtime output
+*.test
+*.out
+*.prof
+dev-utils
+dist/
+tmp/
+
+# Local logs and crash reports
+*.log
+*.crash
 
 # Local OS and editor metadata
 .DS_Store
