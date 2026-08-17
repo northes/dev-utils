@@ -22,12 +22,6 @@ var assets embed.FS
 //go:embed assets/tray/*.png
 var trayAssets embed.FS
 
-//go:embed assets/updater/window.html
-var updaterWindowHTML string
-
-//go:embed frontend/src/locales/*.json
-var updaterLocaleAssets embed.FS
-
 type windowState struct {
 	X int `json:"x"`
 	Y int `json:"y"`
@@ -90,11 +84,7 @@ func main() {
 
 	cfgService := NewConfigService()
 	updateService := NewUpdateService(currentVersion)
-	updaterWindow, err := buildUpdaterWindow(updaterWindowHTML, cfgService.Get())
-	if err != nil {
-		log.Fatal(err)
-	}
-
+	isQuitting := false
 	app := application.New(application.Options{
 		Name:        appName,
 		Description: "Local-first developer utility launcher",
@@ -121,23 +111,12 @@ func main() {
 	if err := app.Updater.Init(updater.Config{
 		CurrentVersion: currentVersion,
 		Providers:      []updater.Provider{gh},
-		Window: &updater.BuiltinWindow{
-			HTML: updaterWindow.HTML,
-			Options: updater.WindowOptions{
-				Title:  updaterWindow.Title,
-				Width:  520,
-				Height: 720,
-			},
-		},
+		// 无窗口 headless 模式：更新流程完全由主窗口前端药丸驱动，
+		// 事件经 app.Event 广播到主窗口，不再创建独立的更新窗口。
+		Window: updater.WindowNone,
 	}); err != nil {
 		log.Fatal(err)
 	}
-	app.Event.On(updater.EventWindowReady, func(*application.CustomEvent) {
-		app.Event.Emit(updaterPreferencesEvent, updaterPreferencesFromConfig(cfgService.Get()))
-	})
-	cfgService.setOnChange(func(cfg Config) {
-		app.Event.Emit(updaterPreferencesEvent, updaterPreferencesFromConfig(cfg))
-	})
 	updateService.start(app.Updater, cfgService.Get().AutoCheckUpdates)
 	app.OnShutdown(updateService.stopScheduler)
 
@@ -168,6 +147,10 @@ func main() {
 				AllowsBackForwardNavigationGestures: application.Enabled,
 			},
 		},
+	})
+	updateService.setBeforeRestart(func() {
+		// 更新重启走真实退出，避免 WindowClosing 钩子把它当成隐藏到托盘。
+		isQuitting = true
 	})
 
 	var saveTimer *time.Timer
@@ -221,7 +204,6 @@ func main() {
 		window.Focus()
 		window.SetAlwaysOnTop(false)
 	}
-	isQuitting := false
 	quit := func() {
 		isQuitting = true
 		app.Quit()

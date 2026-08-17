@@ -24,7 +24,14 @@ type UpdateService struct {
 	wake           chan struct{}
 	stop           chan struct{}
 	done           chan struct{}
+	beforeRestart  func()
 	stopOnce       sync.Once
+}
+
+func (s *UpdateService) setBeforeRestart(before func()) {
+	s.mu.Lock()
+	s.beforeRestart = before
+	s.mu.Unlock()
 }
 
 func NewUpdateService(version string) *UpdateService {
@@ -55,14 +62,58 @@ func (s *UpdateService) SetAutoCheckEnabled(enabled bool) {
 	}
 }
 
-func (s *UpdateService) CheckForUpdates() error {
+// CheckForUpdates runs a single check and reports whether a newer release is
+// available. The result is also broadcast to the main window through the
+// updater's own events (update-available / no-update), which drive the pill.
+func (s *UpdateService) CheckForUpdates() (bool, error) {
 	s.checkMu.Lock()
 	defer s.checkMu.Unlock()
 	u := s.getUpdater()
 	if u == nil {
+		return false, errors.New("更新服务尚未初始化")
+	}
+	release, err := u.Check(context.Background())
+	if err != nil {
+		return false, err
+	}
+	return release != nil, nil
+}
+
+// InstallUpdate downloads, verifies and stages the pending release. If no
+// release is pending it re-checks first. Download progress is reported via the
+// updater's download-progress events, which the pill subscribes to.
+func (s *UpdateService) InstallUpdate() error {
+	u := s.getUpdater()
+	if u == nil {
 		return errors.New("更新服务尚未初始化")
 	}
-	return u.CheckAndInstall(context.Background())
+	if u.State() != updater.StateAvailable {
+		s.checkMu.Lock()
+		release, err := u.Check(context.Background())
+		s.checkMu.Unlock()
+		if err != nil {
+			return err
+		}
+		if release == nil {
+			return errors.New("暂无可用更新")
+		}
+	}
+	return u.DownloadAndInstall(context.Background())
+}
+
+// RestartApp applies the staged update and restarts into the new version.
+func (s *UpdateService) RestartApp() error {
+	u := s.getUpdater()
+	if u == nil {
+		return errors.New("更新服务尚未初始化")
+	}
+	s.mu.RLock()
+	before := s.beforeRestart
+	s.mu.RUnlock()
+	if before != nil {
+		before()
+	}
+	return u.Restart(context.Background())
 }
 
 func (s *UpdateService) stopScheduler() {
@@ -102,6 +153,9 @@ func (s *UpdateService) nextDelay() time.Duration {
 	return autoCheckInterval
 }
 
+// checkAutomatically polls the provider and lets the updater broadcast the
+// result to the main window. Downloading is deferred until the user acts on
+// the pill, so the update is announced without being installed unprompted.
 func (s *UpdateService) checkAutomatically() {
 	s.checkMu.Lock()
 	defer s.checkMu.Unlock()
@@ -109,15 +163,8 @@ func (s *UpdateService) checkAutomatically() {
 	if u == nil {
 		return
 	}
-	release, err := u.Check(context.Background())
-	if err != nil {
+	if _, err := u.Check(context.Background()); err != nil {
 		log.Printf("自动检查更新失败: %v", err)
-		return
-	}
-	if release != nil {
-		if err := u.CheckAndInstall(context.Background()); err != nil {
-			log.Printf("准备自动更新失败: %v", err)
-		}
 	}
 }
 
