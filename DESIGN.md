@@ -125,7 +125,7 @@ DevUtils 采用 Operate 模式：它是一台长期使用的本地调试仪器�
 
 ## Typography
 
-界面字体通过 `--font-sans: var(--font-inter)` 接入，`--font-inter` 在本项目映射为 macOS/系统 UI 字体栈；不加载仓库中的 Inter 字体文件。代码、计量值、分组标签和技术元数据使用系统等宽字体栈。
+界面字体通过 `--font-sans: var(--font-inter)` 接入，`--font-inter` 在本项目映射为 macOS/系统 UI 字体栈；不加载仓库中的 Inter 字体文件。代码、计量值、分组标签和技术元数据使用系统等宽字体栈。运行时 token 由 `frontend/src/styles/tokens/primitives.css`、`themes.css` 和 `semantic.css` 分层提供。
 
 ### Hierarchy
 
@@ -138,7 +138,7 @@ DevUtils 采用 Operate 模式：它是一台长期使用的本地调试仪器�
 
 ## Layout
 
-应用壳为两行网格：38px 原生拖拽标题栏加剩余工作区。工作区由 188px 侧栏与可收缩内容区组成，图标侧栏宽 52px；页面使用 20px 顶部、24px 水平和 24px 底部的紧凑内边距。工具页统一为 header / `minmax(0, 1fr)` content / footer 三行，编辑器吃满可用高度并自行滚动，工具页常驻挂载以保留编辑器测量、滚动与撤销状态。
+应用壳为两行网格：38px 原生拖拽标题栏加剩余工作区。工作区由 188px 侧栏与可收缩内容区组成，图标侧栏宽 52px；页面使用 20px 顶部、24px 水平和 24px 底部的紧凑内边距。工具页统一为 header / `minmax(0, 1fr)` content / footer 三行，编辑器吃满可用高度并自行滚动，工具页常驻挂载以保留编辑器测量、滚动与撤销状态。应用壳和工具页均以 Wails WebView 的桌面工作台为前提，不依赖浏览器页面滚动。
 
 布局以 4、6、8、12、16、20、24px 的实际间距阶梯组织。双栏编辑器通常使用 12–14px 间距；底部动作栏右对齐、6px 间距、30px 控件高度。700px 以下，页面内边距收缩为 14px/18px/16px，多栏编辑区转为单列或上下等分，动作栏允许从右侧自然换行。
 
