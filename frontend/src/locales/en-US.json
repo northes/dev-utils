@@ -47,7 +47,8 @@
     },
     "base64": {"name":"Base64","description":"Convert Base64 text and images"},
     "diff": {"name":"Diff Compare","description":"Compare changes in text and code"},
-    "jwt": {"name":"JWT Decoder","description":"Decode JWT header and payload"}
+    "jwt": {"name":"JWT Decoder","description":"Decode JWT header and payload"},
+    "url": {"name":"URL Analyzer","description":"Parse base, path, hash, and query parameters"}
   },
   "commands": {
     "openJson": "Open JSON tool",
@@ -56,6 +57,7 @@
     "openBase64": "Open Base64",
     "openDiff": "Open diff compare",
     "openJwt": "Open JWT decoder",
+    "openUrl": "Open URL analyzer",
     "toggleSchema": "Toggle Schema",
     "toggleSortRules": "Toggle sort rules",
     "toggleConcat": "Toggle concatenate",
@@ -206,6 +208,7 @@
   "base64Tool": {"title":"Base64","subtitle":"Automatically recognizes text, images, and files","actions":"Base64 actions","input":"Text input","fileInput":"File input","output":"Text result","imageOutput":"Image result","fileOutput":"File result","text":"Text","image":"Image","file":"File","copy":"Copy result","clear":"Clear","chooseFile":"Choose file","fileHint":"Drop, paste, or choose a file","detected":"Detected","encoded":"Base64 encoded","invalid":"Unable to convert content","tooLarge":"File exceeds {{size}}","binaryFile":"Binary file detected","save":"Save","saveTitle":"Save decoded file","saved":"Saved {{name}}","saveFailed":"Failed to save file"},
   "diffTool": {"title":"Diff Compare","actions":"Diff compare actions","before":"Original","after":"Modified","clear":"Clear","swap":"Swap","sample":"Write sample","clipboardTarget":"Clipboard target","targets":{"alternate":"Alternate","before":"Always original","after":"Always modified"},"filled":{"before":"Filled original","after":"Filled modified"},"highlightMode":"Highlight scope","modes":{"word-alt":"Word-Alt","word":"Word","character":"Character","none":"None"}},
   "jwtTool": {"title":"JWT Decoder","subtitle":"Decode JWT header and payload","actions":"JWT actions","input":"JWT","header":"Header","payload":"Payload","clear":"Clear","copyHeader":"Copy header","copyPayload":"Copy payload","valid":"Valid JWT","invalid":"Invalid JWT","detected":"Decoded","decoded":"Decoded","characters":"characters","emptyHint":"Paste a full JWT to decode header and payload"},
+  "urlTool": {"title":"URL Analyzer","subtitle":"Parse base, path, hash, and query parameters in real time","actions":"URL actions","input":"URL","placeholder":"Enter a full URL, for example https://example.com/docs?tab=api#intro","base":"Base","path":"Path","hash":"Hash","params":"Query parameters","empty":"None","emptyTitle":"Enter a complete URL","emptyHint":"Supports HTTP, HTTPS, RTSP, WS, and WSS","invalid":"Invalid URL","invalidHint":"Enter a complete URL with a supported protocol, for example https://example.com","analyzed":"Analyzed","paramCount":"{{count}} parameters","clear":"Clear","copy":"Copy parsed result","copied":"URL parsed result","copyPart":"Copy {{part}}","partCopied":"Copied {{part}}","paramsCopied":"Copied parameters as JSON"},
   "updaterWindow": {"windowTitle":"Software Update","checkingTitle":"Checking for updates…","checkingStatus":"Connecting to GitHub Releases…","availableTitle":"Update available","noReleaseNotes":"No release notes were provided.","upToDateTitle":"You're up to date","upToDateStatus":"No updates are available.","downloadingTitle":"Downloading update","preparingDownload":"Preparing download…","downloaded":"Downloaded {{written}}","downloadProgress":"{{percent}}% · {{written}} / {{total}}","verifyingTitle":"Verifying update","verifyingStatus":"Checking the downloaded file…","installingTitle":"Preparing update","installingStatus":"Unpacking and staging the application…","readyTitle":"Update ready","readyFallback":"Restart the application to finish updating.","errorTitle":"Update failed","errorFallback":"An unexpected error occurred while checking for updates.","skip":"Skip this version","remind":"Remind me later","close":"Close","install":"Install update","restart":"Restart and apply","retry":"Try again"},
   "settings": {
     "title": "Settings",

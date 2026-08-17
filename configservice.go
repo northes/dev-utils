@@ -17,6 +17,7 @@ import (
 type Config struct {
 	TrayMatchEnabled        bool     `json:"trayMatchEnabled"`
 	TrayMatchTools          []string `json:"trayMatchTools"`
+	URLTrayMatchMigrated    bool     `json:"urlTrayMatchMigrated"`
 	AutoOverwrite           bool     `json:"autoOverwrite"`
 	AutoCheckUpdates        bool     `json:"autoCheckUpdates"`
 	Language                string   `json:"language"`
@@ -60,10 +61,10 @@ type historyStored struct {
 }
 
 func defaultConfig() Config {
-	return Config{TrayMatchEnabled: true, TrayMatchTools: []string{"json", "time", "text", "base64", "diff", "jwt"}, AutoOverwrite: true, AutoCheckUpdates: true, Language: "zh-CN", SidebarMode: "full", Theme: "dark", DiffHighlightMode: "character", DiffClipboardTargetMode: "alternate", CodeEditorFontSize: 12, TimeResultOrder: []string{"local", "dateTime", "dateOnly", "timeOnly", "zonedIso8601", "rfc3339", "utc", "compact", "underscore", "unixSeconds", "unixMilliseconds", "unixNanoseconds"}}
+	return Config{TrayMatchEnabled: true, TrayMatchTools: []string{"json", "time", "text", "base64", "diff", "jwt", "url"}, AutoOverwrite: true, AutoCheckUpdates: true, Language: "zh-CN", SidebarMode: "full", Theme: "dark", DiffHighlightMode: "character", DiffClipboardTargetMode: "alternate", CodeEditorFontSize: 12, TimeResultOrder: []string{"local", "dateTime", "dateOnly", "timeOnly", "zonedIso8601", "rfc3339", "utc", "compact", "underscore", "unixSeconds", "unixMilliseconds", "unixNanoseconds"}}
 }
 func normalizeConfig(cfg Config) Config {
-	trayTools := []string{"json", "time", "text", "base64", "diff", "jwt"}
+	trayTools := []string{"json", "time", "text", "base64", "diff", "jwt", "url"}
 	validTrayTool := make(map[string]bool, len(trayTools))
 	for _, id := range trayTools {
 		validTrayTool[id] = true
@@ -80,6 +81,19 @@ func normalizeConfig(cfg Config) Config {
 			}
 		}
 		cfg.TrayMatchTools = matched
+	}
+	if !cfg.URLTrayMatchMigrated {
+		seenURL := false
+		for _, id := range cfg.TrayMatchTools {
+			if id == "url" {
+				seenURL = true
+				break
+			}
+		}
+		if !seenURL {
+			cfg.TrayMatchTools = append(cfg.TrayMatchTools, "url")
+		}
+		cfg.URLTrayMatchMigrated = true
 	}
 	switch cfg.DiffHighlightMode {
 	case "word-alt", "word", "character", "none":
