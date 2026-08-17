@@ -293,7 +293,7 @@ export function ToolHeader({title, desc, actions = []}: { title: string; desc?: 
                         isSelected={!!a.checked}
                         onChange={a.onPress}><Switch.Content><Switch.Control><Switch.Thumb/></Switch.Control></Switch.Content></Switch></label> :
                     <button key={a.key}
-                            className={`flex h-8 flex-none cursor-pointer items-center gap-1.5 rounded-md border px-3 text-[11px] transition-colors ${a.active ? 'border-(--accent) bg-(--accent) text-(--accent-foreground)' : 'border-(--border) bg-(--surface) text-(--muted) hover:border-(--muted) hover:text-(--foreground)'}`}
+                            className={`flex h-8 flex-none cursor-pointer items-center gap-1.5 rounded-(--button-radius) border px-3 text-[11px] transition-colors ${a.active ? 'border-(--accent) bg-(--accent) text-(--accent-foreground)' : 'border-(--border) bg-(--surface) text-(--muted) hover:border-(--muted) hover:text-(--foreground)'}`}
                             aria-pressed={a.active} onClick={a.onPress}>{a.icon &&
                         <a.icon size={14} weight="duotone"/>}{a.label}</button>)}</div>}</header>
 }
@@ -359,7 +359,7 @@ export function Editor({label, value, onChange, readOnly, onKeyDown}: {
 }) {
     return <label
         className="flex min-w-0 flex-col gap-2 font-mono text-[10px] leading-none font-medium tracking-[.04em] text-(--muted) uppercase"><span>{label}</span><textarea
-        className="h-[184px] w-full resize-none rounded-lg border border-(--border) bg-(--surface) p-3.5 font-mono text-[11px] leading-[1.6] text-(--muted) outline-none transition-colors [tab-size:2] read-only:bg-(--surface-tertiary) focus:border-(--muted) max-[700px]:h-[140px]"
+        className="h-[184px] w-full resize-none rounded-(--editor-radius) border border-(--border) bg-(--surface) p-3.5 font-mono text-[11px] leading-[1.6] text-(--muted) outline-none transition-colors [tab-size:2] read-only:bg-(--surface-tertiary) focus:border-(--muted) max-[700px]:h-[140px]"
         value={value} readOnly={readOnly} spellCheck={false} onChange={e => onChange?.(e.target.value)}
         onKeyDown={onKeyDown}/></label>
 }

@@ -13,3 +13,7 @@
 @import "./styles/tools/time.css";
 @import "./styles/tools/text.css";
 @import "./styles/tools/settings.css";
+@import "./styles/sidebar.css";
+@import "./styles/command-palette.css";
+@import "./styles/radii.css";
+@import "./styles/popover-scroll.css";
