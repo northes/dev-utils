@@ -218,6 +218,8 @@
     "theme": "Theme",
     "themeDark": "Dark",
     "themeLight": "Light",
+    "themePine": "Pine",
+    "themeInk": "Ink",
     "language": "Language",
     "languageSubtitle": "Choose the interface language.",
     "languages": {

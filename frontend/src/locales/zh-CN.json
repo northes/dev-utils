@@ -206,6 +206,8 @@
  "theme": "主题",
  "themeDark": "深色",
  "themeLight": "浅色",
+ "themePine": "海松",
+ "themeInk": "纸墨",
  "language": "语言",
     "languageSubtitle": "选择界面显示语言。",
     "languages": {
