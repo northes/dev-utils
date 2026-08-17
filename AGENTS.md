@@ -53,6 +53,16 @@ Wails v3(beta)桌面托盘应用:Go 后端 + React 19 前端。本地优先的�
 - **不消费输入的切换型命令**(schema 开关、sortDefault 恢复、插入时间戳、使用本机时区、diff 高亮模式)必须在 pending effect 中**先于 `setInput/changeInput(pending.input)` 分支处理并 `return`**,否则会拿空/剪贴板内容清空编辑器。
 - 新增命令若复用已有按钮文案,则 locale 零新增;删除命令时同步清理不再引用的 locale 键。
 
+### Popover 与命令面板滚动条/圆角
+- 浮层滚动必须分层:外层 Popover/命令列表负责背景、边框、`border-radius` 与 `overflow:hidden` 裁切;内部真实滚动层负责尺寸收缩、`overflow:auto`、滚动条和滚动内容。不要让外层和内层同时承担滚动。
+- `scrollbar-gutter` 只应作用于真实滚动层。外层即使 `overflow:hidden`,被通用规则设为 `scrollbar-gutter:stable` 仍可能预留 gutter,造成内层滚动条向左缩、未贴住浮层右边界;需要在外层和真实滚动层明确使用 `scrollbar-gutter:auto!important`。
+- 命令面板当前由 `.palette-list` 外壳和 `.palette-list-scroll` 滚动层组成。外壳保留 `padding:5px` 时,滚动层用等量负右边距延伸到外壳内容边界,再用等量 `padding-right` 保持列表项留白;负边距必须与外壳 padding 成对维护,不能孤立调整。
+- HeroUI Popover 的 `.list-box` 才是真实滚动层:外层 Popover 用 `overflow:hidden` 裁切圆角,`.list-box` 用 `overflow:auto` 并继承 `border-radius`;ComboBox 固定高度时外层限定 block size,内部列表使用 `block-size:100%`、`min-block-size:0`。
+- HeroUI Popover 通常 Portal 到 `body`,局部父级选择器可能失效。先检查实际 DOM、`data-slot` 与安装版本类名,再使用全局 `.select__popover`、`.combo-box__popover`、`.dropdown__popover` 等选择器。
+- 圆角职责保持单一:浮层外壳消费 `--overlay-radius`,列表项消费 `--control-radius`,内部滚动层使用 `border-radius:inherit`;不要让滚动内容或滚动条破坏浮层四角。
+- CSS 导入顺序会影响通用规则覆盖:专属命令面板样式若早于 `radii.css`,覆盖 `scrollbar-gutter` 时需要足够特异性或 `!important`;Popover 滚动覆盖集中放在 `popover-scroll.css`。
+- 排查顺序固定为:确认真实滚动 DOM → 检查外/内层 `overflow`、`scrollbar-gutter`、padding、负 margin、尺寸和圆角 → 检查 Portal 后类名/`data-slot` → 检查 import 顺序和特异性。修改后运行 `npm run build`、Impeccable layout detector 与 `git diff --check`;本项目禁止用 Playwright 或 Computer Use 做验证。
+
 ## UI 与布局经验(通用原则,自本项目实践沉淀)
 
 ### 页面切换与状态保留
