@@ -4,3 +4,5 @@
 .diff-merge-host .cm-mergeViewEditor .cm-scroller{overflow-x:auto!important;overflow-y:auto!important}
 .diff-merge-host .cm-mergeViewEditor>.cm-editor{display:flex;flex-direction:column}
 .diff-merge-host .cm-mergeViewEditor .cm-scroller{flex:1 1 auto!important;min-height:0!important;height:auto!important}
+.diff-merge-host .cm-collapsedLines{height:27px;display:flex;align-items:center;padding:0 14px;border-top:1px solid var(--border);border-bottom:1px solid var(--border);background:var(--surface-tertiary);color:var(--muted);font:10px/1 var(--font-mono);cursor:pointer;user-select:none}
+.diff-merge-host .cm-collapsedLines:hover{background:var(--surface-hover);color:var(--foreground)}
