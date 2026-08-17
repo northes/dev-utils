@@ -60,13 +60,9 @@ jobs:
           retention-days: 1
 
   build:
-    name: 构建 ${{ matrix.arch }}
+    name: 构建 Universal
     needs: prepare-frontend
     runs-on: macos-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        arch: [arm64, amd64]
     steps:
       - name: 检出源码
         uses: actions/checkout@v4
@@ -110,7 +106,7 @@ jobs:
           path: frontend
 
       - name: 构建应用包
-        run: wails3 task darwin:package ARCH=${{ matrix.arch }} APP_VERSION=${{ steps.version.outputs.version }} PREBUILT_FRONTEND=true
+        run: wails3 task darwin:package:universal APP_VERSION=${{ steps.version.outputs.version }} PREBUILT_FRONTEND=true
 
       - name: 写入应用版本
         run: |
@@ -151,9 +147,8 @@ jobs:
         shell: bash
         run: |
           version="${{ steps.version.outputs.version }}"
-          arch="${{ matrix.arch }}"
-          zip="DevUtils-${version}-darwin-${arch}.zip"
-          dmg="DevUtils-${version}-darwin-${arch}.dmg"
+          zip="DevUtils-${version}-darwin-universal.zip"
+          dmg="DevUtils-${version}-darwin-universal.dmg"
           ditto -c -k --sequesterRsrc --keepParent bin/DevUtils.app "bin/$zip"
           wails3 task darwin:create:dmg
           mv bin/DevUtils.dmg "bin/$dmg"
@@ -163,7 +158,7 @@ jobs:
       - name: 上传构建产物
         uses: actions/upload-artifact@v4
         with:
-          name: macos-${{ matrix.arch }}
+          name: macos-universal
           path: release/*
           if-no-files-found: error
 
