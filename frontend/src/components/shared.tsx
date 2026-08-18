@@ -252,7 +252,7 @@ export function Reveal({children, index, fill, active}: {
         return () => io.disconnect()
     }, [active]);
     return <div ref={ref}
-                className={`${fill ? 'h-full min-h-0 ' : ''}transition-[opacity,transform] duration-600 ease-[cubic-bezier(.16,1,.3,1)] ${visible ? 'translate-y-0 opacity-100' : 'translate-y-3 opacity-0'}`}
+                className={`${fill ? 'h-full min-h-0 ' : ''}transition-opacity duration-200 ease-out ${visible ? 'opacity-100' : 'opacity-0'}`}
                 style={{transitionDelay: `${(index ?? 0) * 80}ms`}}>{children}</div>
 }
 

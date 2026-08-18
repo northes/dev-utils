@@ -4,3 +4,5 @@
 .json-cm:focus-within{border-color:var(--border)}
 .popover-content:focus-within{border-color:var(--border)}
 [data-radix-popper-content-wrapper]>[data-state]:focus-within{border-color:var(--border)}
+.palette-input,.palette-list{border-color:color-mix(in oklch,var(--border) 55%,transparent)}
+.alert-dialog-content{border-color:color-mix(in oklch,var(--border) 55%,transparent)}
