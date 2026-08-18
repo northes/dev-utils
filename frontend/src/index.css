@@ -31,10 +31,10 @@
     --color-primary-foreground: var(--primary-foreground);
     --color-secondary: var(--secondary);
     --color-secondary-foreground: var(--secondary-foreground);
-    --color-muted: var(--muted-foreground);
+    --color-muted: var(--muted);
     --color-muted-foreground: var(--muted-foreground);
-    --color-accent: var(--primary);
-    --color-accent-foreground: var(--primary-foreground);
+    --color-accent: var(--accent);
+    --color-accent-foreground: var(--accent-foreground);
     --color-destructive: var(--destructive);
     --color-destructive-foreground: var(--destructive-foreground);
     --color-border: var(--border);
@@ -50,11 +50,6 @@
     --color-sidebar-ring: var(--sidebar-ring);
 }
 @layer base {
-    * {
-        border-color: var(--border);
-        outline-color: color-mix(in oklab, var(--ring) 50%, transparent);
-    }
-
     body {
         background-color: var(--background);
         color: var(--foreground);
