@@ -96,7 +96,7 @@ func normalizeConfig(cfg Config) Config {
 		cfg.URLTrayMatchMigrated = true
 	}
 	switch cfg.Theme {
-	case "default-light", "default-dark":
+	case "default-light", "default-dark", "violet-bloom-light", "violet-bloom-dark", "solar-dusk-light", "solar-dusk-dark":
 	default:
 		cfg.Theme = "default-dark"
 	}

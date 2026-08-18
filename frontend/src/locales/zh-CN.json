@@ -210,6 +210,8 @@
  "themeDark": "深色",
  "themeLight": "浅色",
  "themeDefault": "默认",
+ "themeVioletBloom": "Violet Bloom",
+ "themeSolarDusk": "Solar Dusk",
  "language": "语言",
     "languageSubtitle": "选择界面显示语言。",
     "languages": {

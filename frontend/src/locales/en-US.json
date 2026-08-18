@@ -222,6 +222,8 @@
     "themeDark": "Dark",
     "themeLight": "Light",
     "themeDefault": "Default",
+    "themeVioletBloom": "Violet Bloom",
+    "themeSolarDusk": "Solar Dusk",
     "language": "Language",
     "languageSubtitle": "Choose the interface language.",
     "languages": {
