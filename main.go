@@ -65,8 +65,11 @@ const appName = "DevUtils"
 var currentVersion = "0.0.0"
 
 func matchGitHubUpdateAsset(req updater.CheckRequest, assets []githubprovider.ReleaseAsset) int {
+	if !strings.EqualFold(req.Platform, "darwin") {
+		return -1
+	}
 	for i, asset := range assets {
-		if strings.HasSuffix(strings.ToLower(asset.Name), ".zip") && githubprovider.DefaultAssetMatcher(req, []githubprovider.ReleaseAsset{asset}) == 0 {
+		if strings.HasSuffix(strings.ToLower(asset.Name), "-darwin-universal.zip") {
 			return i
 		}
 	}

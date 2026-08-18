@@ -7,15 +7,15 @@ import (
 	githubprovider "github.com/wailsapp/wails/v3/pkg/updater/providers/github"
 )
 
-func TestMatchGitHubUpdateAssetPrefersZipForCurrentArchitecture(t *testing.T) {
+func TestMatchGitHubUpdateAssetSelectsDarwinUniversalZip(t *testing.T) {
 	assets := []githubprovider.ReleaseAsset{
-		{Name: "DevUtils-0.2.0-darwin-arm64.dmg"},
-		{Name: "DevUtils-0.2.0-darwin-amd64.zip"},
+		{Name: "DevUtils-0.2.0-darwin-universal.dmg"},
 		{Name: "DevUtils-0.2.0-darwin-arm64.zip"},
+		{Name: "DevUtils-0.2.0-darwin-universal.zip"},
 	}
 	got := matchGitHubUpdateAsset(updater.CheckRequest{Platform: "darwin", Arch: "arm64"}, assets)
 	if got != 2 {
-		t.Fatalf("期望选择 arm64 ZIP（索引 2），实际为 %d", got)
+		t.Fatalf("期望选择 Universal ZIP（索引 2），实际为 %d", got)
 	}
 }
 
@@ -24,5 +24,24 @@ func TestMatchGitHubUpdateAssetRejectsInstallerOnlyRelease(t *testing.T) {
 	got := matchGitHubUpdateAsset(updater.CheckRequest{Platform: "darwin", Arch: "arm64"}, assets)
 	if got != -1 {
 		t.Fatalf("只有 DMG 时不应作为应用内更新包，实际为 %d", got)
+	}
+}
+
+func TestMatchGitHubUpdateAssetSelectsDarwinUniversalZipWithoutArchitectureMatch(t *testing.T) {
+	assets := []githubprovider.ReleaseAsset{
+		{Name: "DevUtils-0.2.0-darwin-universal.dmg"},
+		{Name: "DevUtils-0.2.0-darwin-universal.zip"},
+	}
+	got := matchGitHubUpdateAsset(updater.CheckRequest{Platform: "darwin", Arch: "arm64"}, assets)
+	if got != 1 {
+		t.Fatalf("缺少架构专用包时应选择 Universal ZIP（索引 1），实际为 %d", got)
+	}
+}
+
+func TestMatchGitHubUpdateAssetDoesNotUseUniversalForOtherPlatforms(t *testing.T) {
+	assets := []githubprovider.ReleaseAsset{{Name: "DevUtils-0.2.0-linux-universal.zip"}}
+	got := matchGitHubUpdateAsset(updater.CheckRequest{Platform: "linux", Arch: "arm64"}, assets)
+	if got != -1 {
+		t.Fatalf("非 macOS 平台不应回退到 Universal ZIP，实际为 %d", got)
 	}
 }
