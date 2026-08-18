@@ -1,1 +1,1 @@
-.app-shell ::selection{background:color-mix(in srgb,var(--primary) 28%,transparent);color:var(--foreground)}.reveal,.reveal.is-visible,.history-list button,.conversion-list>div{opacity:1!important;transform:none!important;animation:none!important;transition:none!important}
+.app-shell ::selection{background:color-mix(in srgb,var(--primary) 28%,transparent);color:var(--foreground)}.conversion-list>div{opacity:1!important;transform:none!important;animation:none!important;transition:none!important}

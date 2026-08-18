@@ -41,7 +41,7 @@ Wails v3(beta)桌面托盘应用:Go 后端 + React 19 前端。本地优先的�
 
 ## 前端约定
 
-- UI 分层:根布局与状态(`App.tsx`:页面路由、侧栏、命令面板、持久化)与工具组件分离。**每个工具封装为独立组件文件** `frontend/src/components/`(如 `JsonTool.tsx`、`TimeTool.tsx`、`TextTool.tsx`),在 `App.tsx` 引入;共享 UI 原语与类型(`Reveal`/`ToolHeader`/`Editor`/`samples`/`ToolId`/`PendingAction`/`Icon`)集中在 `frontend/src/components/shared.tsx`。
+- UI 分层:根布局与状态(`App.tsx`:页面路由、侧栏、命令面板、持久化)与工具组件分离。**每个工具封装为独立组件文件** `frontend/src/components/`(如 `JsonTool.tsx`、`TimeTool.tsx`、`TextTool.tsx`),在 `App.tsx` 引入;共享 UI 原语与类型(`Reveal`/`ToolHeader`/`samples`/`ToolId`/`PendingAction`/`Icon`)集中在 `frontend/src/components/shared.tsx`。
 - 代码刻意保持压缩单行风格(每个组件一行、最少空格)。不要重新格式化或美化;编辑时匹配这种紧凑风格。
 - 样式入口在 `frontend/src/index.css`(Tailwind v4 + shadcn/ui),主题变量定义在 `frontend/src/styles/globals.css`(shadcn `:root`/`.dark` oklch 变量 + 功能必需的 `--success`/`--warning` 语义色)。body 为 `user-select:none`。
 - UI 组件统一用 shadcn/ui(`frontend/src/components/ui/`,复制进项目的源码,非黑盒 npm 包):`Button` 用 `onClick`+`disabled`,`Switch` 用 `checked`+`onCheckedChange`,`Select` 用 `value`+`onValueChange`,`Toggle` 用 `pressed`+`onPressedChange`,`AlertDialog` 用 `open`+`onOpenChange`(在 Root 上)。variant 语义映射:项目内部 `primary`→`default`、`secondary`→`outline`、`tertiary`→`ghost`、`danger`→`destructive`。
@@ -90,7 +90,7 @@ Wails v3(beta)桌面托盘应用:Go 后端 + React 19 前端。本地优先的�
 - 工具页内容直接落在页面背景,不用带边框/圆角/独立背景的卡片包裹;层次用 1px 顶/底边框线表达。
 - 成组展示的统计项使用一个整体卡片:容器保留一圈细边框和小圆角,内部用 grid gap:1px 加边框色背景绘制分隔线;统计项本身不再带独立外框。避免用 :nth-child() 修补特定位置的边线。
 - 分隔线按视觉密度取舍:标题-编辑区、编辑区-底部按钮栏之间若显紧贴,直接去掉边框,不要保留多余线条。
-- 工具页标题:字号小(≈14px)、贴近左上角、与左侧 sidebar 顶沿对齐;不放副标题。开关式布局(如 JSON schema)开/关状态下边距必须一致。
+- 工具页标题:19px/600、贴近左上角、与左侧 sidebar 顶沿对齐;可带 10px 副标题说明(与 DESIGN.md Title 层级一致)。开关式布局(如 JSON schema)开/关状态下边距必须一致。
 - 组件样式必须以组件根类和明确的元素类收敛(如 `.text-stat-grid`/`.text-stat-item`),不要用通用容器选择器、裸子元素选择器或 `:nth-child()` 表达组件结构。重复分隔线优先用 grid `gap:1px` + 容器背景实现,避免项目新增元素后意外改变边框。
 
 ### 工具页公共布局

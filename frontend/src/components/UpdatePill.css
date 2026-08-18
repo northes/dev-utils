@@ -9,4 +9,4 @@
 .update-pill__close{display:grid;place-items:center;flex:none;width:16px;min-width:16px;height:16px;padding:0;border:0;border-radius:50%;background:none;color:var(--muted-foreground);cursor:pointer}
 .update-pill__close:hover{color:var(--foreground);background:var(--accent)}
 @keyframes update-pill-spinner{to{transform:rotate(360deg)}}
-@media(prefers-reduced-motion:reduce){.update-pill.update-pill--working .update-pill__spinner{animation:update-pill-spinner 1200ms linear infinite!important}}
+@media(prefers-reduced-motion:reduce){.update-pill.update-pill--working .update-pill__spinner{animation:none}}

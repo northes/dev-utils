@@ -6,8 +6,7 @@
     "history": "历史记录",
     "settings": "设置",
     "back": "后退",
-    "forward": "前进",
-    "nav": "系统设置"
+    "forward": "前进"
   },
   "sidebar": {
     "toggle": "收起或展开侧边栏"
@@ -27,7 +26,8 @@
   },
   "groups": {
     "nav": "导航",
-    "tools": "工具"
+    "tools": "工具",
+    "system": "系统"
   },
   "tools": {
     "json": {
@@ -42,10 +42,22 @@
       "name": "文本工具集",
       "description": "统计、修剪与规范化文本"
     },
-    "base64": {"name":"Base64 编解码","description":"文本与图片的 Base64 转换"},
-    "diff": {"name":"差异对比","description":"比较文本与代码的修改内容"},
-    "jwt": {"name":"JWT 解析","description":"解码 JWT 的 Header 与 Payload"},
-    "url": {"name":"URL 分析","description":"解析基础地址、路径、哈希与参数"}
+    "base64": {
+      "name": "Base64 编解码",
+      "description": "文本与图片的 Base64 转换"
+    },
+    "diff": {
+      "name": "差异对比",
+      "description": "比较文本与代码的修改内容"
+    },
+    "jwt": {
+      "name": "JWT 解析",
+      "description": "解码 JWT 的 Header 与 Payload"
+    },
+    "url": {
+      "name": "URL 分析",
+      "description": "解析基础地址、路径、哈希与参数"
+    }
   },
   "commands": {
     "openJson": "打开 JSON 工具",
@@ -62,7 +74,6 @@
   },
   "jsonTool": {
     "title": "JSON 工作区",
-    "actions": "JSON 操作",
     "inputActions": "JSON 输入操作",
     "resultActions": "JSON 结果操作",
     "placeholder": "粘贴 JSON 或直接输入…",
@@ -121,7 +132,25 @@
     "sorted": "排序",
     "sortFailed": "排序失败",
     "invalidJsonDesc": "内容不是有效的 JSON，无法继续",
-    "subtitle": "格式化、压缩、校验与路径提取"
+    "subtitle": "格式化、压缩、校验与路径提取",
+    "detected": "JSON 状态",
+    "valid": "有效 JSON",
+    "loadSample": "载入示例",
+    "errors": {
+      "unclosedComment": "注释未闭合",
+      "unclosedString": "字符串未闭合",
+      "invalidObjectKey": "对象键无效",
+      "missingColon": "对象键缺少 :",
+      "unclosedNode": "节点未闭合",
+      "pathMissingBracket": "路径缺少 ]",
+      "pathInvalidSegment": "路径段无效: {{value}}",
+      "pathInvalidChar": "路径字符无效: {{value}}",
+      "notArray": "该位置不是数组",
+      "indexOutOfRange": "数组下标越界",
+      "noKeyAt": "该位置没有键 {{key}}",
+      "keyNotFound": "找不到键 {{key}}",
+      "pathNotFound": "路径未找到"
+    }
   },
   "timeTool": {
     "title": "时间转换器",
@@ -132,11 +161,6 @@
     "timezonePlaceholder": "搜索时区",
     "useSystemTimezone": "使用本机时区",
     "hint": "支持 Unix、ISO 8601、中英文日期及常见年月日格式。无年份时使用当前年份。",
-    "detected": "检测到",
-    "unixSec": "Unix 时间戳 · 秒",
-    "unixMs": "Unix 时间戳 · 毫秒",
-    "dateString": "日期字符串",
-    "unrecognized": "无法识别的时间值",
     "local": "本地时间",
     "dateTime": "日期时间",
     "dateOnly": "日期",
@@ -166,7 +190,14 @@
     "actions": "文本操作",
     "input": "输入",
     "case": "大小写",
-    "caseModes": {"upper":"全部大写","lower":"全部小写","lineUpper":"行首大写","lineLower":"行首小写","wordUpper":"词首大写","wordLower":"词首小写"},
+    "caseModes": {
+      "upper": "全部大写",
+      "lower": "全部小写",
+      "lineUpper": "行首大写",
+      "lineLower": "行首小写",
+      "wordUpper": "词首大写",
+      "wordLower": "词首小写"
+    },
     "trim": "修剪首末空白",
     "removeSpaces": "移除空格",
     "compressSpaces": "修剪空格",
@@ -196,23 +227,117 @@
     "copied": "复制统计项",
     "subtitle": "测量与规范化纯文本"
   },
-  "base64Tool": {"title":"Base64 编解码","subtitle":"自动识别文本、图片与文件","actions":"Base64 操作","input":"文本输入","fileInput":"文件输入","output":"文本结果","imageOutput":"图片结果","fileOutput":"文件结果","text":"文本","image":"图片","file":"文件","copy":"复制结果","clear":"清空","chooseFile":"选择文件","fileHint":"拖入、粘贴或选择文件","detected":"识别结果","encoded":"Base64 编码","invalid":"无法转换内容","tooLarge":"文件超过 {{size}} 上限","binaryFile":"检测到二进制文件","save":"保存","saveTitle":"保存解码文件","saved":"已保存 {{name}}","saveFailed":"保存文件失败"},
-  "diffTool": {"title":"差异对比","actions":"差异对比操作","clear":"清空","swap":"交换内容","sample":"写入示例","clipboardTarget":"剪贴板填入","targets":{"alternate":"交替填入","before":"总是原始内容","after":"总是修改后"},"filled":{"before":"已填入原始内容","after":"已填入修改后"},"highlightMode":"高亮范围","modes":{"word-alt":"按词交替","word":"按词","character":"按字符","none":"关闭"},"collapseUnchanged":"折叠相同行"},
-  "jwtTool": {"title":"JWT 解析","subtitle":"解码 JWT 的 Header 与 Payload","actions":"JWT 操作","input":"JWT","header":"Header","payload":"Payload","clear":"清空","copyHeader":"复制 Header","copyPayload":"复制 Payload","valid":"有效 JWT","invalid":"无效 JWT","detected":"解析结果","decoded":"解析","characters":"字符","emptyHint":"粘贴完整的 JWT，自动解析 Header 与 Payload"},
-  "urlTool": {"title":"URL 分析","subtitle":"实时拆解基础地址、路径、哈希与查询参数","actions":"URL 操作","input":"URL","placeholder":"输入完整 URL，例如 https://example.com/docs?tab=api#intro","base":"基础地址","path":"路径","hash":"哈希","params":"查询参数","empty":"无","emptyTitle":"输入一个完整 URL","emptyHint":"支持 HTTP、HTTPS、RTSP、WS 与 WSS","invalid":"URL 无效","invalidHint":"请输入支持协议的完整地址，例如 https://example.com","analyzed":"分析","paramCount":"{{count}} 个参数","clear":"清空","copy":"复制解析结果","copied":"URL 解析结果","copyPart":"复制{{part}}","partCopied":"已复制{{part}}","paramsCopied":"已复制参数 JSON"},
-  "updatePill": {"checking":"正在检查更新","available":"发现新版本 {{version}}","downloading":"正在下载","applying":"正在准备更新…","restarting":"更新完成，正在重启…","dismiss":"不再提示","error":"更新失败"},
+  "base64Tool": {
+    "title": "Base64 编解码",
+    "subtitle": "自动识别文本、图片与文件",
+    "actions": "Base64 操作",
+    "input": "文本输入",
+    "fileInput": "文件输入",
+    "output": "文本结果",
+    "imageOutput": "图片结果",
+    "fileOutput": "文件结果",
+    "text": "文本",
+    "image": "图片",
+    "file": "文件",
+    "copy": "复制结果",
+    "clear": "清空",
+    "chooseFile": "选择文件",
+    "fileHint": "拖入、粘贴或选择文件",
+    "detected": "识别结果",
+    "encoded": "Base64 编码",
+    "invalid": "无法转换内容",
+    "tooLarge": "文件超过 {{size}} 上限",
+    "binaryFile": "检测到二进制文件",
+    "save": "保存",
+    "saveTitle": "保存解码文件",
+    "saved": "已保存 {{name}}",
+    "saveFailed": "保存文件失败"
+  },
+  "diffTool": {
+    "title": "差异对比",
+    "actions": "差异对比操作",
+    "clear": "清空",
+    "swap": "交换内容",
+    "clipboardTarget": "剪贴板填入",
+    "targets": {
+      "alternate": "交替填入",
+      "before": "总是原始内容",
+      "after": "总是修改后"
+    },
+    "filled": {
+      "before": "已填入原始内容",
+      "after": "已填入修改后"
+    },
+    "highlightMode": "高亮范围",
+    "modes": {
+      "word-alt": "按词交替",
+      "word": "按词",
+      "character": "按字符",
+      "none": "关闭"
+    },
+    "collapseUnchanged": "折叠相同行",
+    "before": "原文",
+    "after": "修改后"
+  },
+  "jwtTool": {
+    "title": "JWT 解析",
+    "subtitle": "解码 JWT 的 Header 与 Payload",
+    "actions": "JWT 操作",
+    "input": "JWT",
+    "header": "Header",
+    "payload": "Payload",
+    "clear": "清空",
+    "copyHeader": "复制 Header",
+    "copyPayload": "复制 Payload",
+    "valid": "有效 JWT",
+    "invalid": "无效 JWT",
+    "detected": "解析结果",
+    "decoded": "解析",
+    "characters": "字符",
+    "emptyHint": "粘贴完整的 JWT，自动解析 Header 与 Payload"
+  },
+  "urlTool": {
+    "title": "URL 分析",
+    "subtitle": "实时拆解基础地址、路径、哈希与查询参数",
+    "actions": "URL 操作",
+    "input": "URL",
+    "placeholder": "输入完整 URL，例如 https://example.com/docs?tab=api#intro",
+    "base": "基础地址",
+    "path": "路径",
+    "hash": "哈希",
+    "params": "查询参数",
+    "empty": "无",
+    "emptyTitle": "输入一个完整 URL",
+    "emptyHint": "支持 HTTP、HTTPS、RTSP、WS 与 WSS",
+    "invalid": "URL 无效",
+    "invalidHint": "请输入支持协议的完整地址，例如 https://example.com",
+    "analyzed": "分析",
+    "paramCount": "{{count}} 个参数",
+    "clear": "清空",
+    "copy": "复制解析结果",
+    "copied": "URL 解析结果",
+    "copyPart": "复制{{part}}",
+    "partCopied": "已复制{{part}}",
+    "paramsCopied": "已复制参数 JSON"
+  },
+  "updatePill": {
+    "checking": "正在检查更新",
+    "available": "发现新版本 {{version}}",
+    "downloading": "正在下载",
+    "applying": "正在准备更新…",
+    "restarting": "更新完成，正在重启…",
+    "dismiss": "不再提示",
+    "error": "更新失败"
+  },
   "settings": {
- "title": "设置",
- "subtitle": "控制上下文检测与本地数据。",
- "appearance": "外观",
- "appearanceSubtitle": "选择界面显示模式。",
- "theme": "主题",
- "themeDark": "深色",
- "themeLight": "浅色",
- "themeDefault": "默认",
- "themeVioletBloom": "Violet Bloom",
- "themeSolarDusk": "Solar Dusk",
- "language": "语言",
+    "title": "设置",
+    "subtitle": "控制上下文检测与本地数据。",
+    "appearance": "外观",
+    "appearanceSubtitle": "选择界面显示模式。",
+    "theme": "主题",
+    "themeDark": "深色",
+    "themeLight": "浅色",
+    "language": "语言",
     "languageSubtitle": "选择界面显示语言。",
     "languages": {
       "zh-CN": "简体中文",
@@ -226,8 +351,19 @@
     "trayMatchToolsDesc": "选择允许托盘自动打开的工具",
     "autoOverwrite": "自动覆盖",
     "autoOverwriteDesc": "匹配后自动填入对应工具；关闭时每次询问",
-    "editor":"代码编辑器","editorSubtitle":"调整所有代码编辑器的显示。","editorFontSize":"字体大小",
-    "updates":"软件更新","updatesSubtitle":"通过 GitHub Releases 获取新版本。","autoCheckUpdates":"自动检查更新","autoCheckUpdatesDesc":"启动后静默检查，并每 24 小时检查一次；仅发现新版本时提示","currentVersion":"当前版本","checkUpdates":"检查更新","checkingUpdates":"正在检查","upToDate":"已是最新版本","updateFailed":"检查更新失败","updateFailedDesc":"请检查网络连接后重试",
+    "editor": "代码编辑器",
+    "editorSubtitle": "调整所有代码编辑器的显示。",
+    "editorFontSize": "字体大小",
+    "updates": "软件更新",
+    "updatesSubtitle": "通过 GitHub Releases 获取新版本。",
+    "autoCheckUpdates": "自动检查更新",
+    "autoCheckUpdatesDesc": "启动后静默检查，并每 24 小时检查一次；仅发现新版本时提示",
+    "currentVersion": "当前版本",
+    "checkUpdates": "检查更新",
+    "checkingUpdates": "正在检查",
+    "upToDate": "已是最新版本",
+    "updateFailed": "检查更新失败",
+    "updateFailedDesc": "请检查网络连接后重试",
     "privacy": "隐私",
     "privacySubtitle": "管理本机历史记录。",
     "history": "历史记录",

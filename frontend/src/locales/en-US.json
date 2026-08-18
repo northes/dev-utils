@@ -5,7 +5,8 @@
   "titlebar": {
     "history": "History",
     "settings": "Settings",
-    "nav": "System"
+    "back": "Back",
+    "forward": "Forward"
   },
   "sidebar": {
     "toggle": "Toggle sidebar"
@@ -26,11 +27,7 @@
   "groups": {
     "nav": "Navigation",
     "tools": "Tools",
-    "json": "JSON commands",
-    "time": "Time commands",
-    "text": "Text commands",
-    "base64": "Base64 commands",
-    "diff": "Diff commands"
+    "system": "System"
   },
   "tools": {
     "json": {
@@ -45,10 +42,22 @@
       "name": "Text Toolkit",
       "description": "Count, trim and normalize text"
     },
-    "base64": {"name":"Base64","description":"Convert Base64 text and images"},
-    "diff": {"name":"Diff Compare","description":"Compare changes in text and code"},
-    "jwt": {"name":"JWT Decoder","description":"Decode JWT header and payload"},
-    "url": {"name":"URL Analyzer","description":"Parse base, path, hash, and query parameters"}
+    "base64": {
+      "name": "Base64",
+      "description": "Convert Base64 text and images"
+    },
+    "diff": {
+      "name": "Diff Compare",
+      "description": "Compare changes in text and code"
+    },
+    "jwt": {
+      "name": "JWT Decoder",
+      "description": "Decode JWT header and payload"
+    },
+    "url": {
+      "name": "URL Analyzer",
+      "description": "Parse base, path, hash, and query parameters"
+    }
   },
   "commands": {
     "openJson": "Open JSON tool",
@@ -61,22 +70,10 @@
     "toggleSchema": "Toggle Schema",
     "toggleSortRules": "Toggle sort rules",
     "toggleConcat": "Toggle concatenate",
-    "paste": "Paste",
-    "base64Encode": "Base64 encode",
-    "base64Decode": "Base64 decode",
-    "format": "Format JSON",
-    "minify": "Minify JSON",
-    "validate": "Validate JSON",
-    "convert": "Convert timestamp",
-    "trim": "Trim leading and trailing whitespace",
-    "removeSpaces": "Remove spaces",
-    "compress": "Trim spaces",
-    "compressLine": "Flatten to one line",
-    "count": "Count text"
+    "paste": "Paste"
   },
   "jsonTool": {
     "title": "JSON Workspace",
-    "actions": "JSON actions",
     "inputActions": "JSON input actions",
     "resultActions": "JSON result actions",
     "placeholder": "Paste JSON or type…",
@@ -133,7 +130,27 @@
     "sorted": "Sort",
     "sortFailed": "Sort failed",
     "invalidJsonDesc": "Content is not valid JSON, cannot continue",
-    "subtitle": "Format, minify, validate and extract paths"
+    "subtitle": "Format, minify, validate and extract paths",
+    "lines": "lines",
+    "characters": "characters",
+    "detected": "JSON status",
+    "valid": "Valid JSON",
+    "loadSample": "Load sample",
+    "errors": {
+      "unclosedComment": "Unclosed comment",
+      "unclosedString": "Unclosed string",
+      "invalidObjectKey": "Invalid object key",
+      "missingColon": "Object key missing :",
+      "unclosedNode": "Unclosed node",
+      "pathMissingBracket": "Path missing ]",
+      "pathInvalidSegment": "Invalid path segment: {{value}}",
+      "pathInvalidChar": "Invalid path character: {{value}}",
+      "notArray": "Not an array at this position",
+      "indexOutOfRange": "Array index out of range",
+      "noKeyAt": "No key {{key}} at this position",
+      "keyNotFound": "Key {{key}} not found",
+      "pathNotFound": "Path not found"
+    }
   },
   "timeTool": {
     "title": "Time Converter",
@@ -144,11 +161,6 @@
     "timezonePlaceholder": "Search timezone",
     "useSystemTimezone": "Use system time zone",
     "hint": "Supports Unix seconds, milliseconds, ISO 8601 and common date strings.",
-    "detected": "Detected",
-    "unixSec": "Unix timestamp · seconds",
-    "unixMs": "Unix timestamp · milliseconds",
-    "dateString": "Date string",
-    "unrecognized": "Unrecognized time value",
     "local": "Local time",
     "dateTime": "Date and time",
     "dateOnly": "Date",
@@ -178,7 +190,14 @@
     "actions": "Text actions",
     "input": "Input",
     "case": "Case",
-    "caseModes": {"upper":"UPPERCASE","lower":"lowercase","lineUpper":"Sentence case","lineLower":"sentence case","wordUpper":"Title Case","wordLower":"camel case"},
+    "caseModes": {
+      "upper": "UPPERCASE",
+      "lower": "lowercase",
+      "lineUpper": "Sentence case",
+      "lineLower": "sentence case",
+      "wordUpper": "Title Case",
+      "wordLower": "camel case"
+    },
     "trim": "Trim leading and trailing whitespace",
     "removeSpaces": "Remove spaces",
     "compressSpaces": "Trim spaces",
@@ -208,11 +227,108 @@
     "copied": "Copy statistic",
     "subtitle": "Measure and normalize plain text"
   },
-  "base64Tool": {"title":"Base64","subtitle":"Automatically recognizes text, images, and files","actions":"Base64 actions","input":"Text input","fileInput":"File input","output":"Text result","imageOutput":"Image result","fileOutput":"File result","text":"Text","image":"Image","file":"File","copy":"Copy result","clear":"Clear","chooseFile":"Choose file","fileHint":"Drop, paste, or choose a file","detected":"Detected","encoded":"Base64 encoded","invalid":"Unable to convert content","tooLarge":"File exceeds {{size}}","binaryFile":"Binary file detected","save":"Save","saveTitle":"Save decoded file","saved":"Saved {{name}}","saveFailed":"Failed to save file"},
-  "diffTool": {"title":"Diff Compare","actions":"Diff compare actions","before":"Original","after":"Modified","clear":"Clear","swap":"Swap","sample":"Write sample","clipboardTarget":"Clipboard target","targets":{"alternate":"Alternate","before":"Always original","after":"Always modified"},"filled":{"before":"Filled original","after":"Filled modified"},"highlightMode":"Highlight scope","modes":{"word-alt":"Word-Alt","word":"Word","character":"Character","none":"None"},"collapseUnchanged":"Collapse unchanged lines"},
-  "jwtTool": {"title":"JWT Decoder","subtitle":"Decode JWT header and payload","actions":"JWT actions","input":"JWT","header":"Header","payload":"Payload","clear":"Clear","copyHeader":"Copy header","copyPayload":"Copy payload","valid":"Valid JWT","invalid":"Invalid JWT","detected":"Decoded","decoded":"Decoded","characters":"characters","emptyHint":"Paste a full JWT to decode header and payload"},
-  "urlTool": {"title":"URL Analyzer","subtitle":"Parse base, path, hash, and query parameters in real time","actions":"URL actions","input":"URL","placeholder":"Enter a full URL, for example https://example.com/docs?tab=api#intro","base":"Base","path":"Path","hash":"Hash","params":"Query parameters","empty":"None","emptyTitle":"Enter a complete URL","emptyHint":"Supports HTTP, HTTPS, RTSP, WS, and WSS","invalid":"Invalid URL","invalidHint":"Enter a complete URL with a supported protocol, for example https://example.com","analyzed":"Analyzed","paramCount":"{{count}} parameters","clear":"Clear","copy":"Copy parsed result","copied":"URL parsed result","copyPart":"Copy {{part}}","partCopied":"Copied {{part}}","paramsCopied":"Copied parameters as JSON"},
-  "updatePill": {"checking":"Checking for updates","available":"Update available · {{version}}","downloading":"Downloading","applying":"Preparing update…","restarting":"Update ready, restarting…","dismiss":"Dismiss","error":"Update failed"},
+  "base64Tool": {
+    "title": "Base64",
+    "subtitle": "Automatically recognizes text, images, and files",
+    "actions": "Base64 actions",
+    "input": "Text input",
+    "fileInput": "File input",
+    "output": "Text result",
+    "imageOutput": "Image result",
+    "fileOutput": "File result",
+    "text": "Text",
+    "image": "Image",
+    "file": "File",
+    "copy": "Copy result",
+    "clear": "Clear",
+    "chooseFile": "Choose file",
+    "fileHint": "Drop, paste, or choose a file",
+    "detected": "Detected",
+    "encoded": "Base64 encoded",
+    "invalid": "Unable to convert content",
+    "tooLarge": "File exceeds {{size}}",
+    "binaryFile": "Binary file detected",
+    "save": "Save",
+    "saveTitle": "Save decoded file",
+    "saved": "Saved {{name}}",
+    "saveFailed": "Failed to save file"
+  },
+  "diffTool": {
+    "title": "Diff Compare",
+    "actions": "Diff compare actions",
+    "before": "Original",
+    "after": "Modified",
+    "clear": "Clear",
+    "swap": "Swap",
+    "clipboardTarget": "Clipboard target",
+    "targets": {
+      "alternate": "Alternate",
+      "before": "Always original",
+      "after": "Always modified"
+    },
+    "filled": {
+      "before": "Filled original",
+      "after": "Filled modified"
+    },
+    "highlightMode": "Highlight scope",
+    "modes": {
+      "word-alt": "Word-Alt",
+      "word": "Word",
+      "character": "Character",
+      "none": "None"
+    },
+    "collapseUnchanged": "Collapse unchanged lines"
+  },
+  "jwtTool": {
+    "title": "JWT Decoder",
+    "subtitle": "Decode JWT header and payload",
+    "actions": "JWT actions",
+    "input": "JWT",
+    "header": "Header",
+    "payload": "Payload",
+    "clear": "Clear",
+    "copyHeader": "Copy header",
+    "copyPayload": "Copy payload",
+    "valid": "Valid JWT",
+    "invalid": "Invalid JWT",
+    "detected": "Decoded",
+    "decoded": "Decoded",
+    "characters": "characters",
+    "emptyHint": "Paste a full JWT to decode header and payload"
+  },
+  "urlTool": {
+    "title": "URL Analyzer",
+    "subtitle": "Parse base, path, hash, and query parameters in real time",
+    "actions": "URL actions",
+    "input": "URL",
+    "placeholder": "Enter a full URL, for example https://example.com/docs?tab=api#intro",
+    "base": "Base",
+    "path": "Path",
+    "hash": "Hash",
+    "params": "Query parameters",
+    "empty": "None",
+    "emptyTitle": "Enter a complete URL",
+    "emptyHint": "Supports HTTP, HTTPS, RTSP, WS, and WSS",
+    "invalid": "Invalid URL",
+    "invalidHint": "Enter a complete URL with a supported protocol, for example https://example.com",
+    "analyzed": "Analyzed",
+    "paramCount": "{{count}} parameters",
+    "clear": "Clear",
+    "copy": "Copy parsed result",
+    "copied": "URL parsed result",
+    "copyPart": "Copy {{part}}",
+    "partCopied": "Copied {{part}}",
+    "paramsCopied": "Copied parameters as JSON"
+  },
+  "updatePill": {
+    "checking": "Checking for updates",
+    "available": "Update available · {{version}}",
+    "downloading": "Downloading",
+    "applying": "Preparing update…",
+    "restarting": "Update ready, restarting…",
+    "dismiss": "Dismiss",
+    "error": "Update failed"
+  },
   "settings": {
     "title": "Settings",
     "subtitle": "Control context detection and local data.",
@@ -221,9 +337,6 @@
     "theme": "Theme",
     "themeDark": "Dark",
     "themeLight": "Light",
-    "themeDefault": "Default",
-    "themeVioletBloom": "Violet Bloom",
-    "themeSolarDusk": "Solar Dusk",
     "language": "Language",
     "languageSubtitle": "Choose the interface language.",
     "languages": {
@@ -236,13 +349,26 @@
     "trayMatchDesc": "Automatically match clipboard content when clicking the tray icon",
     "autoOverwrite": "Auto overwrite",
     "autoOverwriteDesc": "Fill the matching tool automatically after matching; ask each time when off",
-    "editor":"Code editor","editorSubtitle":"Adjust all code editors.","editorFontSize":"Font size",
-    "updates":"Software updates","updatesSubtitle":"Get new versions from GitHub Releases.","autoCheckUpdates":"Automatically check for updates","autoCheckUpdatesDesc":"Checks silently after launch and every 24 hours; only prompts when an update is found","currentVersion":"Current version","checkUpdates":"Check for updates","checkingUpdates":"Checking","upToDate":"You're up to date","updateFailed":"Failed to check for updates","updateFailedDesc":"Check your network connection and try again",
+    "editor": "Code editor",
+    "editorSubtitle": "Adjust all code editors.",
+    "editorFontSize": "Font size",
+    "updates": "Software updates",
+    "updatesSubtitle": "Get new versions from GitHub Releases.",
+    "autoCheckUpdates": "Automatically check for updates",
+    "autoCheckUpdatesDesc": "Checks silently after launch and every 24 hours; only prompts when an update is found",
+    "currentVersion": "Current version",
+    "checkUpdates": "Check for updates",
+    "checkingUpdates": "Checking",
+    "upToDate": "You're up to date",
+    "updateFailed": "Failed to check for updates",
+    "updateFailedDesc": "Check your network connection and try again",
     "privacy": "Privacy",
     "privacySubtitle": "Manage local history.",
     "history": "History",
     "historyDesc": "Clear all recent activity on this device",
-    "clearHistory": "Clear history"
+    "clearHistory": "Clear history",
+    "trayMatchTools": "Match tools",
+    "trayMatchToolsDesc": "Choose which tools the tray may open automatically"
   },
   "history": {
     "title": "History",
@@ -260,7 +386,9 @@
     "columnTime": "Time",
     "summary": "{{start}}–{{end}} of {{total}}",
     "prev": "Previous",
-    "next": "Next"
+    "next": "Next",
+    "loadFailed": "Failed to load",
+    "loadFailedHint": "Click to retry"
   },
   "types": {
     "json": "JSON",
@@ -281,9 +409,10 @@
   },
   "matchDialog": {
     "title": "Content matched",
-    "body": "Clipboard matched {{tool}}. Fill it in?",
     "confirm": "Fill in",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "bodyPrefix": "Clipboard matched ",
+    "bodySuffix": ". Fill it in?"
   },
   "clearHistoryDialog": {
     "title": "Clear history?",

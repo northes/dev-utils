@@ -55,12 +55,12 @@ export default function TextTool({active, theme, record, pending, clearPending}:
     const toggleSort = (column: 'entry' | 'count') => setSortDescriptor(d => d.column === column ? {column, direction: d.direction === 'ascending' ? 'descending' : 'ascending'} : {column, direction: 'ascending'});
     const copyDetail = (character: string, count: number) => {
         const copied = `${character}: ${count}`;
-        navigator.clipboard?.writeText(copied);
+        navigator.clipboard?.writeText(copied).catch(()=>{});
         toast(t('toast.copied', {value: copied}));
         record('text', t('textTool.copied'), copied, value)
     };
     const copy = () => {
-        navigator.clipboard?.writeText(value);
+        navigator.clipboard?.writeText(value).catch(()=>{});
         toast(t('toast.copied', {value: `${[...value].length} ${t('textTool.characters')}`}));
         record('text', t('textTool.copy'), `${[...value].length} ${t('textTool.characters')}`, value)
     };
@@ -138,7 +138,7 @@ export default function TextTool({active, theme, record, pending, clearPending}:
                                                                                          key: 'clear',
                                                                                          label: t('textTool.clear'),
                                                                                          icon: Trash,
-                                                                                         variant: 'secondary',
+                                                                                         variant: 'tertiary',
                                                                                          disabled: !value,
                                                                                          onPress: () => {
                                                                                              setValue('');
@@ -193,6 +193,7 @@ export default function TextTool({active, theme, record, pending, clearPending}:
                                                                                            value={value}
                                                                                            onChange={setValue}
                                                                                            onCreateEditor={view => {
+                                                                                               view.contentDOM.setAttribute('aria-label', t('textTool.input'));
                                                                                                inputView.current = view
                                                                                            }}
                                                                                            theme={cmTheme}
@@ -210,7 +211,7 @@ export default function TextTool({active, theme, record, pending, clearPending}:
     <Button variant="ghost" className="stat-detail-trigger"
             aria-label={t('textTool.showDetails', {label: t(`textTool.${stat.key}`)})}>
         <span>{t(`textTool.${stat.key}`)}</span><strong>{stat.count.toLocaleString()}</strong></Button>
-</PopoverTrigger><PopoverContent className="text-stat-dialog-popover w-[min(320px,calc(100vw-32px))] p-0">{stat.details.length ?
+</PopoverTrigger><PopoverContent className="text-stat-popover w-[min(320px,calc(100vw-32px))] p-0">{stat.details.length ?
     <Table className="text-stat-table"><TableHeader><TableRow><TableHead className="text-left"><Button variant="ghost" onClick={() => toggleSort('entry')} className="h-auto w-full justify-start gap-1 rounded-sm px-1 py-0 text-left">{t('textTool.detailEntry')}{sortDescriptor.column === 'entry' && (sortDescriptor.direction === 'ascending' ? <CaretUp size={10} weight="bold"/> : <CaretDown size={10} weight="bold"/>)}</Button></TableHead><TableHead className="text-right"><Button variant="ghost" onClick={() => toggleSort('count')} className="h-auto w-full justify-end gap-1 rounded-sm px-1 py-0 text-right">{t('textTool.detailCount')}{sortDescriptor.column === 'count' && (sortDescriptor.direction === 'ascending' ? <CaretUp size={10} weight="bold"/> : <CaretDown size={10} weight="bold"/>)}</Button></TableHead></TableRow></TableHeader><TableBody>{sortDetails(stat.details).map(([character, count]) =>
         <TableRow key={character} onClick={() => copyDetail(character, count)} className="cursor-pointer"><TableCell>{character}</TableCell><TableCell className="text-right">{count.toLocaleString()}</TableCell></TableRow>)}</TableBody></Table> :
     <p>{t('textTool.noDetails')}</p>}</PopoverContent></Popover> : <>

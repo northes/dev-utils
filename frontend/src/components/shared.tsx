@@ -3,7 +3,6 @@ import {Button} from './ui/button'
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from './ui/select'
 import {Switch} from './ui/switch'
 import {Label} from './ui/label'
-import {Textarea} from './ui/textarea'
 import {BracketsCurly} from '@phosphor-icons/react'
 
 export type ToolId = 'json' | 'time' | 'text' | 'base64' | 'diff' | 'jwt' | 'url'
@@ -349,21 +348,7 @@ export function ToolActionBar({label, actions}: { label: string; actions: ToolBa
                 onClick={action.onPress}
                 className="h-[30px] flex-none px-[11px] text-[11px] [&_svg]:size-3.5">{action.icon &&
             <action.icon size={14} weight="duotone"/>}{action.label}</Button>)}</div>
-}export function Editor({label, value, onChange, readOnly, onKeyDown}: {
-    label: string;
-    value: string;
-    onChange?: (v: string) => void;
-    readOnly?: boolean;
-    onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void
-}) {
-    return <Label
-        className="flex min-w-0 flex-col gap-2 font-mono text-[10px] leading-none font-medium tracking-[.04em] text-(--muted-foreground) uppercase"><span>{label}</span><Textarea
-        className="h-[184px] min-h-[184px] w-full resize-none rounded-(--radius) border-(--border) bg-(--card) p-3.5 font-mono text-[11px] leading-[1.6] text-(--muted-foreground) shadow-none transition-colors [tab-size:2] read-only:bg-(--muted) focus:border-(--muted-foreground) max-[700px]:h-[140px]"
-        value={value} readOnly={readOnly} spellCheck={false} onChange={e => onChange?.(e.target.value)}
-        onKeyDown={onKeyDown}/></Label>
-}
-
-export function useHistory(initial: string) {
+}export function useHistory(initial: string) {
     const [value, setValueState] = useState(initial);
     const valueRef = useRef(initial);
     const past = useRef<string[]>([]);
