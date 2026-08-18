@@ -1,5 +1,9 @@
 import {useEffect, useRef, useState} from 'react'
-import {Button, ListBox, Select, Switch} from '@heroui/react'
+import {Button} from './ui/button'
+import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from './ui/select'
+import {Switch} from './ui/switch'
+import {Label} from './ui/label'
+import {Textarea} from './ui/textarea'
 import {BracketsCurly} from '@phosphor-icons/react'
 
 export type ToolId = 'json' | 'time' | 'text' | 'base64' | 'diff' | 'jwt' | 'url'
@@ -273,32 +277,27 @@ export type ToolAction =
 }
 
 export function ToolHeader({title, desc, actions = []}: { title: string; desc?: string; actions?: ToolAction[] }) {
-    return <header className="mt-[5px] mb-3.5 flex items-start justify-between gap-3 text-(--muted)">
+    return <header className="mt-[5px] mb-3.5 flex items-start justify-between gap-3 text-(--muted-foreground)">
         <div className="min-w-0"><h1
             className="m-0 text-[19px] leading-tight font-semibold tracking-[-.01em] text-(--foreground)">{title}</h1>{desc ?
-            <p className="mt-1 mb-0 text-[10px] font-normal text-(--muted)">{desc}</p> : null}</div>
+            <p className="mt-1 mb-0 text-[10px] font-normal text-(--muted-foreground)">{desc}</p> : null}</div>
         {actions.length > 0 &&
             <div className="flex flex-none items-center gap-2">{actions.map(a => a.type === 'select' ?
                 <div key={a.key} className="tool-header-select-field"><span
-                    id={`tool-action-label-${a.key}`}>{a.label}</span><Select className="tool-header-select"
-                                                                              selectedKey={a.value}
-                                                                              onSelectionChange={key => {
-                                                                                  if (key != null) a.onSelect(String(key))
-                                                                              }}
-                                                                              aria-labelledby={`tool-action-label-${a.key}`}><Select.Trigger><Select.Value/><Select.Indicator/></Select.Trigger><Select.Popover><ListBox>{a.options.map(option =>
-                    <ListBox.Item key={option.key} id={option.key}
-                                  textValue={option.label}>{option.label}<ListBox.ItemIndicator/></ListBox.Item>)}</ListBox></Select.Popover></Select>
-                </div> : a.type === 'toggle' ? <label key={a.key}
-                                                      className="flex h-8 flex-none items-center gap-2 border border-transparent bg-transparent py-0 pr-1.5 pl-3 text-[11px] text-(--muted) [&_.switch]:origin-right [&_.switch]:scale-[.82]"><span>{a.label}</span><Switch
-                        isSelected={!!a.checked}
-                        onChange={a.onPress}><Switch.Content><Switch.Control><Switch.Thumb/></Switch.Control></Switch.Content></Switch></label> :
-                    <button key={a.key}
-                            className={`flex h-8 flex-none cursor-pointer items-center gap-1.5 rounded-(--button-radius) border px-3 text-[11px] transition-colors ${a.active ? 'border-(--accent) bg-(--accent) text-(--accent-foreground)' : 'border-(--border) bg-(--surface) text-(--muted) hover:border-(--muted) hover:text-(--foreground)'}`}
-                            aria-pressed={a.active} onClick={a.onPress}>{a.icon &&
-                        <a.icon size={14} weight="duotone"/>}{a.label}</button>)}</div>}</header>
-}
-
-export function ToolLayout({title, desc, actions, footer, children, className = '', contentMode = 'scroll'}: {
+                    id={`tool-action-label-${a.key}`}>{a.label}</span><Select value={a.value}
+                                                                              onValueChange={v => a.onSelect(v)}><SelectTrigger
+                    className="tool-header-select" aria-labelledby={`tool-action-label-${a.key}`}><SelectValue/></SelectTrigger><SelectContent>{a.options.map(option =>
+                    <SelectItem key={option.key} value={option.key}>{option.label}</SelectItem>)}</SelectContent></Select>
+                </div> : a.type === 'toggle' ? <Label key={a.key}
+                                                      className="flex h-8 flex-none items-center gap-2 border border-transparent bg-transparent py-0 pr-1.5 pl-3 text-[11px] text-(--muted-foreground)"><span>{a.label}</span><Switch
+                        checked={!!a.checked}
+                        onCheckedChange={a.onPress}
+                        className="origin-right scale-[.82]"/></Label> :
+                    <Button key={a.key} variant={a.active ? 'default' : 'outline'}
+                          className="h-8 flex-none rounded-(--radius) px-3 text-[11px] [&_svg]:size-3.5"
+                          aria-pressed={a.active} onClick={a.onPress}>{a.icon &&
+                        <a.icon size={14} weight="duotone"/>}{a.label}</Button>)}</div>}</header>
+}export function ToolLayout({title, desc, actions, footer, children, className = '', contentMode = 'scroll'}: {
     title: string;
     desc?: string;
     actions?: ToolAction[];
@@ -335,33 +334,33 @@ export type ToolBarAction =
     onSelect: (value: string) => void
 }
 
+const buttonVariant = {primary: 'default', secondary: 'outline', tertiary: 'ghost', danger: 'destructive'} as const
+
 export function ToolActionBar({label, actions}: { label: string; actions: ToolBarAction[] }) {
     return <div
-        className="tool-action-bar mt-3 flex min-h-[30px] flex-wrap items-center justify-end gap-1.5 [&_.button]:h-[30px] [&_.button]:min-h-[30px] [&_.button]:flex-none [&_.button]:px-[11px] [&_.button]:text-[11px] [&_.button--tertiary:first-child]:mr-1 [&_svg]:size-3.5"
+        className="tool-action-bar mt-3 flex min-h-[30px] flex-wrap items-center justify-end gap-1.5"
         role="toolbar" aria-label={label}>{actions.map(action => action.type === 'select' ?
-        <Select key={action.key} className="tool-action-select" isDisabled={action.disabled} aria-label={action.label}
-                onSelectionChange={key => {
-                    if (key != null) action.onSelect(String(key))
-                }}><Select.Trigger><span>{action.label}</span><Select.Indicator/></Select.Trigger><Select.Popover><ListBox>{action.options.map(option =>
-            <ListBox.Item key={option.key} id={option.key}
-                          textValue={option.label}>{option.label}</ListBox.Item>)}</ListBox></Select.Popover></Select> :
-        <Button key={action.key} variant={action.variant} isDisabled={action.disabled}
-                onPress={action.onPress}>{action.icon &&
+        <Select key={action.key} value="" disabled={action.disabled}
+                onValueChange={v => action.onSelect(v)}><SelectTrigger
+            className="tool-action-select h-[30px] flex-none px-[11px] text-[11px] [&_svg]:size-3.5"><SelectValue
+            placeholder={action.label}/></SelectTrigger><SelectContent>{action.options.map(option =>
+            <SelectItem key={option.key} value={option.key}>{option.label}</SelectItem>)}</SelectContent></Select> :
+        <Button key={action.key} variant={buttonVariant[action.variant]} disabled={action.disabled}
+                onClick={action.onPress}
+                className="h-[30px] flex-none px-[11px] text-[11px] [&_svg]:size-3.5">{action.icon &&
             <action.icon size={14} weight="duotone"/>}{action.label}</Button>)}</div>
-}
-
-export function Editor({label, value, onChange, readOnly, onKeyDown}: {
+}export function Editor({label, value, onChange, readOnly, onKeyDown}: {
     label: string;
     value: string;
     onChange?: (v: string) => void;
     readOnly?: boolean;
     onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void
 }) {
-    return <label
-        className="flex min-w-0 flex-col gap-2 font-mono text-[10px] leading-none font-medium tracking-[.04em] text-(--muted) uppercase"><span>{label}</span><textarea
-        className="h-[184px] w-full resize-none rounded-(--editor-radius) border border-(--border) bg-(--surface) p-3.5 font-mono text-[11px] leading-[1.6] text-(--muted) outline-none transition-colors [tab-size:2] read-only:bg-(--surface-tertiary) focus:border-(--muted) max-[700px]:h-[140px]"
+    return <Label
+        className="flex min-w-0 flex-col gap-2 font-mono text-[10px] leading-none font-medium tracking-[.04em] text-(--muted-foreground) uppercase"><span>{label}</span><Textarea
+        className="h-[184px] min-h-[184px] w-full resize-none rounded-(--radius) border-(--border) bg-(--card) p-3.5 font-mono text-[11px] leading-[1.6] text-(--muted-foreground) shadow-none transition-colors [tab-size:2] read-only:bg-(--muted) focus:border-(--muted-foreground) max-[700px]:h-[140px]"
         value={value} readOnly={readOnly} spellCheck={false} onChange={e => onChange?.(e.target.value)}
-        onKeyDown={onKeyDown}/></label>
+        onKeyDown={onKeyDown}/></Label>
 }
 
 export function useHistory(initial: string) {

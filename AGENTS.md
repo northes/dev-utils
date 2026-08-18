@@ -43,8 +43,8 @@ Wails v3(beta)桌面托盘应用:Go 后端 + React 19 前端。本地优先的�
 
 - UI 分层:根布局与状态(`App.tsx`:页面路由、侧栏、命令面板、持久化)与工具组件分离。**每个工具封装为独立组件文件** `frontend/src/components/`(如 `JsonTool.tsx`、`TimeTool.tsx`、`TextTool.tsx`),在 `App.tsx` 引入;共享 UI 原语与类型(`Reveal`/`ToolHeader`/`Editor`/`samples`/`ToolId`/`PendingAction`/`Icon`)集中在 `frontend/src/components/shared.tsx`。
 - 代码刻意保持压缩单行风格(每个组件一行、最少空格)。不要重新格式化或美化;编辑时匹配这种紧凑风格。
-- 所有样式在 `frontend/src/index.css`,使用 CSS 自定义属性(仅暗色主题:`--bg`、`--surface`、`--accent` …)。body 为 `user-select:none`。
-- HeroUI(`@heroui/react`):用 HeroUI props 而非标准 DOM — `Button` 触发 `onPress`,`Switch` 用 `isSelected` + `onChange`。使用其他 HeroUI 组件前先查阅 `frontend/.agents/skills/heroui-react/SKILL.md`。
+- 样式入口在 `frontend/src/index.css`(Tailwind v4 + shadcn/ui),主题变量定义在 `frontend/src/styles/globals.css`(shadcn `:root`/`.dark` oklch 变量 + 功能必需的 `--success`/`--warning` 语义色)。body 为 `user-select:none`。
+- UI 组件统一用 shadcn/ui(`frontend/src/components/ui/`,复制进项目的源码,非黑盒 npm 包):`Button` 用 `onClick`+`disabled`,`Switch` 用 `checked`+`onCheckedChange`,`Select` 用 `value`+`onValueChange`,`Toggle` 用 `pressed`+`onPressedChange`,`AlertDialog` 用 `open`+`onOpenChange`(在 Root 上)。variant 语义映射:项目内部 `primary`→`default`、`secondary`→`outline`、`tertiary`→`ghost`、`danger`→`destructive`。
 - 图标来自 `@phosphor-icons/react`,统一 `weight="duotone"` 双色风格(状态区分除外,如选中态用 `fill`)。字体用系统默认栈,`frontend/public/` 内的 Inter TTF 未引用,勿在 CSS 引入。
 - 图标按钮位于 flex 布局(尤其输入框右侧操作区)时,必须显式设置相等的 `width` 与 `min-width`、`flex:none`/`flex-shrink:0`，并按需要清除横向 padding；否则长输入或窄窗口会把按钮左右压扁。
 - 窗口拖拽区域由 `--wails-draggable: drag/no-drag` CSS 控制(titlebar 用 `data-wails-drag`),不用 JS。
@@ -68,11 +68,9 @@ Wails v3(beta)桌面托盘应用:Go 后端 + React 19 前端。本地优先的�
 - 浮层滚动必须分层:外层 Popover/命令列表负责背景、边框、`border-radius` 与 `overflow:hidden` 裁切;内部真实滚动层负责尺寸收缩、`overflow:auto`、滚动条和滚动内容。不要让外层和内层同时承担滚动。
 - `scrollbar-gutter` 只应作用于真实滚动层。外层即使 `overflow:hidden`,被通用规则设为 `scrollbar-gutter:stable` 仍可能预留 gutter,造成内层滚动条向左缩、未贴住浮层右边界;需要在外层和真实滚动层明确使用 `scrollbar-gutter:auto!important`。
 - 命令面板当前由 `.palette-list` 外壳和 `.palette-list-scroll` 滚动层组成。外壳保留 `padding:5px` 时,滚动层用等量负右边距延伸到外壳内容边界,再用等量 `padding-right` 保持列表项留白;负边距必须与外壳 padding 成对维护,不能孤立调整。
-- HeroUI Popover 的 `.list-box` 才是真实滚动层:外层 Popover 用 `overflow:hidden` 裁切圆角,`.list-box` 用 `overflow:auto` 并继承 `border-radius`;ComboBox 固定高度时外层限定 block size,内部列表使用 `block-size:100%`、`min-block-size:0`。
-- HeroUI Popover 通常 Portal 到 `body`,局部父级选择器可能失效。先检查实际 DOM、`data-slot` 与安装版本类名,再使用全局 `.select__popover`、`.combo-box__popover`、`.dropdown__popover` 等选择器。
-- 圆角职责保持单一:浮层外壳消费 `--overlay-radius`,列表项消费 `--control-radius`,内部滚动层使用 `border-radius:inherit`;不要让滚动内容或滚动条破坏浮层四角。
-- CSS 导入顺序会影响通用规则覆盖:专属命令面板样式若早于 `radii.css`,覆盖 `scrollbar-gutter` 时需要足够特异性或 `!important`;Popover 滚动覆盖集中放在 `popover-scroll.css`。
-- 排查顺序固定为:确认真实滚动 DOM → 检查外/内层 `overflow`、`scrollbar-gutter`、padding、负 margin、尺寸和圆角 → 检查 Portal 后类名/`data-slot` → 检查 import 顺序和特异性。修改后运行 `npm run build`、Impeccable layout detector 与 `git diff --check`;本项目禁止用 Playwright 或 Computer Use 做验证。
+- shadcn Popover/Select(基于 Radix)会 Portal 到 `body`,局部父级选择器失效;需要时用组件 `className` 传入覆盖类,或检查 Radix 实际渲染的 `data-state`/`data-side` 属性定位。
+- 圆角统一用 shadcn 的单一 `--radius`(Tailwind `rounded-*` 已按 `@theme inline` 缩放);浮层四角由组件 `rounded-md`/`rounded-lg` 承担,不要另建全局圆角覆盖层。
+- 排查顺序固定为:确认真实滚动 DOM → 检查外/内层 `overflow`、`scrollbar-gutter`、padding、负 margin、尺寸和圆角 → 检查 Portal 后类名/`data-state` → 检查 import 顺序和特异性。修改后运行 `npm run build`、Impeccable layout detector 与 `git diff --check`;本项目禁止用 Playwright 或 Computer Use 做验证。
 
 ## UI 与布局经验(通用原则,自本项目实践沉淀)
 
@@ -137,32 +135,26 @@ Wails v3(beta)桌面托盘应用:Go 后端 + React 19 前端。本地优先的�
 - 样式在 `frontend/src/components/JwtTool.css`,与组件同目录。
 
 ### 弹层(AlertDialog)
-- HeroUI AlertDialog portal 到 body、脱离 `.app-shell`:`--accent`/`--cta-*` 等作用域变量不可用。必须在 `index.css` 用 `:root` 变量或显式色值补齐对话框背景、标题、body、Footer 按钮(primary/secondary/tertiary/danger)与关闭按钮样式,否则会继承 HeroUI 浅色主题 token 而配色异常。
-- 破坏性操作(清空历史等)执行前必须 AlertDialog 二次确认,确认按钮用 `danger`。
+- 使用 shadcn `AlertDialog`(Radix):`<AlertDialog open onOpenChange>` + `AlertDialogContent/Header/Title/Description/Footer/Cancel/Action`;取消用 `AlertDialogCancel`,确认用 `AlertDialogAction`。
+- 破坏性操作(清空历史、注释压缩等)执行前必须 AlertDialog 二次确认,确认按钮额外加 `className="bg-destructive text-destructive-foreground hover:bg-destructive/90"`。
 
-### HeroUI v3 易踩坑
-- `Switch` 是 compound 组件:裸 `<Switch isSelected onChange/>` 只渲染空字段、看不见开关;必须包成 `<Switch.Content><Switch.Control><Switch.Thumb/></Switch.Control></Switch.Content>`(项目内已封装 `SettingSwitch` 复用)。
-- 其余遵循上文「HeroUI 设计原则」。
+### shadcn/ui 易踩坑
+- shadcn 组件是复制进 `frontend/src/components/ui/` 的源码,直接改源码(图标已统一换成 `@phosphor-icons/react`),不要当黑盒 npm 包用。
+- 项目内部的语义 variant(`primary/secondary/tertiary/danger`)只在 `ToolActionBar` 等自有类型里使用,落到 shadcn `Button` 时按 `default/outline/ghost/destructive` 映射,不要直接给 shadcn 组件传 `variant="primary"`。
 
 ### 托盘与窗口、配置持久化
 - 托盘附件窗口:显示时**不要**用 `tray.ShowWindow()`(会强制定位到托盘图标下并置顶),直接 `window.Show().Focus()` + `SetAlwaysOnTop(false)`,窗口才回到上次位置。
 - 窗口位置/大小(`window-state.json`)与用户配置(`config.json`)都由 Go 持久化,前端不写 localStorage(上次打开页面 `devutils.lastPage` 除外);Go 退出前用 `app.OnShutdown` flush 防抖中的保存。
 - Go 结构体经 `wails3 generate bindings -clean=true -ts -i` 直接生成 TS 模型与方法绑定,前端 `type Settings = Config` 直接复用;**改动 Go 结构体后必须重新生成 bindings**。
 
-## HeroUI 设计原则
+## shadcn/ui 设计原则
 
-内化 HeroUI v3 设计原则(https://heroui.com/en/docs/react/getting-started/design-principles),所有 HeroUI 用法必须遵循:
-
-- **语义意图优于视觉风格**:变体只用语义名(`primary`/`secondary`/`tertiary`/`danger`),禁止按视觉命名(`solid`/`flat`/`bordered`)。层级约定:每个上下文仅一个 `primary`,`secondary` 可多个,`tertiary` 仅用于 dismissive/取消,`danger` 用于破坏性操作。
-- **无障碍为基础**:组件基于 React Aria(WCAG 2.1 AA),自带 ARIA 与键盘导航 — 不要破坏默认语义;交互一律 `onPress`,不写 `onClick`。
-- **组合优于配置**:优先 compound components(如 `ComboBox.InputGroup`、`ComboBox.Popover`),按需组装/省略子部件,而非堆 props。
-- **渐进披露**:从最小 props 起步,需求增长再扩展;不为一次性场景提前加复杂度。
-- **可预测行为**:`size`/`variant`/`className`/data 属性在各组件间语义一致。
-- **类型安全优先**:全量 TypeScript;自定义组件用 `extends Omit<ButtonProps,'variant'>` 等类型扩展,吃满 IntelliSense 与编译期校验。
-- **样式与逻辑分离**:样式(`@heroui/styles`)与逻辑(`@heroui/react`)分离。本项目统一在 `index.css` 覆盖样式,不在组件里写内联主题逻辑。
-- **完全可定制**:主题级用 CSS 变量(`--accent`、`--radius` 等),组件级用 BEM 类(`.button--primary`)。覆盖时选择器特异性要足够(如 `.app-shell .button--primary`),并显式声明关键色(`color`/`background`)而非依赖变量链。
-- **动效走 CSS + GPU**:只用 `transform`/`opacity`,不用 framer-motion。
-- **开放可扩展**:需要时写 wrapper 组件、直接用 BEM 类或 `tv({ extend: ... })` 扩展,不 fork 库。
+- **组件即源码**:shadcn 组件复制进 `frontend/src/components/ui/`,样式用 Tailwind 类 + `cn()`(cva) 组合,直接在源码里按需调整,不 fork 黑盒库。
+- **变量即主题**:颜色语义只用 shadcn 变量(`--background/--foreground/--primary/--secondary/--muted/--accent/--destructive/--border/--input/--ring`),亮暗切换靠根节点 `.dark` class;shadcn 未提供的 `--success/--warning` 作为项目扩展语义色保留。
+- **语义意图优于视觉风格**:项目内部仍用 `primary/secondary/tertiary/danger` 语义名(见 `ToolActionBar`),每个上下文仅一个 `primary`,`danger` 仅用于破坏性操作。
+- **无障碍为基础**:组件基于 Radix(WCAG 2.1 AA),不要破坏默认 ARIA 与键盘导航;交互用 `onClick`/`onValueChange`/`onCheckedChange` 等标准 props。
+- **动效走 shadcn 动画**:保留 `tw-animate-css` 提供的 `animate-in/out`、`fade-*`、`zoom-*`、`slide-*` 类;不用 framer-motion。
+- **图标用 Phosphor**:shadcn 组件源码里的 lucide 图标一律替换为 `@phosphor-icons/react`,统一 `weight` 风格。
 
 ## 工具约束
 

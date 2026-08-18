@@ -10,5 +10,10 @@ export default defineConfig({
     port: Number(process.env.WAILS_VITE_PORT) || 9245,
     strictPort: true,
   },
+  resolve: {
+    alias: {
+      "@": "/src",
+    },
+  },
   plugins: [react(), tailwindcss(), wails("./bindings")],
 });

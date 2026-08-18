@@ -1,7 +1,9 @@
 import {useEffect, useMemo, useRef, useState} from 'react'
-import {Popover, type SortDescriptor, Table} from '@heroui/react'
+import {Popover, PopoverContent, PopoverTrigger} from './ui/popover'
+import {Button} from './ui/button'
+import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow} from './ui/table'
 import {useTranslation} from 'react-i18next'
-import {Copy, Trash} from '@phosphor-icons/react'
+import {CaretDown, CaretUp, Copy, Trash} from '@phosphor-icons/react'
 import CodeMirror from '@uiw/react-codemirror'
 import {EditorView} from '@codemirror/view'
 import {quietEditorTheme} from './codeMirrorTheme'
@@ -12,6 +14,7 @@ const countDetails = (characters: string[]) => Array.from(characters.reduce((cou
 const words = (value: string) => value.match(/[A-Za-z]+(?:['’-][A-Za-z]+)*/g) ?? []
 type CaseMode = 'upper' | 'lower' | 'lineUpper' | 'lineLower' | 'wordUpper' | 'wordLower'
 const caseModes: CaseMode[] = ['upper', 'lower', 'lineUpper', 'lineLower', 'wordUpper', 'wordLower']
+type SortDescriptor = {column: 'entry' | 'count'; direction: 'ascending' | 'descending'}
 const transformCase = (value: string, mode: CaseMode) => mode === 'upper' ? value.toUpperCase() : mode === 'lower' ? value.toLowerCase() : mode === 'lineUpper' ? value.replace(/(^|\n)([^\n])/g, (_, start, character) => start + character.toUpperCase()) : mode === 'lineLower' ? value.replace(/(^|\n)([^\n])/g, (_, start, character) => start + character.toLowerCase()) : mode === 'wordUpper' ? value.replace(/[A-Za-z]+/g, word => word[0].toUpperCase() + word.slice(1).toLowerCase()) : value.replace(/[A-Za-z]+/g, word => word[0].toLowerCase() + word.slice(1))
 
 export default function TextTool({active, theme, record, pending, clearPending}: {
@@ -49,6 +52,7 @@ export default function TextTool({active, theme, record, pending, clearPending}:
         const order = sortDescriptor.column === 'count' ? leftCount - rightCount : leftName.localeCompare(rightName, 'zh-CN');
         return sortDescriptor.direction === 'descending' ? -order : order
     });
+    const toggleSort = (column: 'entry' | 'count') => setSortDescriptor(d => d.column === column ? {column, direction: d.direction === 'ascending' ? 'descending' : 'ascending'} : {column, direction: 'ascending'});
     const copyDetail = (character: string, count: number) => {
         const copied = `${character}: ${count}`;
         navigator.clipboard?.writeText(copied);
@@ -202,24 +206,14 @@ export default function TextTool({active, theme, record, pending, clearPending}:
                                                                                                closeBrackets: false
                                                                                            }}/></div>
         <div className="text-stat-grid">{stats.map(stat => <div className="text-stat-item" key={stat.key}>{stat.detail ?
-            <Popover><Popover.Trigger>
-                <button className="stat-detail-trigger"
-                        aria-label={t('textTool.showDetails', {label: t(`textTool.${stat.key}`)})}>
-                    <span>{t(`textTool.${stat.key}`)}</span><strong>{stat.count.toLocaleString()}</strong></button>
-            </Popover.Trigger><Popover.Content className="text-stat-dialog-popover"><Popover.Dialog
-                className="text-stat-dialog">{stat.details.length ?
-                <Table className="text-stat-table"><Table.ScrollContainer
-                    className="scrollbar-thin text-stat-table-scroll"><Table.Content className="text-stat-table-sticky"
-                                                                                     aria-label={t('textTool.detailTitle', {label: t(`textTool.${stat.key}`)})}
-                                                                                     sortDescriptor={sortDescriptor}
-                                                                                     onSortChange={setSortDescriptor}><Table.Header><Table.Column
-                    id="entry" isRowHeader allowsSorting>{({sortDirection}) => <Table.SortableColumnHeader
-                    sortDirection={sortDirection}>{t('textTool.detailEntry')}</Table.SortableColumnHeader>}</Table.Column><Table.Column
-                    id="count" allowsSorting>{({sortDirection}) => <Table.SortableColumnHeader
-                    sortDirection={sortDirection}>{t('textTool.detailCount')}</Table.SortableColumnHeader>}</Table.Column></Table.Header><Table.Body>{sortDetails(stat.details).map(([character, count]) =>
-                    <Table.Row key={character} id={character} textValue={`${character}: ${count}`}
-                               onAction={() => copyDetail(character, count)}><Table.Cell>{character}</Table.Cell><Table.Cell>{count.toLocaleString()}</Table.Cell></Table.Row>)}</Table.Body></Table.Content></Table.ScrollContainer></Table> :
-                <p>{t('textTool.noDetails')}</p>}</Popover.Dialog></Popover.Content></Popover> : <>
+            <Popover><PopoverTrigger asChild>
+    <Button variant="ghost" className="stat-detail-trigger"
+            aria-label={t('textTool.showDetails', {label: t(`textTool.${stat.key}`)})}>
+        <span>{t(`textTool.${stat.key}`)}</span><strong>{stat.count.toLocaleString()}</strong></Button>
+</PopoverTrigger><PopoverContent className="text-stat-dialog-popover w-[min(320px,calc(100vw-32px))] p-0">{stat.details.length ?
+    <Table className="text-stat-table"><TableHeader><TableRow><TableHead className="text-left"><Button variant="ghost" onClick={() => toggleSort('entry')} className="h-auto w-full justify-start gap-1 rounded-sm px-1 py-0 text-left">{t('textTool.detailEntry')}{sortDescriptor.column === 'entry' && (sortDescriptor.direction === 'ascending' ? <CaretUp size={10} weight="bold"/> : <CaretDown size={10} weight="bold"/>)}</Button></TableHead><TableHead className="text-right"><Button variant="ghost" onClick={() => toggleSort('count')} className="h-auto w-full justify-end gap-1 rounded-sm px-1 py-0 text-right">{t('textTool.detailCount')}{sortDescriptor.column === 'count' && (sortDescriptor.direction === 'ascending' ? <CaretUp size={10} weight="bold"/> : <CaretDown size={10} weight="bold"/>)}</Button></TableHead></TableRow></TableHeader><TableBody>{sortDetails(stat.details).map(([character, count]) =>
+        <TableRow key={character} onClick={() => copyDetail(character, count)} className="cursor-pointer"><TableCell>{character}</TableCell><TableCell className="text-right">{count.toLocaleString()}</TableCell></TableRow>)}</TableBody></Table> :
+    <p>{t('textTool.noDetails')}</p>}</PopoverContent></Popover> : <>
                 <span>{t(`textTool.${stat.key}`)}</span><strong>{stat.count.toLocaleString()}</strong></>}</div>)}</div>
     </ToolLayout>
 
