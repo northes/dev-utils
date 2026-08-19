@@ -368,7 +368,12 @@
     "privacySubtitle": "管理本机历史记录。",
     "history": "历史记录",
     "historyDesc": "清除本机所有最近活动",
-    "clearHistory": "清除历史"
+    "clearHistory": "清除历史",
+    "about": "关于",
+    "aboutSubtitle": "项目主页与支持渠道。",
+    "projectLink": "项目链接",
+    "projectUrl": "https://github.com/northes/dev-utils",
+    "openProject": "打开"
   },
   "history": {
     "title": "历史记录",

@@ -368,7 +368,12 @@
     "historyDesc": "Clear all recent activity on this device",
     "clearHistory": "Clear history",
     "trayMatchTools": "Match tools",
-    "trayMatchToolsDesc": "Choose which tools the tray may open automatically"
+    "trayMatchToolsDesc": "Choose which tools the tray may open automatically",
+    "about": "About",
+    "aboutSubtitle": "Project home and support.",
+    "projectLink": "Project link",
+    "projectUrl": "https://github.com/northes/dev-utils",
+    "openProject": "Open"
   },
   "history": {
     "title": "History",
