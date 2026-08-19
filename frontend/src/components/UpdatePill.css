@@ -4,9 +4,8 @@
 .update-pill__action{display:flex;align-items:center;gap:6px;min-width:0;height:100%;padding:0;border:0;background:none;color:inherit;cursor:pointer}
 .update-pill__action svg{flex:none;color:var(--primary)}
 .update-pill__progress{display:block;width:14px;height:14px;align-self:center;justify-self:center}
-.update-pill.update-pill--working .update-pill__spinner{display:block;width:14px;height:14px;align-self:center;justify-self:center;animation:update-pill-spinner 900ms linear infinite!important}
+.update-pill.update-pill--working .update-pill__spinner{width:14px;height:14px;align-self:center;justify-self:center}
 .update-pill__label{display:block;align-self:center;min-width:0;height:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px;line-height:14px;color:var(--foreground)}
 .update-pill__close{display:grid;place-items:center;flex:none;width:16px;min-width:16px;height:16px;padding:0;border:0;border-radius:50%;background:none;color:var(--muted-foreground);cursor:pointer}
 .update-pill__close:hover{color:var(--foreground);background:var(--accent)}
-@keyframes update-pill-spinner{to{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){.update-pill.update-pill--working .update-pill__spinner{animation:none}}

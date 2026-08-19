@@ -1,7 +1,8 @@
 import {useEffect,useRef,useState} from 'react'
 import {Events} from '@wailsio/runtime'
-import {ArrowUp,CircleNotch,X} from '@phosphor-icons/react'
+import {ArrowUp,X} from '@phosphor-icons/react'
 import {Button} from './ui/button'
+import {Spinner} from './ui/spinner'
 import {useTranslation} from 'react-i18next'
 import {InstallUpdate,RestartApp} from '../../bindings/changeme/updateservice'
 import {toast} from './AppToast'
@@ -41,6 +42,6 @@ export default function UpdatePill(){
   if(!state)return null
   const working=state!=='available'
   const label=state==='checking'?t('updatePill.checking'):state==='available'?t('updatePill.available',{version}):state==='downloading'?t('updatePill.downloading'):state==='applying'?t('updatePill.applying'):t('updatePill.restarting')
-  if(working)return <div className="update-pill update-pill--working" role="status"><CircleNotch className="update-pill__spinner animate-spin text-(--primary)" size={14} weight="bold"/><span className="update-pill__label">{label}{state==='downloading'&&percent>0?` ${percent}%`:''}</span></div>
+  if(working)return <div className="update-pill update-pill--working" role="status"><Spinner className="update-pill__spinner text-(--primary)" size={14}/><span className="update-pill__label">{label}{state==='downloading'&&percent>0?` ${percent}%`:''}</span></div>
   return <div className="update-pill update-pill--available" role="status"><Button variant="ghost" className="update-pill__action" onClick={start} aria-label={label}><ArrowUp size={13} weight="duotone"/><span className="update-pill__label">{label}</span></Button><Button variant="ghost" className="update-pill__close p-0" aria-label={t('updatePill.dismiss')} title={t('updatePill.dismiss')} onClick={dismiss}><X size={11} weight="bold"/></Button></div>
 }
