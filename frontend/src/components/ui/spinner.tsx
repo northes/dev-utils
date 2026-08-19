@@ -4,13 +4,14 @@ import { cn } from "@/lib/utils"
 
 function Spinner({ className, size = 16 }: { className?: string; size?: number }) {
   return (
-    <CircleNotch
+    <span
       role="status"
       aria-label="Loading"
-      size={size}
-      weight="bold"
-      className={cn("animate-spin transform-view origin-center", className)}
-    />
+      className={cn("inline-grid animate-spin origin-center place-items-center", className)}
+      style={{ width: size, height: size }}
+    >
+      <CircleNotch size={size} weight="bold" className="h-full w-full" aria-hidden="true" />
+    </span>
   )
 }
 
