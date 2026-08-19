@@ -1,6 +1,9 @@
 import * as React from "react"
 import { CaretDown, CaretLeft, CaretRight } from "@phosphor-icons/react"
 import { DayButton, DayPicker, getDefaultClassNames } from "react-day-picker"
+import { useTranslation } from "react-i18next"
+import { enUS } from "react-day-picker/locale/en-US"
+import { zhCN } from "react-day-picker/locale/zh-CN"
 
 import { cn } from "@/lib/utils"
 import { Button, buttonVariants } from "@/components/ui/button"
@@ -18,12 +21,13 @@ function Calendar({
   buttonVariant?: React.ComponentProps<typeof Button>["variant"]
 }) {
   const defaultClassNames = getDefaultClassNames()
+  const { i18n } = useTranslation()
 
   return (
     <DayPicker
       showOutsideDays={showOutsideDays}
       className={cn(
-        "bg-background group/calendar p-3 [--cell-size:2rem] [[data-slot=card-content]_&]:bg-transparent [[data-slot=popover-content]_&]:bg-transparent",
+        "bg-background group/calendar p-3 [[data-slot=card-content]_&]:bg-transparent [[data-slot=popover-content]_&]:bg-transparent",
         String.raw`rtl:**:[.rdp-button\_next>svg]:rotate-180`,
         String.raw`rtl:**:[.rdp-button\_previous>svg]:rotate-180`,
         className
@@ -35,7 +39,7 @@ function Calendar({
         ...formatters,
       }}
       classNames={{
-        root: cn("w-fit", defaultClassNames.root),
+        root: cn("w-fit [--cell-size:2rem]", defaultClassNames.root),
         months: cn(
           "relative flex flex-col gap-4 md:flex-row",
           defaultClassNames.months
@@ -162,6 +166,7 @@ function Calendar({
         },
         ...components,
       }}
+      locale={props.locale ?? (i18n.language === "zh-CN" ? zhCN : enUS)}
       {...props}
     />
   )
