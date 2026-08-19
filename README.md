@@ -1,83 +1,147 @@
-# Welcome to Your New Wails3 Project!
+# DevUtils
 
-Congratulations on generating your Wails3 application! This README will guide you through the next steps to get your project up and running.
+> 本地优先的开发者工具启动器 —— 一个常驻 macOS 菜单栏、随叫随到的开发调试工作台。
 
-## Getting Started
+[![简体中文](https://img.shields.io/badge/简体中文-默认-3DA639)](README.md)
+[![English](https://img.shields.io/badge/English-Read%20in%20English-0078D4)](README.en.md)
 
-1. Navigate to your project directory in the terminal.
+DevUtils 基于 [Wails v3](https://v3.wails.io/) 构建,把日常开发调试中高频的 JSON、时间戳、文本、Base64、JWT、URL 与差异对比等小工具,集中到一个紧凑、本地运行的桌面应用里。所有数据只在你自己的设备上处理,不会上传到任何服务器。
 
-2. To run your application in development mode, use the following command:
+![GitHub release](https://img.shields.io/github/v/release/northes/dev-utils?sort=semver&label=版本)
+![license](https://img.shields.io/badge/license-MIT-3DA639)
+![platform](https://img.shields.io/badge/platform-macOS-000000)
+![Wails](https://img.shields.io/badge/Wails-v3%20beta-DF0D3F)
+![React](https://img.shields.io/badge/React-19-61DAFB)
 
-   ```
-   wails3 dev
-   ```
+## 特性
 
-   This will start your application and enable hot-reloading for both frontend and backend changes.
+- **本地优先,隐私安全** — 没有账号、没有遥测、没有上传。密钥、token、日志等敏感内容始终留在设备上,处理全程离线。
+- **托盘常驻,随叫随到** — 应用常驻菜单栏(无 Dock 图标),关闭窗口即隐藏到托盘。复制内容后点击托盘图标,自动识别 JSON / 时间戳 / URL / JWT / Base64 / 文本并跳到对应工具(默认询问确认,可开启「自动覆盖」免确认)。
+- **命令面板,键盘直达** — `⌘K` / `Ctrl+K` 打开,支持拼音与首字母搜索,按当前上下文过滤命令;几乎所有操作都可以不从鼠标完成。
+- **历史记录,本机留存** — 工具操作自动记录在本机,支持按工具、时间范围过滤与分页,大内容按需加载,一键恢复。
+- **简体中文优先,支持国际化** — 界面默认简体中文,内置 English,语言资源可扩展。
+- **自动更新** — 通过 GitHub Releases 分发,启动时静默检查、每 24 小时复查,发现新版本才提示,一键下载并重启。
 
-3. To build your application for production, use:
+## 内置工具
 
-   ```
-   wails3 build
-   ```
+| 工具 | 说明 | 亮点 |
+| --- | --- | --- |
+| JSON 工作区 | 格式化、压缩、校验 | 支持带注释与尾逗号的 JSON;JSONPath 路径提取;Schema 结构面板;模板拼接;自定义 JSONPath 排序规则 |
+| 时间转换器 | 时间戳与日期互转 | 智能解析 Unix、ISO 8601、RFC3339 及常见中英文日期;时区搜索;输出格式可拖拽排序、按需显隐 |
+| 文本工具集 | 测量与规范化纯文本 | 字符 / 中文字符 / 英文 / 数字 / 单词 / 标点 / 行 / 字节统计;大小写转换;修剪与压缩 |
+| Base64 编解码 | 文本、图片、文件 | 自动识别编码方向与内容类型;data URL 与图片预览;解码结果保存为文件 |
+| 差异对比 | 原文与修改后并排比较 | 按词 / 按字符高亮;折叠相同行;剪贴板交替填入两侧 |
+| JWT 解析 | 解码 Header 与 Payload | 纯前端解码,不展示签名,自动校验合法性 |
+| URL 分析 | 实时拆解 URL | 基础地址 / 路径 / 哈希 / 查询参数;支持 http、https、rtsp、ws、wss |
 
-   This will create a production-ready executable in the `build` directory.
+<!--
+  截图占位:发布前请在此处补充应用主界面与各工具的截图,
+  便于用户快速了解产品形态。
+-->
 
-## Exploring Wails3 Features
+## 安装
 
-Now that you have your project set up, it's time to explore the features that Wails3 offers:
+从 [GitHub Releases](https://github.com/northes/dev-utils/releases) 下载最新版 `DevUtils-<version>-darwin-universal.dmg` 安装:
 
-1. **Check out the examples**: The best way to learn is by example. Visit the `examples` directory in the `v3/examples` directory to see various sample applications.
+- Apple Silicon 与 Intel 均为同一 Universal 包,无需区分架构;
+- 应用内更新使用同名 `-darwin-universal.zip` 与 `SHA256SUMS` 校验文件,安装后即可自动升级;
+- 未配置 Apple Developer 证书的构建为 ad-hoc 签名,首次打开需在「系统设置 → 隐私与安全性」中手动允许。
 
-2. **Run an example**: To run any of the examples, navigate to the example's directory and use:
+## 快速上手
 
-   ```
-   go run .
-   ```
+1. 首次启动后,DevUtils 驻留在菜单栏托盘,无 Dock 图标。
+2. 复制一段 JSON、时间戳、URL、JWT 或 Base64,点击托盘图标 → 应用识别内容类型并询问是否填入对应工具(默认行为;在「设置 → 剪贴板」中可关闭托盘匹配或开启「自动覆盖」)。
+3. 任意工具内按 `⌘K` / `Ctrl+K` 打开命令面板,搜索并执行操作。
+4. 关闭窗口会隐藏到托盘;从托盘菜单「退出」才真正退出应用。
 
-   Note: Some examples may be under development during the alpha phase.
+## 隐私与数据
 
-3. **Explore the documentation**: Visit the [Wails3 documentation](https://v3.wails.io/) for in-depth guides and API references.
+- 所有工具(格式化、转换、解析、比较)均在本地执行,无任何网络请求;
+- 历史记录与设置保存在本机:`~/Library/Application Support/DevUtils/`,可在「设置 → 隐私」中一键清除;
+- 唯一可能发起网络请求的是「检查更新」,仅向 GitHub Releases 查询版本信息。
 
-4. **Join the community**: Have questions or want to share your progress? Join the [Wails Discord](https://discord.gg/JDdSxwjhGf) or visit the [Wails discussions on GitHub](https://github.com/wailsapp/wails/discussions).
+## 开发
 
-## Project Structure
+### 环境要求
 
-Take a moment to familiarize yourself with your project structure:
+- macOS
+- Go 1.25+
+- Node.js 22+(仅 `frontend/` 内需要安装依赖)
+- Wails v3 CLI(当前锁定 `v3.0.0-beta.9`):
 
-- `frontend/`: Contains your frontend code (HTML, CSS, JavaScript/TypeScript)
-- `main.go`: The entry point of your Go backend
-- `app.go`: Define your application structure and methods here
-- `wails.json`: Configuration file for your Wails project
+  ```bash
+  go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.9
+  ```
 
-## Next Steps
+### 常用命令
 
-1. Modify the frontend in the `frontend/` directory to create your desired UI.
-2. Add backend functionality in `main.go`.
-3. Use `wails3 dev` to see your changes in real-time.
-4. When ready, build your application with `wails3 build`.
+所有任务通过 `wails3 task <name>` 执行(wails3 CLI 自带 task runner,无需单独安装):
 
-Happy coding with Wails3! If you encounter any issues or have questions, don't hesitate to consult the documentation or reach out to the Wails community.
+| 命令 | 说明 |
+| --- | --- |
+| `wails3 task dev` | 开发循环:编译 DEV 二进制,在 `http://localhost:9245` 启动 Vite,Go 变更热重载,前端由 Vite 热更新 |
+| `wails3 task build` | 构建生产可执行文件(分发到 `build/{GOOS}/`) |
+| `wails3 task package` | 打包安装包 |
+| `wails3 task run` | 运行应用 |
 
-## 发布 macOS 版本
-
-推送语义化版本标签即可触发 `.github/workflows/release-macos.yml`：
+前端类型检查(无 lint/format 配置):
 
 ```bash
-git tag v0.2.0
-git push github v0.2.0
+cd frontend && npx tsc --noEmit
 ```
 
-工作流会分别构建 Apple Silicon 与 Intel 包，并在同一个 GitHub Release 中上传：
+前端依赖只在 `frontend/` 内安装;前端构建产物被 `main.go` 通过 `//go:embed` 嵌入,因此任何 Go 构建前 `frontend/dist` 必须已存在。
 
-- `DevUtils-<version>-darwin-<arch>.dmg`：用于首次安装；
-- `DevUtils-<version>-darwin-<arch>.zip`：用于 Wails 应用内更新；
-- `SHA256SUMS`：供应用下载后校验文件完整性。
+### 项目结构
 
-仓库未配置 Apple 凭据时会生成 ad-hoc 签名包，仅适合测试。正式分发前请在 GitHub Actions Secrets 中配置：
+```
+├── main.go              # Go 入口:窗口、系统托盘、已绑定服务与更新调度
+├── configservice.go     # 配置服务:设置持久化到 ~/Library/Application Support/DevUtils/config.json
+├── updateservice.go     # 更新轮询与调度(基于 Wails updater + GitHub Releases)
+├── frontend/            # React 19 + TypeScript 前端
+│   ├── src/App.tsx      # 布局、路由、命令面板、剪贴板识别
+│   ├── src/components/  # 各工具组件(JsonTool / TimeTool / …)与共享原语
+│   ├── src/locales/     # i18n 语言资源(zh-CN / en-US)
+│   └── src/bindings/    # wails 自动生成的 TS 绑定(勿手改)
+├── build/               # Wails 构建资源配置与平台 Taskfile
+└── .github/workflows/   # macOS 发布流水线
+```
 
-- `APPLE_CERTIFICATE`：Developer ID Application 的 P12 Base64；
-- `APPLE_CERTIFICATE_PASSWORD`：P12 密码；
-- `APPLE_SIGNING_IDENTITY`：Developer ID Application 证书名称；
-- `APPLE_ID`、`APPLE_APP_PASSWORD`、`APPLE_TEAM_ID`：Apple 公证凭据。
+### 技术栈
 
-也可以从 Actions 页面手动运行工作流并输入 `v0.2.0` 形式的标签。应用内更新固定读取公开仓库 `northes/dev-utils` 的最新 GitHub Release。
+- 桌面壳:[Wails v3](https://v3.wails.io/)(Go),Go 层保持薄壳职责;
+- 前端:React 19 + TypeScript + Vite;
+- UI:shadcn/ui(源码内嵌)+ Tailwind CSS v4 + [Phosphor Icons](https://phosphoricons.com/);
+- 编辑器:[CodeMirror 6](https://codemirror.net/)(JSON 等语法高亮);
+- 国际化:react-i18next;
+- 更新:Wails updater + GitHub Releases provider。
+
+## 发布
+
+推送语义化版本标签即可触发 [release-macos.yml](.github/workflows/release-macos.yml):
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+工作流会构建 Apple Silicon + Intel 的 Universal 包,并在同一个 GitHub Release 中上传:
+
+- `DevUtils-<version>-darwin-universal.dmg` — 首次安装;
+- `DevUtils-<version>-darwin-universal.zip` — 应用内更新;
+- `SHA256SUMS` — 文件完整性校验。
+
+签名与公证可选:在仓库 Secrets 中配置 `APPLE_CERTIFICATE`、`APPLE_CERTIFICATE_PASSWORD`、`APPLE_SIGNING_IDENTITY`、`APPLE_ID`、`APPLE_APP_PASSWORD`、`APPLE_TEAM_ID` 后,流水线自动签名并公证;未配置时生成 ad-hoc 签名包,仅适合测试。也可以从 Actions 页面手动运行工作流并输入版本标签。应用内更新固定读取公开仓库 `northes/dev-utils` 的最新 GitHub Release。
+
+## 贡献
+
+欢迎通过 [Issue](https://github.com/northes/dev-utils/issues) 报告问题、提出需求,通过 Pull Request 提交代码:
+
+- 提交前请在 `frontend/` 内通过 `npx tsc --noEmit` 类型检查;
+- 保持既有代码风格(紧凑单行风格,详见 `AGENTS.md`);
+- 新增工具请遵循「新增工具接线清单」(`AGENTS.md`),确保命令面板、历史记录、托盘匹配三处接线一致;
+- 用户可见文案走 locale 文件,不硬编码。
+
+## 许可证
+
+本项目采用 [MIT License](LICENSE)。你可以自由使用、修改、分发本项目,包括用于商业用途,只需保留版权声明与许可声明。
