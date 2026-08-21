@@ -1,9 +1,10 @@
 import {useEffect, useRef, useState} from 'react'
 import {Button} from './ui/button'
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from './ui/select'
+import {Popover, PopoverContent, PopoverTrigger} from './ui/popover'
 import {Switch} from './ui/switch'
 import {Label} from './ui/label'
-import {BracketsCurly} from '@phosphor-icons/react'
+import {BracketsCurly, CaretDown, Check} from '@phosphor-icons/react'
 
 export type ToolId = 'json' | 'time' | 'text' | 'base64' | 'diff' | 'jwt' | 'url'
 export type PendingAction = {
@@ -332,6 +333,18 @@ export type ToolBarAction =
     options: Array<{ key: string; label: string }>;
     onSelect: (value: string) => void
 }
+    | {
+    key: string;
+    label: string;
+    variant: 'primary' | 'secondary' | 'tertiary' | 'danger';
+    type: 'split';
+    disabled?: boolean;
+    onPress: () => void;
+    menuLabel: string;
+    menuChecked: boolean;
+    menuItemLabel: string;
+    onMenuToggle: () => void
+}
 
 const buttonVariant = {primary: 'default', secondary: 'outline', tertiary: 'ghost', danger: 'destructive'} as const
 
@@ -344,6 +357,22 @@ export function ToolActionBar({label, actions}: { label: string; actions: ToolBa
             className="tool-action-select h-[30px] flex-none px-[11px] text-[11px] [&_svg]:size-3.5"><SelectValue
             placeholder={action.label}/></SelectTrigger><SelectContent>{action.options.map(option =>
             <SelectItem key={option.key} value={option.key}>{option.label}</SelectItem>)}</SelectContent></Select> :
+        action.type === 'split' ?
+            <div key={action.key} className={`tool-action-split${action.disabled?' is-disabled':''}`} role="group"
+                 aria-label={action.label}><Button variant={buttonVariant[action.variant]}
+                                                   disabled={action.disabled} onClick={action.onPress}
+                                                   className="tool-action-split-main h-[30px] flex-none px-[11px] text-[11px] [&_svg]:size-3.5">{action.label}</Button><Popover><PopoverTrigger
+                asChild><Button variant={buttonVariant[action.variant]}
+                                className="tool-action-split-trigger h-[30px] w-[26px] min-w-[26px] flex-none px-0 text-[11px] [&_svg]:size-3.5"
+                                aria-label={action.menuLabel}><CaretDown size={12}
+                                                                         weight="bold"/></Button></PopoverTrigger><PopoverContent
+                align="end" className="tool-action-split-menu w-auto min-w-0 p-1"
+                role="menu"><button type="button" role="menuitemcheckbox" aria-checked={action.menuChecked}
+                                    className="tool-action-split-item"
+                                    onClick={action.onMenuToggle}><Check size={12} weight="bold"
+                                                                         className={action.menuChecked ? undefined : 'opacity-0'}
+                                                                         aria-hidden/><span>{action.menuItemLabel}</span></button></PopoverContent></Popover>
+            </div> :
         <Button key={action.key} variant={buttonVariant[action.variant]} disabled={action.disabled}
                 onClick={action.onPress}
                 className="h-[30px] flex-none px-[11px] text-[11px] [&_svg]:size-3.5">{action.icon &&

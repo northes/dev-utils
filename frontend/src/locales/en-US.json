@@ -69,6 +69,7 @@
     "openUrl": "Open URL analyzer",
     "toggleSchema": "Toggle Schema",
     "toggleWorkflow": "Toggle workflow",
+    "toggleAutoFormatOnFill": "Toggle auto-format on fill",
     "paste": "Paste"
   },
   "jsonTool": {
@@ -77,6 +78,8 @@
     "resultActions": "JSON result actions",
     "placeholder": "Paste JSON or type…",
     "format": "Format",
+    "formatOptions": "Format options",
+    "autoFormatOnFill": "Auto-format after fill",
     "minify": "Minify",
     "copy": "Copy",
     "clear": "Clear",

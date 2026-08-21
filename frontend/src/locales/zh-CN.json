@@ -69,6 +69,7 @@
     "openUrl": "打开 URL 分析",
     "toggleSchema": "切换 Schema",
     "toggleWorkflow": "切换工作流",
+    "toggleAutoFormatOnFill": "切换填入后自动格式化",
     "paste": "粘贴"
   },
   "jsonTool": {
@@ -77,6 +78,8 @@
     "resultActions": "JSON 结果操作",
     "placeholder": "粘贴 JSON 或直接输入…",
     "format": "格式化",
+    "formatOptions": "格式化选项",
+    "autoFormatOnFill": "填入后自动格式化",
     "minify": "压缩",
     "copy": "复制",
     "clear": "清空",

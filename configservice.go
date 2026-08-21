@@ -15,19 +15,21 @@ import (
 )
 
 type Config struct {
-	TrayMatchEnabled        bool     `json:"trayMatchEnabled"`
-	TrayMatchTools          []string `json:"trayMatchTools"`
-	URLTrayMatchMigrated    bool     `json:"urlTrayMatchMigrated"`
-	AutoOverwrite           bool     `json:"autoOverwrite"`
-	AutoCheckUpdates        bool     `json:"autoCheckUpdates"`
-	Language                string   `json:"language"`
-	SidebarMode             string   `json:"sidebarMode"`
-	Theme                   string   `json:"theme"`
-	DiffHighlightMode       string   `json:"diffHighlightMode"`
-	DiffClipboardTargetMode string   `json:"diffClipboardTargetMode"`
-	CodeEditorFontSize      int      `json:"codeEditorFontSize"`
-	TimeResultOrder         []string `json:"timeResultOrder"`
-	HiddenTimeResults       []string `json:"hiddenTimeResults"`
+	TrayMatchEnabled             bool     `json:"trayMatchEnabled"`
+	TrayMatchTools               []string `json:"trayMatchTools"`
+	URLTrayMatchMigrated         bool     `json:"urlTrayMatchMigrated"`
+	AutoOverwrite                bool     `json:"autoOverwrite"`
+	AutoCheckUpdates             bool     `json:"autoCheckUpdates"`
+	Language                     string   `json:"language"`
+	SidebarMode                  string   `json:"sidebarMode"`
+	Theme                        string   `json:"theme"`
+	DiffHighlightMode            string   `json:"diffHighlightMode"`
+	DiffClipboardTargetMode      string   `json:"diffClipboardTargetMode"`
+	CodeEditorFontSize           int      `json:"codeEditorFontSize"`
+	TimeResultOrder              []string `json:"timeResultOrder"`
+	HiddenTimeResults            []string `json:"hiddenTimeResults"`
+	JsonAutoFormatOnFill         bool     `json:"jsonAutoFormatOnFill"`
+	JsonAutoFormatOnFillMigrated bool     `json:"jsonAutoFormatOnFillMigrated"`
 }
 type HistoryItem struct {
 	ID        int64  `json:"id"`
@@ -61,7 +63,7 @@ type historyStored struct {
 }
 
 func defaultConfig() Config {
-	return Config{TrayMatchEnabled: true, TrayMatchTools: []string{"json", "time", "text", "base64", "diff", "jwt", "url"}, AutoOverwrite: true, AutoCheckUpdates: true, Language: "zh-CN", SidebarMode: "full", Theme: "dark", DiffHighlightMode: "character", DiffClipboardTargetMode: "alternate", CodeEditorFontSize: 12, TimeResultOrder: []string{"local", "dateTime", "dateOnly", "timeOnly", "zonedIso8601", "rfc3339", "utc", "compact", "underscore", "unixSeconds", "unixMilliseconds", "unixNanoseconds"}}
+	return Config{TrayMatchEnabled: true, TrayMatchTools: []string{"json", "time", "text", "base64", "diff", "jwt", "url"}, AutoOverwrite: true, AutoCheckUpdates: true, Language: "zh-CN", SidebarMode: "full", Theme: "dark", DiffHighlightMode: "character", DiffClipboardTargetMode: "alternate", CodeEditorFontSize: 12, TimeResultOrder: []string{"local", "dateTime", "dateOnly", "timeOnly", "zonedIso8601", "rfc3339", "utc", "compact", "underscore", "unixSeconds", "unixMilliseconds", "unixNanoseconds"}, JsonAutoFormatOnFill: true, JsonAutoFormatOnFillMigrated: true}
 }
 func normalizeConfig(cfg Config) Config {
 	trayTools := []string{"json", "time", "text", "base64", "diff", "jwt", "url"}
@@ -141,6 +143,10 @@ func normalizeConfig(cfg Config) Config {
 		}
 	}
 	cfg.HiddenTimeResults = hidden
+	if !cfg.JsonAutoFormatOnFillMigrated {
+		cfg.JsonAutoFormatOnFill = true
+		cfg.JsonAutoFormatOnFillMigrated = true
+	}
 	return cfg
 }
 func appDataDir() string {
