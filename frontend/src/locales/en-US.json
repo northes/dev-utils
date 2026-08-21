@@ -421,7 +421,11 @@
     "aboutSubtitle": "Project home and support.",
     "projectLink": "Project link",
     "projectUrl": "https://github.com/northes/dev-utils",
-    "openProject": "Open"
+    "openProject": "Open",
+    "application": "Application",
+    "applicationSubtitle": "Control the application state.",
+    "quit": "Quit application",
+    "quitDesc": "Close DevUtils and stop its tray service"
   },
   "history": {
     "title": "History",

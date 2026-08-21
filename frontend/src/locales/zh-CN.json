@@ -421,7 +421,11 @@
     "aboutSubtitle": "项目主页与支持渠道。",
     "projectLink": "项目链接",
     "projectUrl": "https://github.com/northes/dev-utils",
-    "openProject": "打开"
+    "openProject": "打开",
+    "application": "应用",
+    "applicationSubtitle": "控制应用运行状态。",
+    "quit": "退出应用",
+    "quitDesc": "关闭 DevUtils 并停止托盘服务"
   },
   "history": {
     "title": "历史记录",
