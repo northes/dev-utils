@@ -3,11 +3,6 @@
 .json-workflow-rules,.json-workflow-output{display:flex;min-height:0;min-width:0;flex-direction:column}
 .json-workflow-rules{container:workflow-rules / inline-size}
 .json-workflow-section-header{display:flex;min-height:30px;flex:none;align-items:center;justify-content:space-between;gap:8px;border-bottom:1px solid var(--border)}
-.json-workflow-header-actions{display:flex;min-width:0;align-items:center;justify-content:flex-end;gap:6px;flex-wrap:wrap}
-.json-workflow-add-split{display:inline-flex;flex:none;align-items:stretch;height:26px}
-.json-workflow-add{height:26px;min-height:26px;flex:none;padding:0 10px;font-size:11px;border-top-right-radius:0!important;border-bottom-right-radius:0!important}
-.json-workflow-add-trigger{position:relative;width:22px;min-width:22px;height:26px;min-height:26px;flex:none;padding:0;border-top-left-radius:0!important;border-bottom-left-radius:0!important;border-left-width:0!important}
-.json-workflow-add-trigger:focus-visible,.json-workflow-add:focus-visible{z-index:1}
 .json-workflow-list{min-height:0;overflow:auto;scrollbar-gutter:stable}
 .json-workflow-empty{display:flex;min-height:74px;align-items:center;justify-content:center;color:var(--muted-foreground);font-size:11px}
 .json-workflow-item{border-bottom:1px solid var(--border);padding:14px 12px 16px}
@@ -60,6 +55,8 @@
   .json-schema-layout.workflow-layout>.json-schema-right{display:grid}
   .json-schema-layout.workflow-layout .json-workflow-slot{display:block;grid-row:1/-1}
   .json-schema-layout.workflow-layout .json-workflow-panel{display:grid}
+  .json-footer-actions.workflow-layout{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+  .json-footer-actions.workflow-layout>.json-workflow-rules-footer-actions,.json-footer-actions.workflow-layout>.json-workflow-footer-actions{grid-column:2;min-width:0}
 }
 
 @container json-page (min-width:960px){
@@ -67,5 +64,5 @@
   .json-schema-layout.workflow-layout>.json-schema-right,.json-schema-layout.workflow-layout .json-workflow-slot,.json-schema-layout.workflow-layout .json-workflow-panel{display:contents}
   .json-schema-layout.workflow-layout .json-workflow-rules,.json-schema-layout.workflow-layout .json-workflow-output{height:100%;min-height:0}
   .json-footer-actions.workflow-layout{grid-template-columns:repeat(3,minmax(0,1fr))}
-  .json-footer-actions.workflow-layout>.json-workflow-footer-actions{grid-column:3;min-width:0}
+  .json-footer-actions.workflow-layout>.json-workflow-rules-footer-actions,.json-footer-actions.workflow-layout>.json-workflow-footer-actions{min-width:0}
 }
