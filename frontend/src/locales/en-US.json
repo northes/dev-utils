@@ -120,6 +120,7 @@
       "clipboardReadFailed": "Unable to read the clipboard; check permissions",
       "clipboardWriteFailed": "Unable to write to the clipboard; check permissions",
       "addItem": "Add step",
+      "moreActions": "More actions",
       "empty": "Add a step to start the workflow",
       "type": "Item type",
       "enableItem": "Enable Item",

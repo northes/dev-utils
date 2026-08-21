@@ -122,6 +122,7 @@
       "clipboardReadFailed": "无法读取剪贴板，请检查权限",
       "clipboardWriteFailed": "无法写入剪贴板，请检查权限",
       "addItem": "添加步骤",
+      "moreActions": "更多操作",
       "empty": "添加步骤开始执行工作流",
       "type": "Item 类型",
       "enableItem": "启用 Item",
