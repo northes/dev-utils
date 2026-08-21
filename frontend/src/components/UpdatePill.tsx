@@ -1,12 +1,11 @@
 import {useEffect,useRef,useState} from 'react'
 import {Events} from '@wailsio/runtime'
-import {ArrowUp,X} from '@phosphor-icons/react'
+import {ArrowCircleUp,X} from '@phosphor-icons/react'
 import {Button} from './ui/button'
 import {Spinner} from './ui/spinner'
 import {useTranslation} from 'react-i18next'
 import {InstallUpdate,RestartApp} from '../../bindings/changeme/updateservice'
 import {toast} from './AppToast'
-import './UpdatePill.css'
 
 type PillState='checking'|'available'|'downloading'|'applying'|'restarting'
 const payload=(event:any)=>event?.data??event
@@ -42,6 +41,6 @@ export default function UpdatePill(){
   if(!state)return null
   const working=state!=='available'
   const label=state==='checking'?t('updatePill.checking'):state==='available'?t('updatePill.available',{version}):state==='downloading'?t('updatePill.downloading'):state==='applying'?t('updatePill.applying'):t('updatePill.restarting')
-  if(working)return <div className="update-pill update-pill--working" role="status"><Spinner className="update-pill__spinner text-(--primary)" size={14}/><span className="update-pill__label">{label}{state==='downloading'&&percent>0?` ${percent}%`:''}</span></div>
-  return <div className="update-pill update-pill--available" role="status"><Button variant="ghost" className="update-pill__action" onClick={start} aria-label={label}><ArrowUp size={14} weight="duotone"/><span className="update-pill__label">{label}</span></Button><Button variant="ghost" className="update-pill__close p-0" aria-label={t('updatePill.dismiss')} title={t('updatePill.dismiss')} onClick={dismiss}><X size={12} weight="bold"/></Button></div>
+  if(working)return <div className="relative top-px z-[3] flex h-6 max-w-[min(340px,calc(100vw-220px))] flex-none items-center self-center gap-1.5 ml-auto rounded-full border border-border bg-card px-2 py-0 text-foreground [--wails-draggable:no-drag]" role="status"><Spinner className="flex-none self-center text-(--primary) motion-reduce:animate-none" size={14}/><span className="block min-w-0 self-center overflow-hidden text-ellipsis whitespace-nowrap text-[10px] leading-[14px] text-foreground">{label}{state==='downloading'&&percent>0?` ${percent}%`:''}</span></div>
+  return <div className="relative top-px z-[3] flex h-6 max-w-[min(340px,calc(100vw-220px))] flex-none items-center self-center gap-1.5 ml-auto rounded-full border border-border bg-card py-0 pl-2 pr-1 text-foreground [--wails-draggable:no-drag] cursor-pointer hover:border-muted-foreground hover:bg-muted" role="status"><Button variant="ghost" className="flex h-full min-w-0 flex-none cursor-pointer gap-[5px] border-0 bg-transparent p-0 text-inherit hover:bg-transparent hover:text-inherit [&_svg]:size-3.5 [&_svg]:text-primary" onClick={start} aria-label={label}><ArrowCircleUp size={14} weight="duotone"/><span className="block min-w-0 self-center overflow-hidden text-ellipsis whitespace-nowrap text-[10px] leading-[14px] text-foreground">{label}</span></Button><Button variant="ghost" className="grid h-3.5 min-w-3.5 w-3.5 flex-none cursor-pointer place-items-center rounded-full border-0 bg-transparent p-0 text-muted-foreground opacity-[.72] hover:bg-accent hover:text-foreground hover:opacity-100 [&_svg]:size-[11px] [&_svg]:shrink-0" aria-label={t('updatePill.dismiss')} title={t('updatePill.dismiss')} onClick={dismiss}><X size={11} weight="bold"/></Button></div>
 }
