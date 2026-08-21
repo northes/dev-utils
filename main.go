@@ -12,6 +12,7 @@ import (
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
+	"github.com/wailsapp/wails/v3/pkg/services/dock"
 	"github.com/wailsapp/wails/v3/pkg/updater"
 	githubprovider "github.com/wailsapp/wails/v3/pkg/updater/providers/github"
 )
@@ -87,6 +88,7 @@ func main() {
 
 	cfgService := NewConfigService()
 	updateService := NewUpdateService(currentVersion)
+	dockService := dock.New()
 	isQuitting := false
 	app := application.New(application.Options{
 		Name:        appName,
@@ -97,9 +99,10 @@ func main() {
 		Services: []application.Service{
 			application.NewService(cfgService),
 			application.NewService(updateService),
+			application.NewService(dockService),
 		},
 		Mac: application.MacOptions{
-			ActivationPolicy: application.ActivationPolicyAccessory,
+			ActivationPolicy: application.ActivationPolicyRegular,
 		},
 	})
 
@@ -151,6 +154,7 @@ func main() {
 			},
 		},
 	})
+	window.Show()
 	updateService.setBeforeRestart(func() {
 		// 更新重启走真实退出，避免 WindowClosing 钩子把它当成隐藏到托盘。
 		isQuitting = true
@@ -200,6 +204,9 @@ func main() {
 		tray.SetIcon(trayLight)
 	}
 	showFromTray := func() {
+		if runtime.GOOS == "darwin" {
+			go dockService.ShowAppIcon()
+		}
 		// 临时提升窗口层级，确保从托盘菜单唤回时能越过当前前台窗口；
 		// 聚焦后恢复普通层级，避免 DevUtils 变成永久置顶窗口。
 		window.SetAlwaysOnTop(true)
@@ -244,6 +251,9 @@ func main() {
 		saveWindowState(&windowState{X: x, Y: y, W: w, H: h})
 		if isQuitting {
 			return
+		}
+		if runtime.GOOS == "darwin" {
+			go dockService.HideAppIcon()
 		}
 		window.Hide()
 		event.Cancel()
