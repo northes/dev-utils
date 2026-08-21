@@ -13,7 +13,7 @@
 .json-workflow-item.dragging{background:var(--accent-soft)}
 .json-workflow-item-header{display:grid;grid-template-columns:26px 24px minmax(0,1fr) 36px 26px;min-width:0;align-items:center;gap:8px}
 .json-workflow-drag,.json-workflow-delete{width:26px;min-width:26px;height:26px;flex:none;padding:0;color:var(--muted-foreground)}
-.json-workflow-drag{cursor:grab}
+.json-workflow-drag{cursor:grab;touch-action:none}
 .json-workflow-index{width:24px;min-width:24px;color:var(--muted-foreground);font:500 10px/1 var(--font-mono);text-align:center}
 .json-workflow-type{width:100%;min-width:0}
 .json-workflow-enabled{width:36px;height:20px;justify-self:end}
