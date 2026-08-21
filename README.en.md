@@ -26,7 +26,7 @@ Built with [Wails v3](https://v3.wails.io/), DevUtils gathers the small, high-fr
 
 | Tool | Description | Highlights |
 | --- | --- | --- |
-| JSON Workspace | Format, minify, validate | Tolerant of comments and trailing commas; JSONPath extraction; schema panel; template interpolation; custom JSONPath sort rules |
+| JSON Workspace | Format, minify, validate | Tolerant of comments and trailing commas; JSONPath extraction; schema panel; configurable workflow transformations |
 | Time Converter | Convert between timestamps and dates | Smart parsing of Unix, ISO 8601, RFC3339 and common CN/EN date formats; timezone search; drag-to-reorder and toggle output formats |
 | Text Toolkit | Measure and normalize plain text | Character / Chinese / English / digit / word / punctuation / line / byte counts; case conversion; trimming and compressing |
 | Base64 | Encode and decode text, images, files | Auto-detects encoding direction and content type; data URLs and image preview; save decoded files |
