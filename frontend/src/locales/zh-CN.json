@@ -173,7 +173,7 @@
         "extract": "匹配 / 提取",
         "sort": "排序",
         "arraySort": "数组排序",
-        "filter": "筛选",
+        "filter": "数组筛选",
         "template": "模板"
       },
       "errors": {

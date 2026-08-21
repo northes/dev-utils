@@ -171,7 +171,7 @@
         "extract": "Match / Extract",
         "sort": "Sort",
         "arraySort": "Array sort",
-        "filter": "Filter",
+        "filter": "Array filter",
         "template": "Template"
       },
       "errors": {
