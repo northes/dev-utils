@@ -1,6 +1,22 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import {
   ArrowsClockwise,
   CaretDown,
   Check,
@@ -195,8 +211,10 @@ export default function TimeTool({
   const [draftHidden, setDraftHidden] = useState<Set<string>>(() => new Set(hiddenResults));
   const draftOrderRef = useRef(draftOrder),
     draftHiddenRef = useRef(draftHidden);
-  const [dragging, setDragging] = useState<TimeResultId | null>(null);
-  const draggingRef = useRef<TimeResultId | null>(null);
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
   useFocusOnActivate(active, () => inputRef.current?.focus());
   const parsed = useMemo(() => parseTimeInput(input, new Date(), timeZone), [input, timeZone]);
   const values = useMemo<Record<TimeResultId, string>>(() => {
@@ -276,44 +294,31 @@ export default function TimeTool({
     draftOrderRef.current = next;
     setDraftOrder(next);
   };
-  const finishDrag = (event: React.PointerEvent<HTMLButtonElement>) => {
-    if (event.currentTarget.hasPointerCapture(event.pointerId))
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    draggingRef.current = null;
-    setDragging(null);
-  };
   const rows = (ids: TimeResultId[], isEditing: boolean) =>
     ids.map((id) => {
       const isHidden = draftHidden.has(id),
         label = t(`timeTool.${id}`);
+      const sortable = useSortable({ id });
+      const style = {
+        transform: CSS.Transform.toString(sortable.transform),
+        transition: sortable.transition,
+        zIndex: sortable.isDragging ? 1 : undefined,
+      };
       return (
         <div
           key={id}
+          ref={sortable.setNodeRef}
+          style={style}
           data-time-result-id={id}
-          className={`grid min-h-11 items-center border-b border-border px-1 ${isEditing ? 'grid-cols-[30px_110px_minmax(0,1fr)_34px]' : 'grid-cols-[110px_minmax(0,1fr)]'} ${isHidden ? 'opacity-40' : ''} ${dragging === id ? 'bg-accent' : ''}`}
+          className={`grid min-h-11 items-center border-b border-border px-1 ${isEditing ? 'grid-cols-[30px_110px_minmax(0,1fr)_34px]' : 'grid-cols-[110px_minmax(0,1fr)]'} ${isHidden ? 'opacity-40' : ''} ${sortable.isDragging ? 'bg-accent' : ''}`}
         >
           {isEditing && (
             <Button
+              ref={sortable.setActivatorNodeRef}
               variant="ghost"
               className="grid size-[30px] min-w-[30px] place-items-center p-0 cursor-grab active:cursor-grabbing"
-              onPointerDown={(event) => {
-                if (event.button !== 0) return;
-                event.preventDefault();
-                event.currentTarget.setPointerCapture(event.pointerId);
-                draggingRef.current = id;
-                setDragging(id);
-              }}
-              onPointerMove={(event) => {
-                const from = draggingRef.current;
-                if (!from) return;
-                const to = document
-                  .elementFromPoint(event.clientX, event.clientY)
-                  ?.closest<HTMLElement>('[data-time-result-id]')?.dataset.timeResultId as
-                  TimeResultId | undefined;
-                if (to && to !== from) moveResult(from, to);
-              }}
-              onPointerUp={finishDrag}
-              onPointerCancel={finishDrag}
+              {...sortable.attributes}
+              {...sortable.listeners}
               aria-label={t('timeTool.dragResult', { label })}
             >
               <DotsSixVertical size={16} weight="duotone" />
@@ -358,7 +363,7 @@ export default function TimeTool({
                 <Clock size={18} weight="duotone" />
                 <Input
                   ref={inputRef}
-                  className="min-w-0 flex-1 border-0 bg-transparent px-0 py-0 text-[13px] shadow-none focus-visible:ring-0"
+                  className="min-w-0 flex-1 border-0 bg-transparent px-0 py-0 text-[13px] shadow-none focus-visible:ring-0 dark:bg-transparent"
                   value={input}
                   onKeyDown={(event) => undoRedoKey(event, undo, redo)}
                   onChange={(event) => setInput(event.target.value)}
@@ -411,9 +416,26 @@ export default function TimeTool({
           </div>
           <div className="min-h-0 overflow-x-hidden overflow-y-auto">
             {editing ? (
-              <div>{rows(draftOrder, true)}</div>
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={({ active, over }: DragEndEvent) => {
+                  if (!over || active.id === over.id) return;
+                  const from = draftOrderRef.current.indexOf(String(active.id) as TimeResultId);
+                  const to = draftOrderRef.current.indexOf(String(over.id) as TimeResultId);
+                  moveResult(draftOrderRef.current[from], draftOrderRef.current[to]);
+                }}
+              >
+                <SortableContext items={draftOrder} strategy={verticalListSortingStrategy}>
+                  <div>{rows(draftOrder, true)}</div>
+                </SortableContext>
+              </DndContext>
             ) : parsed ? (
-              <div>{rows(shown, false)}</div>
+              <DndContext sensors={sensors}>
+                <SortableContext items={shown} strategy={verticalListSortingStrategy}>
+                  <div>{rows(shown, false)}</div>
+                </SortableContext>
+              </DndContext>
             ) : (
               <div className="flex min-h-[140px] flex-col items-center justify-center gap-2 text-center text-muted-foreground">
                 <Clock size={24} weight="duotone" />
