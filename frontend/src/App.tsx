@@ -1602,15 +1602,21 @@ function Sidebar({
       <div className="sidebar-footer">
         <Button
           variant="ghost"
-          className="sidebar-palette h-auto min-h-0 justify-start px-0 py-0"
+          className="sidebar-palette flex h-auto min-h-0 w-full items-center justify-start gap-2.5 rounded-(--radius) px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground [&_svg]:size-[17px]"
           onClick={onOpenPalette}
           aria-label={t('statusbar.openPalette')}
           title={t('statusbar.openPalette')}
         >
-          <CommandIcon className="palette-icon" size={14} weight="duotone" />
-          <kbd>{navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}</kbd>
-          <kbd>K</kbd>
-          <span>{t('statusbar.openPalette')}</span>
+          <CommandIcon size={17} weight="duotone" />
+          <span className="min-w-0 flex-1 truncate">{t('statusbar.openPalette')}</span>
+          <span className="ml-auto flex shrink-0 items-center gap-1">
+            <kbd className="rounded-sm bg-muted px-1 text-[10px] leading-4 text-muted-foreground">
+              {navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}
+            </kbd>
+            <kbd className="rounded-sm bg-muted px-1 text-[10px] leading-4 text-muted-foreground">
+              K
+            </kbd>
+          </span>
         </Button>
       </div>
     </aside>

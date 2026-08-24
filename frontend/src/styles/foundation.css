@@ -106,22 +106,22 @@ textarea,
 .sidebar-footer {
   flex: none;
   margin-top: auto;
-  padding: 14px 10px 0;
+  padding: 14px 0 0;
   border-top: 1px solid var(--border);
 }
 .sidebar-palette {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 10px;
   flex: none;
   width: 100%;
   white-space: nowrap;
   border: 0;
   background: none;
-  padding: 6px 8px;
+  padding: 8px 10px;
   border-radius: var(--radius);
   color: var(--muted-foreground);
-  font-size: 10px;
+  font-size: 12px;
   cursor: pointer;
   text-align: left;
 }
