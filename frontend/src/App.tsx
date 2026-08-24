@@ -54,10 +54,6 @@ import {
 import { SetAutoCheckEnabled } from '../bindings/changeme/updateservice';
 import type { Config as Settings } from '../bindings/changeme/models';
 import {
-  Navigate,
-  Outlet,
-  Route,
-  Routes,
   useLocation,
   useNavigate,
   useNavigationType,
@@ -846,6 +842,10 @@ function AppShell() {
   };
   const navigate = navigatePage;
   useEffect(() => {
+    const next = pageFromPath(location.pathname);
+    if (location.pathname !== routePath(next)) routerNavigate(routePath(next), { replace: true });
+  }, [location.pathname, routerNavigate]);
+  useEffect(() => {
     const root = document.documentElement;
     root.classList.toggle('dark', theme === 'dark');
     root.dataset.theme = theme;
@@ -1409,7 +1409,6 @@ function AppShell() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-      <Outlet />
     </>
   );
 }
@@ -1642,27 +1641,4 @@ function Sidebar({
     </aside>
   );
 }
-function InitialRoute() {
-  return <Navigate replace to={routePath(pageFromPath('/'))} />;
-}
-function AppRouter() {
-  return (
-    <Routes>
-      <Route element={<AppShell />}>
-        <Route index element={<InitialRoute />} />
-        <Route path="json" element={null} />
-        <Route path="time" element={null} />
-        <Route path="text" element={null} />
-        <Route path="base64" element={null} />
-        <Route path="diff" element={null} />
-        <Route path="jwt" element={null} />
-        <Route path="url" element={null} />
-        <Route path="settings" element={null} />
-        <Route path="history" element={null} />
-        <Route path="*" element={<Navigate replace to="/" />} />
-      </Route>
-    </Routes>
-  );
-}
-
-export default AppRouter;
+export default AppShell;
