@@ -72,6 +72,7 @@ Wails v3(beta)桌面托盘应用:Go 后端 + React 19 前端。本地优先的�
 - shadcn Popover/Select(基于 Radix)会 Portal 到 `body`,局部父级选择器失效;需要时用组件 `className` 传入覆盖类,或检查 Radix 实际渲染的 `data-state`/`data-side` 属性定位。
 - 圆角统一用 shadcn 的单一 `--radius`(Tailwind `rounded-*` 已按 `@theme inline` 缩放);浮层四角由组件 `rounded-md`/`rounded-lg` 承担,不要另建全局圆角覆盖层。
 - 排查顺序固定为:确认真实滚动 DOM → 检查外/内层 `overflow`、`scrollbar-gutter`、padding、负 margin、尺寸和圆角 → 检查 Portal 后类名/`data-state` → 检查 import 顺序和特异性。修改后运行 `npm run build`、Impeccable layout detector 与 `git diff --check`;本项目禁止用 Playwright 或 Computer Use 做验证。
+- 命令面板的搜索区、命令列表和空状态属于同一浮层表面，背景统一使用 `bg-popover`，不要使用 `bg-muted` 造成与浮层外壳或其他 Portal 浮层的明度层级不一致；搜索框使用 `Input` 时必须显式加 `dark:bg-transparent`，覆盖组件默认的 `dark:bg-input/30`，避免输入区域出现额外的暗色胶囊背景。外部遮罩仍使用 `--backdrop`，选中命令才使用 `bg-primary` 表示交互状态。
 
 ### 自定义悬浮滚动条
 - WKWebView/macOS 的系统滚动条是否采用 Overlay 受系统偏好与 WebView 行为影响;一旦用 `scrollbar-width`、`scrollbar-color` 或 `::-webkit-scrollbar` 强制定制,可能退化为占位滚动条并产生底部/侧边槽。需要“细滑块 + 不占布局”时,应明确选择系统原生 Overlay 或隐藏原生滚动条后完整自绘,不要混用两套机制。

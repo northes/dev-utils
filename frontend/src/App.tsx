@@ -1490,7 +1490,7 @@ function CommandPalette({
         className="palette-card w-[min(540px,92vw)]"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="palette-input flex h-[52px] w-full items-center gap-3 rounded-(--radius) border border-border bg-muted px-[18px] text-muted-foreground shadow-[var(--overlay-shadow)] focus-within:border-muted-foreground">
+        <div className="palette-input flex h-[52px] w-full items-center gap-3 rounded-(--radius) border border-border bg-popover px-[18px] text-muted-foreground shadow-[var(--overlay-shadow)] focus-within:border-muted-foreground">
           <MagnifyingGlass size={18} weight="duotone" />
           <Input
             autoFocus
@@ -1506,12 +1506,12 @@ function CommandPalette({
               setActive(0);
             }}
             placeholder={t('palette.searchPlaceholder')}
-            className="h-auto min-w-0 flex-1 border-0 bg-transparent px-0 py-0 text-[15px] shadow-none focus-visible:outline-none focus-visible:ring-0"
+            className="h-auto min-w-0 flex-1 border-0 bg-transparent px-0 py-0 text-[15px] shadow-none focus-visible:outline-none focus-visible:ring-0 dark:bg-transparent"
           />
         </div>
         {list.length > 0 ? (
           <div
-            className="palette-list mt-2 flex max-h-[min(60vh,340px)] flex-col overflow-hidden rounded-(--radius) border border-border bg-muted p-1 shadow-[var(--overlay-shadow)]"
+            className="palette-list mt-2 flex max-h-[min(60vh,340px)] flex-col overflow-hidden rounded-(--radius) border border-border bg-popover p-1 shadow-[var(--overlay-shadow)]"
             id="palette-listbox"
             role="listbox"
             aria-label={t('palette.listLabel')}
@@ -1546,7 +1546,7 @@ function CommandPalette({
           </div>
         ) : (
           <div
-            className="palette-list palette-empty mt-2 flex min-h-[72px] items-center justify-center rounded-(--radius) border border-border bg-muted p-1 text-muted-foreground shadow-[var(--overlay-shadow)]"
+            className="palette-list palette-empty mt-2 flex min-h-[72px] items-center justify-center rounded-(--radius) border border-border bg-popover p-1 text-muted-foreground shadow-[var(--overlay-shadow)]"
             role="status"
           >
             <span>{t('palette.empty')}</span>
