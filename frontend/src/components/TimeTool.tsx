@@ -18,19 +18,27 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import {
   ArrowsClockwise,
-  CaretDown,
-  Check,
   Clock,
   Copy,
   DotsSixVertical,
   Eye,
   EyeClosed,
   GpsFix,
+  Globe,
 } from '@phosphor-icons/react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
-import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
+import {
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+  ComboboxTrigger,
+  ComboboxValue,
+} from './ui/combobox';
 import {
   Reveal,
   ToolLayout,
@@ -80,77 +88,55 @@ function TimezoneCombobox({
   onChange,
   zones,
   placeholder,
+  emptyLabel,
   label,
 }: {
   value: string;
   onChange: (id: string) => void;
   zones: Array<{ id: string; label: string }>;
   placeholder: string;
+  emptyLabel: string;
   label: string;
 }) {
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState('');
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return q
-      ? zones.filter(
-          (zone) => zone.label.toLowerCase().includes(q) || zone.id.toLowerCase().includes(q),
-        )
-      : zones;
-  }, [query, zones]);
   const current = zones.find((zone) => zone.id === value);
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-2 pt-3.5 font-mono text-[10px] font-medium uppercase tracking-[.04em] text-muted-foreground">
       <span>{label}</span>
-      <Popover
-        open={open}
-        onOpenChange={(next) => {
-          setOpen(next);
-          if (!next) setQuery('');
+      <Combobox
+        items={zones}
+        value={current ?? null}
+        onValueChange={(zone) => {
+          if (zone) onChange(zone.id);
         }}
+        itemToStringValue={(zone) => zone.label}
       >
-        <PopoverTrigger
+        <ComboboxTrigger
           render={
             <Button
               variant="ghost"
-              className="h-[42px] w-full justify-between rounded-(--radius) border border-border bg-card px-3 text-[13px]"
-              role="combobox"
-              aria-label={label}
+              className="h-[46px] w-full justify-between rounded-(--radius) border border-border bg-card px-3.5 text-[13px] font-normal"
             />
           }
         >
-          <span className="min-w-0 truncate">{current?.label ?? placeholder}</span>
-          <CaretDown size={14} weight="bold" />
-        </PopoverTrigger>
-        <PopoverContent
-          align="start"
-          className="w-[min(340px,var(--anchor-width))] max-h-[280px] overflow-hidden p-0"
-        >
-          <Input
-            className="h-auto border-x-0 border-t-0 border-b border-border rounded-none bg-transparent px-3 py-2 text-[13px] shadow-none focus-visible:ring-0"
-            autoFocus
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder={placeholder}
-          />
-          <div className="max-h-[236px] overflow-y-auto p-1">
-            {filtered.map((zone) => (
-              <Button
-                key={zone.id}
-                variant="ghost"
-                className={`w-full justify-between rounded-sm px-2 py-1.5 text-xs ${zone.id === value ? 'bg-accent text-accent-foreground' : ''}`}
-                onClick={() => {
-                  onChange(zone.id);
-                  setOpen(false);
-                }}
-              >
-                <span className="min-w-0 truncate">{zone.label}</span>
-                {zone.id === value && <Check size={12} weight="bold" />}
-              </Button>
-            ))}
-          </div>
-        </PopoverContent>
-      </Popover>
+          <span className="flex min-w-0 items-center gap-2.5">
+            <Globe size={18} weight="duotone" />
+            <span className="min-w-0 truncate">
+              <ComboboxValue placeholder={placeholder} />
+            </span>
+          </span>
+        </ComboboxTrigger>
+        <ComboboxContent className="min-w-(--anchor-width)">
+          <ComboboxInput showTrigger={false} placeholder={placeholder} />
+          <ComboboxEmpty>{emptyLabel}</ComboboxEmpty>
+          <ComboboxList>
+            {(zone) => (
+              <ComboboxItem key={zone.id} value={zone}>
+                {zone.label}
+              </ComboboxItem>
+            )}
+          </ComboboxList>
+        </ComboboxContent>
+      </Combobox>
     </div>
   );
 }
@@ -412,6 +398,7 @@ export default function TimeTool({
               zones={zones}
               label={t('timeTool.timezone')}
               placeholder={t('timeTool.timezonePlaceholder')}
+              emptyLabel={t('timeTool.timezoneNoResults')}
             />
             <Button
               variant="ghost"
@@ -427,7 +414,7 @@ export default function TimeTool({
               {editing ? t('timeTool.editHint') : ''}
             </span>
             <Button
-              variant={editing ? 'default' : 'outline'}
+              variant={editing ? 'default' : 'ghost'}
               onClick={editing ? finishEditing : startEditing}
               className="h-[26px] px-2.5 text-[11px]"
             >
