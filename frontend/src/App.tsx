@@ -1,4 +1,13 @@
-import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import {
+  Fragment,
+  lazy,
+  Suspense,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,7 +27,7 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-  CommandShortcut,
+  CommandSeparator,
 } from './components/ui/command';
 import { Clipboard, Events } from '@wailsio/runtime';
 import { useTranslation } from 'react-i18next';
@@ -838,8 +847,8 @@ function AppShell() {
   const canGoForward = currentHistoryIndex < maxHistoryIndex;
   const dismissOverlays = () => {
     closePalette();
-    document.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
-    document.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }));
   };
   const navigatePage = (next: Page) => {
     routerNavigate(routePath(next));
@@ -1433,8 +1442,12 @@ function CommandPalette({
 }) {
   const { t } = useTranslation();
   const [input, setInput] = useState('');
+  const listRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (open) setInput('');
+  }, [open]);
+  useLayoutEffect(() => {
+    if (open) listRef.current?.scrollTo({ top: 0, left: 0 });
   }, [open]);
   const matches = useMemo(() => {
     const q = input.trim().toLowerCase().replace(/\s+/g, '');
@@ -1463,6 +1476,28 @@ function CommandPalette({
     return scored.map((s) => s.item);
   }, [input, indexed, page]);
   const list = matches ?? indexed;
+  const groups = useMemo(() => {
+    const grouped = new Map<string, { heading: string; items: IndexedItem[] }>();
+    for (const item of list) {
+      const heading = item.subgroup ? `${item.group} - ${item.subgroup}` : item.group;
+      const group = grouped.get(heading);
+      if (group) group.items.push(item);
+      else grouped.set(heading, { heading, items: [item] });
+    }
+    return [...grouped.values()];
+  }, [list]);
+  useEffect(() => {
+    if (!open) return;
+    const frame = requestAnimationFrame(() => {
+      const selected = listRef.current?.querySelector<HTMLElement>('[aria-selected="true"]');
+      if (!selected) return;
+      const heading = selected
+        .closest<HTMLElement>('[cmdk-group]')
+        ?.querySelector<HTMLElement>('[cmdk-group-heading]');
+      (heading ?? selected).scrollIntoView({ block: 'nearest' });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [input, list, open]);
   return (
     <CommandDialog
       open={open}
@@ -1480,20 +1515,21 @@ function CommandPalette({
           value={input}
           onValueChange={(value) => setInput(value)}
         />
-        <CommandList>
+        <CommandList ref={listRef}>
           <CommandEmpty>{t('palette.empty')}</CommandEmpty>
-          <CommandGroup>
-            {list.map((item) => (
-              <CommandItem key={item.id} value={item.id} onSelect={() => run(item)}>
-                <item.icon size={16} weight="duotone" />
-                <span className="min-w-0 truncate font-medium">{t(item.labelKey)}</span>
-                <CommandShortcut>
-                  {t(item.groupKey)}
-                  {item.subgroupKey ? ` - ${t(item.subgroupKey)}` : ''}
-                </CommandShortcut>
-              </CommandItem>
-            ))}
-          </CommandGroup>
+          {groups.map((group, index) => (
+            <Fragment key={group.heading}>
+              {index > 0 && <CommandSeparator />}
+              <CommandGroup heading={group.heading}>
+                {group.items.map((item) => (
+                  <CommandItem key={item.id} value={item.id} onSelect={() => run(item)}>
+                    <item.icon size={16} weight="duotone" />
+                    <span>{t(item.labelKey)}</span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </Fragment>
+          ))}
         </CommandList>
       </Command>
     </CommandDialog>

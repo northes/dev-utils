@@ -53,6 +53,7 @@ function axesFor(el: HTMLElement): Axes {
     !el.isConnected ||
     el.classList.contains('overlay-scroll') ||
     el.closest('.overlay-scroll') ||
+    el.closest('[data-slot="command-list"]') ||
     el.closest('.tool-slot.hidden')
   )
     return { x: false, y: false };
