@@ -10,7 +10,16 @@ import {
   AlertDialogTitle,
 } from './components/ui/alert-dialog';
 import { Button } from './components/ui/button';
-import { Input } from './components/ui/input';
+import {
+  Command,
+  CommandDialog,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandShortcut,
+} from './components/ui/command';
 import { Clipboard, Events } from '@wailsio/runtime';
 import { useTranslation } from 'react-i18next';
 import {
@@ -20,12 +29,12 @@ import {
   ClipboardText,
   Clock,
   ClockCounterClockwise,
+  Command as CommandIcon,
   FileCode,
   GearSix,
   GitDiff,
   Key,
   LinkSimple,
-  MagnifyingGlass,
   SidebarSimple,
   TextT,
 } from '@phosphor-icons/react';
@@ -828,7 +837,7 @@ function AppShell() {
   const canGoBack = currentHistoryIndex > 0;
   const canGoForward = currentHistoryIndex < maxHistoryIndex;
   const dismissOverlays = () => {
-    setPaletteOpen(false);
+    closePalette();
     document.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
     document.dispatchEvent(new MouseEvent('click', { bubbles: true }));
   };
@@ -1424,12 +1433,8 @@ function CommandPalette({
 }) {
   const { t } = useTranslation();
   const [input, setInput] = useState('');
-  const [active, setActive] = useState(0);
   useEffect(() => {
-    if (open) {
-      setInput('');
-      setActive(0);
-    }
+    if (open) setInput('');
   }, [open]);
   const matches = useMemo(() => {
     const q = input.trim().toLowerCase().replace(/\s+/g, '');
@@ -1458,102 +1463,40 @@ function CommandPalette({
     return scored.map((s) => s.item);
   }, [input, indexed, page]);
   const list = matches ?? indexed;
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        setActive((a) => (list.length ? Math.min(a + 1, list.length - 1) : 0));
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        setActive((a) => (list.length ? Math.max(a - 1, 0) : 0));
-      } else if (e.key === 'Enter') {
-        e.preventDefault();
-        const item = list[active];
-        if (item) run(item);
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, active, list]);
-  useLayoutEffect(() => {
-    if (open)
-      document.getElementById(`palette-opt-${active}`)?.scrollIntoView({ block: 'nearest' });
-  }, [open, active, list]);
-  if (!open) return null;
   return (
-    <div
-      className="palette-backdrop fixed inset-0 z-[60] grid place-items-start justify-center bg-[var(--backdrop)] pt-[12vh]"
-      onClick={onClose}
+    <CommandDialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) onClose();
+      }}
+      title={t('palette.title')}
+      description={t('palette.description')}
     >
-      <div
-        className="palette-card w-[min(540px,92vw)]"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="palette-input flex h-[52px] w-full items-center gap-3 rounded-(--radius) border border-border bg-popover px-[18px] text-muted-foreground shadow-[var(--overlay-shadow)] focus-within:border-muted-foreground">
-          <MagnifyingGlass size={18} weight="duotone" />
-          <Input
-            autoFocus
-            spellCheck={false}
-            role="combobox"
-            aria-expanded={list.length > 0}
-            aria-controls="palette-listbox"
-            aria-activedescendant={list.length ? `palette-opt-${active}` : undefined}
-            aria-label={t('palette.searchLabel')}
-            value={input}
-            onChange={(e) => {
-              setInput(e.target.value);
-              setActive(0);
-            }}
-            placeholder={t('palette.searchPlaceholder')}
-            className="h-auto min-w-0 flex-1 border-0 bg-transparent px-0 py-0 text-[15px] shadow-none focus-visible:outline-none focus-visible:ring-0 dark:bg-transparent"
-          />
-        </div>
-        {list.length > 0 ? (
-          <div
-            className="palette-list mt-2 flex max-h-[min(60vh,340px)] flex-col overflow-hidden rounded-(--radius) border border-border bg-popover p-1 shadow-[var(--overlay-shadow)]"
-            id="palette-listbox"
-            role="listbox"
-            aria-label={t('palette.listLabel')}
-          >
-            <div className="palette-list-scroll min-h-0 flex-1 overflow-auto [scrollbar-gutter:auto] -mr-1.25 pr-1.25">
-              {list.map((item, i) => (
-                <Button
-                  key={item.id}
-                  id={`palette-opt-${i}`}
-                  role="option"
-                  aria-selected={i === active}
-                  variant="ghost"
-                  className={`palette-row flex w-full items-center rounded-(--radius) px-[11px] py-[9px] text-left${i === active ? ' bg-primary text-primary-foreground' : ''}`}
-                  onMouseMove={(e) => {
-                    if (e.nativeEvent.movementX || e.nativeEvent.movementY) setActive(i);
-                  }}
-                  onClick={() => run(item)}
-                >
-                  <span className="palette-item flex min-w-0 flex-1 items-center gap-[11px]">
-                    <item.icon size={16} weight="duotone" />
-                    <span className="palette-label min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-[13px] font-medium">
-                      {t(item.labelKey)}
-                    </span>
-                    <small>
-                      {t(item.groupKey)}
-                      {item.subgroupKey ? ` - ${t(item.subgroupKey)}` : ''}
-                    </small>
-                  </span>
-                </Button>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <div
-            className="palette-list palette-empty mt-2 flex min-h-[72px] items-center justify-center rounded-(--radius) border border-border bg-popover p-1 text-muted-foreground shadow-[var(--overlay-shadow)]"
-            role="status"
-          >
-            <span>{t('palette.empty')}</span>
-          </div>
-        )}
-      </div>
-    </div>
+      <Command shouldFilter={false} aria-label={t('palette.listLabel')}>
+        <CommandInput
+          autoFocus
+          aria-label={t('palette.searchLabel')}
+          placeholder={t('palette.searchPlaceholder')}
+          value={input}
+          onValueChange={(value) => setInput(value)}
+        />
+        <CommandList>
+          <CommandEmpty>{t('palette.empty')}</CommandEmpty>
+          <CommandGroup>
+            {list.map((item) => (
+              <CommandItem key={item.id} value={item.id} onSelect={() => run(item)}>
+                <item.icon size={16} weight="duotone" />
+                <span className="min-w-0 truncate font-medium">{t(item.labelKey)}</span>
+                <CommandShortcut>
+                  {t(item.groupKey)}
+                  {item.subgroupKey ? ` - ${t(item.subgroupKey)}` : ''}
+                </CommandShortcut>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        </CommandList>
+      </Command>
+    </CommandDialog>
   );
 }
 
@@ -1628,7 +1571,7 @@ function Sidebar({
           aria-label={t('statusbar.openPalette')}
           title={t('statusbar.openPalette')}
         >
-          <MagnifyingGlass className="palette-icon" size={14} weight="duotone" />
+          <CommandIcon className="palette-icon" size={14} weight="duotone" />
           <kbd>{navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}</kbd>
           <kbd>K</kbd>
           <span>{t('statusbar.openPalette')}</span>

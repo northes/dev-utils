@@ -25,6 +25,8 @@
     "openPalette": "Open command palette"
   },
   "palette": {
+    "title": "Command Palette",
+    "description": "Search and run commands",
     "searchLabel": "Search",
     "searchPlaceholder": "Search tools and commands…",
     "listLabel": "Commands",
@@ -217,6 +219,7 @@
     "refresh": "Insert current timestamp",
     "timezone": "Parsing timezone",
     "timezonePlaceholder": "Search timezone",
+    "timezoneNoResults": "No timezones found",
     "useSystemTimezone": "Use system time zone",
     "hint": "Supports Unix seconds, milliseconds, ISO 8601 and common date strings.",
     "local": "Local time",

@@ -28,7 +28,6 @@ type Pane = {
 };
 type Axes = { x: boolean; y: boolean };
 type Layers = {
-  palette: HTMLElement | null;
   dialog: HTMLElement | null;
   floating: HTMLElement | null;
   floatingLevel: number;
@@ -81,15 +80,19 @@ function currentLayers(): Layers {
       '[data-slot="popover-content"],[data-slot="select-content"]',
     ),
   ];
+  const dialogs = [
+    ...document.querySelectorAll<HTMLElement>(
+      '[data-slot="dialog-content"], [data-slot="alert-dialog-content"]',
+    ),
+  ];
   const topFloating = floating.length ? floating[floating.length - 1] : null,
-    dialog = document.querySelector<HTMLElement>('[data-slot="alert-dialog-content"]');
+    dialog = dialogs.length ? dialogs[dialogs.length - 1] : null;
   const floatingAboveDialog = !!(
     dialog &&
     topFloating &&
     dialog.compareDocumentPosition(topFloating) & Node.DOCUMENT_POSITION_FOLLOWING
   );
   return {
-    palette: document.querySelector<HTMLElement>('.palette-backdrop'),
     dialog,
     floating: topFloating,
     floatingLevel: topFloating ? sourceLevel(topFloating) : 0,
@@ -97,7 +100,6 @@ function currentLayers(): Layers {
   };
 }
 function visibleInLayers(el: HTMLElement, layers: Layers) {
-  if (layers.palette) return layers.palette.contains(el);
   if (layers.dialog) {
     if (!layers.floatingAboveDialog) return layers.dialog.contains(el);
     if (layers.floating?.contains(el)) return true;

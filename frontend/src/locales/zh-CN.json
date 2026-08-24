@@ -25,6 +25,8 @@
     "openPalette": "打开命令面板"
   },
   "palette": {
+    "title": "命令面板",
+    "description": "搜索并执行命令",
     "searchLabel": "搜索",
     "searchPlaceholder": "搜索工具和命令…",
     "listLabel": "命令列表",
@@ -217,6 +219,7 @@
     "refresh": "插入当前时间戳",
     "timezone": "解析时区",
     "timezonePlaceholder": "搜索时区",
+    "timezoneNoResults": "没有匹配的时区",
     "useSystemTimezone": "使用本机时区",
     "hint": "支持 Unix、ISO 8601、中英文日期及常见年月日格式。无年份时使用当前年份。",
     "local": "本地时间",
