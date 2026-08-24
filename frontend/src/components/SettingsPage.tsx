@@ -138,15 +138,15 @@ function Setting({
       : children;
   return (
     <div
-      className={`flex min-h-[46px] items-center justify-between gap-5 border-b border-border${className ? ` ${className}` : ""}`}
+      className={`flex min-h-[46px] items-center justify-between gap-5${className ? ` ${className}` : ""}`}
     >
       {label && (
         <span className="flex flex-col gap-[3px]">
-          <strong className="text-[11px] font-[550] text-muted-foreground">
+          <strong className="text-[11px] leading-[1.4] font-medium text-foreground">
             {label}
           </strong>
           {description && (
-            <small className="text-[9px] text-muted-foreground">
+            <small className="text-[10px] leading-[1.4] text-muted-foreground">
               {description}
             </small>
           )}
@@ -253,7 +253,7 @@ export default function SettingsPage({
       title={t("settings.clipboard")}
       subtitle={t("settings.clipboardSubtitle")}
     >
-      <div className="clipboard-core-settings flex flex-col">
+      <div className="clipboard-core-settings flex flex-col divide-y divide-border">
         <Setting
           label={t("settings.trayMatch")}
           description={t("settings.trayMatchDesc")}
@@ -276,8 +276,8 @@ export default function SettingsPage({
       </div>
       <div className="tray-match-tool-group m-0 border-0 border-t border-border pt-3">
         <div className="tray-match-tool-heading flex min-h-0 flex-col gap-0.5 border-0 pb-2">
-          <strong>{t("settings.trayMatchTools")}</strong>
-          <small>{t("settings.trayMatchToolsDesc")}</small>
+          <strong className="text-[11px] leading-[1.4] font-medium text-foreground">{t("settings.trayMatchTools")}</strong>
+          <small className="text-[10px] leading-[1.4] text-muted-foreground">{t("settings.trayMatchToolsDesc")}</small>
         </div>
         <div className="tray-match-tool-list grid grid-cols-2 gap-x-5 max-[700px]:grid-cols-1">
           {tools.map((tool) => (
@@ -375,30 +375,33 @@ export default function SettingsPage({
           title={t("settings.updates")}
           subtitle={t("settings.updatesSubtitle")}
         >
-          <Setting
-            label={t("settings.autoCheckUpdates")}
-            description={t("settings.autoCheckUpdatesDesc")}
-          >
-            <SettingSwitch
-              selected={settings.autoCheckUpdates}
-              onChange={(v) => update("autoCheckUpdates", v)}
-            />
-          </Setting>
-          <Setting
-            label={t("settings.currentVersion")}
-            description={version ? `v${version}` : undefined}
-          >
-            <Button
-              variant="outline"
-              disabled={checking}
-              onClick={() => void checkUpdates()}
+          <div className="divide-y divide-border">
+            <Setting
+              label={t("settings.autoCheckUpdates")}
+              description={t("settings.autoCheckUpdatesDesc")}
             >
-              <ArrowsClockwise weight="duotone" />
-              {t(
-                checking ? "settings.checkingUpdates" : "settings.checkUpdates",
-              )}
-            </Button>
-          </Setting>
+              <SettingSwitch
+                selected={settings.autoCheckUpdates}
+                onChange={(v) => update("autoCheckUpdates", v)}
+              />
+            </Setting>
+            <Setting
+              label={t("settings.currentVersion")}
+              description={version ? `v${version}` : undefined}
+            >
+              <Button
+                variant="outline"
+                className="text-[11px]"
+                disabled={checking}
+                onClick={() => void checkUpdates()}
+              >
+                <ArrowsClockwise weight="duotone" />
+                {t(
+                  checking ? "settings.checkingUpdates" : "settings.checkUpdates",
+                )}
+              </Button>
+            </Setting>
+          </div>
         </SettingsGroup>
         <SettingsGroup
           title={t("settings.privacy")}
@@ -408,7 +411,7 @@ export default function SettingsPage({
             label={t("settings.history")}
             description={t("settings.historyDesc")}
           >
-            <Button variant="destructive" onClick={() => setConfirmClear(true)}>
+            <Button variant="destructive" className="text-[11px]" onClick={() => setConfirmClear(true)}>
               <Trash weight="duotone" />
               {t("settings.clearHistory")}
             </Button>
@@ -424,6 +427,7 @@ export default function SettingsPage({
           >
             <Button
               variant="outline"
+              className="text-[11px]"
               onClick={() => void Browser.OpenURL(t("settings.projectUrl"))}
             >
               <ArrowSquareOut weight="duotone" />
