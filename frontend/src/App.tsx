@@ -53,11 +53,7 @@ import {
 } from '../bindings/changeme/configservice';
 import { SetAutoCheckEnabled } from '../bindings/changeme/updateservice';
 import type { Config as Settings } from '../bindings/changeme/models';
-import {
-  useLocation,
-  useNavigate,
-  useNavigationType,
-} from 'react-router';
+import { useLocation, useNavigate, useNavigationType } from 'react-router';
 
 type Page = 'settings' | 'history' | ToolId;
 type SidebarMode = 'full' | 'icon' | 'hidden';
