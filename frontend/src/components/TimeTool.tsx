@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   DndContext,
@@ -7,10 +7,10 @@ import {
   PointerSensor,
   useSensor,
   useSensors,
-  type DragEndEvent,
 } from '@dnd-kit/core';
 import {
   SortableContext,
+  arrayMove,
   sortableKeyboardCoordinates,
   useSortable,
   verticalListSortingStrategy,
@@ -183,6 +183,78 @@ function zonedOffset(date: Date, timeZone: string) {
     match = part.match(/GMT([+-])(\d{1,2})(?::(\d{2}))?/);
   return match ? `${match[1]}${match[2].padStart(2, '0')}:${match[3] || '00'}` : 'Z';
 }
+function TimeResultRow({
+  id,
+  label,
+  value,
+  hidden,
+  editing,
+  onCopy,
+  onToggle,
+  onSortIndexChange,
+}: {
+  id: TimeResultId;
+  label: string;
+  value: string;
+  hidden: boolean;
+  editing: boolean;
+  onCopy: () => void;
+  onToggle?: () => void;
+  onSortIndexChange?: (index: number) => void;
+}) {
+  const { t } = useTranslation();
+  const sortable = useSortable({ id });
+  useLayoutEffect(() => {
+    if (sortable.isDragging) onSortIndexChange?.(sortable.newIndex);
+  }, [onSortIndexChange, sortable.isDragging, sortable.newIndex]);
+  const style = {
+    transform: CSS.Transform.toString(sortable.transform),
+    transition: sortable.transition,
+    zIndex: sortable.isDragging ? 1 : undefined,
+  };
+  return (
+    <div
+      ref={sortable.setNodeRef}
+      style={style}
+      data-time-result-id={id}
+      className={`grid min-h-11 items-center border-b border-border px-1 ${editing ? 'grid-cols-[30px_110px_minmax(0,1fr)_34px]' : 'grid-cols-[110px_minmax(0,1fr)]'} ${hidden ? 'opacity-40' : ''} ${sortable.isDragging ? 'bg-accent' : ''}`}
+    >
+      {editing && (
+        <Button
+          ref={sortable.setActivatorNodeRef}
+          variant="ghost"
+          className="grid size-[30px] min-w-[30px] place-items-center p-0 cursor-grab active:cursor-grabbing"
+          {...sortable.attributes}
+          {...sortable.listeners}
+          aria-label={t('timeTool.dragResult', { label })}
+        >
+          <DotsSixVertical size={16} weight="duotone" />
+        </Button>
+      )}
+      <span className="text-[10px] text-muted-foreground">{label}</span>
+      <Button
+        variant="ghost"
+        className="min-h-9 min-w-0 justify-start gap-2.5 rounded-(--radius) px-3"
+        onClick={onCopy}
+      >
+        <code className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[10px] text-foreground">
+          {value}
+        </code>
+        <Copy size={15} weight="duotone" />
+      </Button>
+      {editing && (
+        <Button
+          variant="ghost"
+          className="size-[30px] min-w-[30px] p-0"
+          onClick={onToggle}
+          aria-label={t(hidden ? 'timeTool.showResult' : 'timeTool.hideResult', { label })}
+        >
+          {hidden ? <Eye size={16} weight="duotone" /> : <EyeClosed size={16} weight="duotone" />}
+        </Button>
+      )}
+    </div>
+  );
+}
 export default function TimeTool({
   active,
   resultOrder,
@@ -210,7 +282,8 @@ export default function TimeTool({
   const [draftOrder, setDraftOrder] = useState<TimeResultId[]>(() => normalizeOrder(resultOrder));
   const [draftHidden, setDraftHidden] = useState<Set<string>>(() => new Set(hiddenResults));
   const draftOrderRef = useRef(draftOrder),
-    draftHiddenRef = useRef(draftHidden);
+    draftHiddenRef = useRef(draftHidden),
+    dragTargetIndexRef = useRef(-1);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -269,6 +342,7 @@ export default function TimeTool({
   const startEditing = () => {
     const next = normalizeOrder(resultOrder),
       nextHidden = new Set(hiddenResults);
+    if (!input.trim()) setInput(Math.floor(Date.now() / 1000).toString(), { isolate: true });
     draftOrderRef.current = next;
     draftHiddenRef.current = nextHidden;
     setDraftOrder(next);
@@ -285,73 +359,19 @@ export default function TimeTool({
     draftHiddenRef.current = next;
     setDraftHidden(next);
   };
-  const moveResult = (from: TimeResultId, to: TimeResultId) => {
-    const next = [...draftOrderRef.current],
-      fromIndex = next.indexOf(from),
-      toIndex = next.indexOf(to);
-    if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return;
-    next.splice(toIndex, 0, next.splice(fromIndex, 1)[0]);
+  const moveResult = (fromIndex: number, toIndex: number) => {
+    if (
+      fromIndex < 0 ||
+      toIndex < 0 ||
+      fromIndex >= draftOrderRef.current.length ||
+      toIndex >= draftOrderRef.current.length ||
+      fromIndex === toIndex
+    )
+      return;
+    const next = arrayMove(draftOrderRef.current, fromIndex, toIndex);
     draftOrderRef.current = next;
     setDraftOrder(next);
   };
-  const rows = (ids: TimeResultId[], isEditing: boolean) =>
-    ids.map((id) => {
-      const isHidden = draftHidden.has(id),
-        label = t(`timeTool.${id}`);
-      const sortable = useSortable({ id });
-      const style = {
-        transform: CSS.Transform.toString(sortable.transform),
-        transition: sortable.transition,
-        zIndex: sortable.isDragging ? 1 : undefined,
-      };
-      return (
-        <div
-          key={id}
-          ref={sortable.setNodeRef}
-          style={style}
-          data-time-result-id={id}
-          className={`grid min-h-11 items-center border-b border-border px-1 ${isEditing ? 'grid-cols-[30px_110px_minmax(0,1fr)_34px]' : 'grid-cols-[110px_minmax(0,1fr)]'} ${isHidden ? 'opacity-40' : ''} ${sortable.isDragging ? 'bg-accent' : ''}`}
-        >
-          {isEditing && (
-            <Button
-              ref={sortable.setActivatorNodeRef}
-              variant="ghost"
-              className="grid size-[30px] min-w-[30px] place-items-center p-0 cursor-grab active:cursor-grabbing"
-              {...sortable.attributes}
-              {...sortable.listeners}
-              aria-label={t('timeTool.dragResult', { label })}
-            >
-              <DotsSixVertical size={16} weight="duotone" />
-            </Button>
-          )}
-          <span className="text-[10px] text-muted-foreground">{label}</span>
-          <Button
-            variant="ghost"
-            className="min-h-9 min-w-0 justify-start gap-2.5 rounded-(--radius) px-3"
-            onClick={() => copyResult(id)}
-          >
-            <code className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[10px] text-foreground">
-              {values[id]}
-            </code>
-            <Copy size={15} weight="duotone" />
-          </Button>
-          {isEditing && (
-            <Button
-              variant="ghost"
-              className="size-[30px] min-w-[30px] p-0"
-              onClick={() => toggleResult(id)}
-              aria-label={t(isHidden ? 'timeTool.showResult' : 'timeTool.hideResult', { label })}
-            >
-              {isHidden ? (
-                <Eye size={16} weight="duotone" />
-              ) : (
-                <EyeClosed size={16} weight="duotone" />
-              )}
-            </Button>
-          )}
-        </div>
-      );
-    });
   return (
     <Reveal index={0} fill active={active}>
       <ToolLayout title={t('timeTool.title')} desc={t('timeTool.subtitle')} contentMode="fixed">
@@ -419,21 +439,56 @@ export default function TimeTool({
               <DndContext
                 sensors={sensors}
                 collisionDetection={closestCenter}
-                onDragEnd={({ active, over }: DragEndEvent) => {
-                  if (!over || active.id === over.id) return;
+                onDragStart={({ active }) => {
+                  dragTargetIndexRef.current = draftOrderRef.current.indexOf(
+                    String(active.id) as TimeResultId,
+                  );
+                }}
+                onDragEnd={({ active }) => {
                   const from = draftOrderRef.current.indexOf(String(active.id) as TimeResultId);
-                  const to = draftOrderRef.current.indexOf(String(over.id) as TimeResultId);
-                  moveResult(draftOrderRef.current[from], draftOrderRef.current[to]);
+                  moveResult(from, dragTargetIndexRef.current);
+                  dragTargetIndexRef.current = -1;
+                }}
+                onDragCancel={() => {
+                  dragTargetIndexRef.current = -1;
                 }}
               >
                 <SortableContext items={draftOrder} strategy={verticalListSortingStrategy}>
-                  <div>{rows(draftOrder, true)}</div>
+                  <div>
+                    {draftOrder.map((id) => (
+                      <TimeResultRow
+                        key={id}
+                        id={id}
+                        label={t(`timeTool.${id}`)}
+                        value={values[id]}
+                        hidden={draftHidden.has(id)}
+                        editing
+                        onCopy={() => copyResult(id)}
+                        onToggle={() => toggleResult(id)}
+                        onSortIndexChange={(index) => {
+                          dragTargetIndexRef.current = index;
+                        }}
+                      />
+                    ))}
+                  </div>
                 </SortableContext>
               </DndContext>
             ) : parsed ? (
               <DndContext sensors={sensors}>
                 <SortableContext items={shown} strategy={verticalListSortingStrategy}>
-                  <div>{rows(shown, false)}</div>
+                  <div>
+                    {shown.map((id) => (
+                      <TimeResultRow
+                        key={id}
+                        id={id}
+                        label={t(`timeTool.${id}`)}
+                        value={values[id]}
+                        hidden={false}
+                        editing={false}
+                        onCopy={() => copyResult(id)}
+                      />
+                    ))}
+                  </div>
                 </SortableContext>
               </DndContext>
             ) : (
