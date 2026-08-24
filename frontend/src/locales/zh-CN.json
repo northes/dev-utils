@@ -11,6 +11,10 @@
   "sidebar": {
     "toggle": "收起或展开侧边栏"
   },
+  "scrollbar": {
+    "vertical": "垂直滚动条",
+    "horizontal": "水平滚动条"
+  },
   "statusbar": {
     "openPalette": "打开命令面板"
   },

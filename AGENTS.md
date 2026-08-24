@@ -72,6 +72,16 @@ Wails v3(beta)桌面托盘应用:Go 后端 + React 19 前端。本地优先的�
 - 圆角统一用 shadcn 的单一 `--radius`(Tailwind `rounded-*` 已按 `@theme inline` 缩放);浮层四角由组件 `rounded-md`/`rounded-lg` 承担,不要另建全局圆角覆盖层。
 - 排查顺序固定为:确认真实滚动 DOM → 检查外/内层 `overflow`、`scrollbar-gutter`、padding、负 margin、尺寸和圆角 → 检查 Portal 后类名/`data-state` → 检查 import 顺序和特异性。修改后运行 `npm run build`、Impeccable layout detector 与 `git diff --check`;本项目禁止用 Playwright 或 Computer Use 做验证。
 
+### 自定义悬浮滚动条
+- WKWebView/macOS 的系统滚动条是否采用 Overlay 受系统偏好与 WebView 行为影响;一旦用 `scrollbar-width`、`scrollbar-color` 或 `::-webkit-scrollbar` 强制定制,可能退化为占位滚动条并产生底部/侧边槽。需要“细滑块 + 不占布局”时,应明确选择系统原生 Overlay 或隐藏原生滚动条后完整自绘,不要混用两套机制。
+- 自绘滚动条必须以真实滚动容器为责任边界:初始化时发现已有容器,DOM 新增/移除时增量注册/注销,用 `ResizeObserver` 跟踪尺寸;滚动帧只测量已注册容器,禁止每次滚动 `querySelectorAll('*')`、逐节点 `getComputedStyle()` 或全 DOM 扫描。
+- 横纵轴资格必须由同一个函数统一判定并贯穿发现、布局和拖动计算:`overflow-x:hidden` 绝不能因为 `scrollWidth>clientWidth` 生成横向滑块,反之亦然。滑块长度、位置与拖动映射均使用“可滚范围”和“扣除最小滑块后的可用轨道”,并钳制在容器边界内。
+- 可视滑块和命中区域分离:视觉可保持 6px,命中区可放宽到约 12px;Overlay 外壳 `pointer-events:none`,仅滑块接收事件。hover 只改变视觉反馈,位移只能在主指针按下并进入明确 drag 状态后发生。
+- 拖动状态必须绑定发起手势的 `pointerId`,使用 pointer capture,并在 `pointerup`、`pointercancel`、`window.blur`、页面隐藏、源节点移除和组件卸载时走同一清理函数;动态注册的 document/window 监听器也必须由该生命周期统一移除,禁止遗留旧拖动状态。
+- fixed Overlay 脱离源元素的 stacking context 与裁切链,不能使用一个全局固定高 `z-index`。应根据源容器所在层级定位,并理解 Portal 的 DOM 顺序:Dialog/命令面板打开时隐藏背景滚动条,Popover/Select 只显示当前顶层浮层的滚动条,后打开的模态层不得被旧浮层滚动条穿透。
+- 全局隐藏原生滚动条后,自绘滑块必须补齐原生交互契约:`role="scrollbar"`、可聚焦、可访问名称、`aria-controls`、`aria-valuemin/max/now`、方向信息,并支持方向键、PageUp/PageDown、Home/End;焦点态必须可见。只做视觉滑块而丢失键盘和辅助技术能力不可接受。
+- 自绘滚动条至少回归这些边界:单轴/双轴、`overflow:hidden` 的另一轴、滚到起点/终点、最小滑块、嵌套滚动区、CodeMirror、常驻但隐藏的页面、Popover/Select Portal、先开浮层再开 Dialog、Dialog 内再开浮层、窗口外释放拖动、窗口失焦、动态内容增删和窗口缩放。
+
 ## UI 与布局经验(通用原则,自本项目实践沉淀)
 
 ### 页面切换与状态保留

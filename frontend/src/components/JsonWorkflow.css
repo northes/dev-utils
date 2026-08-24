@@ -3,7 +3,7 @@
 .json-workflow-rules,.json-workflow-output{display:flex;min-height:0;min-width:0;flex-direction:column}
 .json-workflow-rules{container:workflow-rules / inline-size}
 .json-workflow-section-header{display:flex;min-height:30px;flex:none;align-items:center;justify-content:space-between;gap:8px;border-bottom:1px solid var(--border)}
-.json-workflow-list{min-height:0;overflow:auto;scrollbar-gutter:stable}
+.json-workflow-list{min-height:0;overflow:auto;scrollbar-gutter:auto}
 .json-workflow-empty{display:flex;min-height:74px;align-items:center;justify-content:center;color:var(--muted-foreground);font-size:11px}
 .json-workflow-item{border-bottom:1px solid var(--border);padding:14px 12px 16px}
 .json-workflow-item.disabled{opacity:.55}

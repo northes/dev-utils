@@ -11,6 +11,10 @@
   "sidebar": {
     "toggle": "Toggle sidebar"
   },
+  "scrollbar": {
+    "vertical": "Vertical scrollbar",
+    "horizontal": "Horizontal scrollbar"
+  },
   "statusbar": {
     "openPalette": "Open command palette"
   },
