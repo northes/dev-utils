@@ -1,1 +1,0 @@
-.palette-list:not(.palette-empty){display:flex;flex-direction:column;overflow:hidden;scrollbar-gutter:auto!important}.palette-list-scroll{min-height:0;flex:1;overflow:auto;margin-right:-5px;padding-right:5px;border-radius:inherit;scrollbar-gutter:auto!important}

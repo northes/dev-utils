@@ -283,10 +283,10 @@ export function ToolHeader({title, desc, actions = []}: { title: string; desc?: 
             <p className="mt-1 mb-0 text-[10px] font-normal text-(--muted-foreground)">{desc}</p> : null}</div>
         {actions.length > 0 &&
             <div className="flex flex-none items-center gap-2">{actions.map(a => a.type === 'select' ?
-                <div key={a.key} className="tool-header-select-field"><span
+                 <div key={a.key} className="tool-header-select-field flex h-8 flex-none items-center gap-2"><span
                     id={`tool-action-label-${a.key}`}>{a.label}</span><Select value={a.value}
-                                                                              onValueChange={v => a.onSelect(v)}><SelectTrigger
-                    className="tool-header-select" aria-labelledby={`tool-action-label-${a.key}`}><SelectValue/></SelectTrigger><SelectContent>{a.options.map(option =>
+                                                                               items={a.options.map(option => ({value: option.key, label: option.label}))} onValueChange={v => {if(v!==null)a.onSelect(v)}}><SelectTrigger
+                     className="tool-header-select h-8 w-32 flex-none" aria-labelledby={`tool-action-label-${a.key}`}><SelectValue/></SelectTrigger><SelectContent>{a.options.map(option =>
                     <SelectItem key={option.key} value={option.key}>{option.label}</SelectItem>)}</SelectContent></Select>
                 </div> : a.type === 'toggle' ? <Label key={a.key}
                                                       className="flex h-8 flex-none items-center gap-2 border border-transparent bg-transparent py-0 pr-1.5 pl-3 text-[11px] text-(--muted-foreground)"><span>{a.label}</span><Switch
@@ -297,20 +297,21 @@ export function ToolHeader({title, desc, actions = []}: { title: string; desc?: 
                           className="h-8 flex-none rounded-(--radius) px-3 text-[11px] [&_svg]:size-3.5"
                           aria-pressed={a.active} onClick={a.onPress}>{a.icon &&
                         <a.icon size={14} weight="duotone"/>}{a.label}</Button>)}</div>}</header>
-}export function ToolLayout({title, desc, actions, footer, children, className = '', contentMode = 'scroll'}: {
+}export function ToolLayout({title, desc, actions, footer, children, className = '', contentClassName = '', contentMode = 'scroll'}: {
     title: string;
     desc?: string;
     actions?: ToolAction[];
     footer?: React.ReactNode;
     children: React.ReactNode;
     className?: string;
+    contentClassName?: string;
     contentMode?: 'scroll' | 'fixed'
 }) {
     return <section
         className={`grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden px-7 pt-5 pb-[26px] max-[700px]:px-[18px] max-[700px]:pt-3.5 max-[700px]:pb-4 ${className}`}>
         <ToolHeader title={title} desc={desc} actions={actions}/>
         <div
-            className={`h-full min-h-0 min-w-0 ${contentMode === 'fixed' ? 'overflow-hidden' : 'overflow-auto'}`}>{children}</div>
+            className={`tool-layout-content h-full min-h-0 min-w-0 ${contentMode === 'fixed' ? 'overflow-hidden' : 'overflow-auto'} ${contentClassName}`}>{children}</div>
         <footer className="min-h-0 min-w-0">{footer}</footer>
     </section>
 }
@@ -350,25 +351,24 @@ const buttonVariant = {primary: 'default', secondary: 'outline', tertiary: 'ghos
 
 export function ToolActionBar({label, actions}: { label: string; actions: ToolBarAction[] }) {
     return <div
-        className="tool-action-bar mt-3 flex min-h-[30px] flex-wrap items-center justify-end gap-1.5"
+        className="mt-3 flex min-h-[30px] flex-wrap items-center justify-end gap-1.5"
         role="toolbar" aria-label={label}>{actions.map(action => action.type === 'select' ?
-        <Select key={action.key} value="" disabled={action.disabled}
-                onValueChange={v => action.onSelect(v)}><SelectTrigger
-            className="tool-action-select h-[30px] flex-none px-[11px] text-[11px] [&_svg]:size-3.5"><SelectValue
+        <Select key={action.key} value={null} disabled={action.disabled}
+                  items={action.options.map(option => ({value: option.key, label: option.label}))} onValueChange={v => {if(v!==null)action.onSelect(v)}}><SelectTrigger
+            className="h-[30px] min-w-24 flex-none px-[11px] text-[11px] hover:bg-accent hover:text-accent-foreground [&_svg]:size-3.5"><SelectValue
             placeholder={action.label}/></SelectTrigger><SelectContent>{action.options.map(option =>
             <SelectItem key={option.key} value={option.key}>{option.label}</SelectItem>)}</SelectContent></Select> :
         action.type === 'split' ?
-            <div key={action.key} className={`tool-action-split${action.disabled?' is-disabled':''}`} role="group"
-                 aria-label={action.label}><Button variant={buttonVariant[action.variant]}
-                                                   disabled={action.disabled} onClick={action.onPress}
-                                                   className="tool-action-split-main h-[30px] flex-none px-[11px] text-[11px] [&_svg]:size-3.5">{action.label}</Button><Popover><PopoverTrigger
-                asChild><Button variant={buttonVariant[action.variant]}
-                                className="tool-action-split-trigger h-[30px] w-[26px] min-w-[26px] flex-none px-0 text-[11px] [&_svg]:size-3.5"
-                                aria-label={action.menuLabel}><CaretDown size={12}
-                                                                         weight="bold"/></Button></PopoverTrigger><PopoverContent
-                align="end" className="tool-action-split-menu w-auto min-w-0 p-1"
-                role="menu"><button type="button" role="menuitemcheckbox" aria-checked={action.menuChecked}
-                                    className="tool-action-split-item"
+             <div key={action.key} className="inline-flex h-[30px] flex-none items-stretch" role="group"
+                  aria-label={action.label}><Button variant={buttonVariant[action.variant]}
+                                                    disabled={action.disabled} onClick={action.onPress}
+                                                      className="h-[30px] flex-none rounded-r-none px-[11px] text-[11px] focus-visible:z-1 [&_svg]:size-3.5">{action.label}</Button><Popover><PopoverTrigger
+                 render={<Button variant={buttonVariant[action.variant]}
+                                  className="relative h-[30px] w-[26px] min-w-[26px] flex-none rounded-l-none px-0 text-[11px] before:pointer-events-none before:absolute before:top-[7px] before:bottom-[7px] before:left-0 before:w-px before:bg-[color-mix(in_srgb,var(--primary-foreground)_28%,transparent)] focus-visible:z-1 [&_svg]:size-3.5"
+                                 aria-label={action.menuLabel}/>}><CaretDown size={12} weight="bold"/></PopoverTrigger><PopoverContent
+                  align="end" className="w-auto min-w-0 overflow-hidden p-1 [scrollbar-gutter:auto]"
+                 role="menu"><button type="button" role="menuitemcheckbox" aria-checked={action.menuChecked}
+                                      className="flex min-h-7 w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-xs whitespace-nowrap text-popover-foreground hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
                                     onClick={action.onMenuToggle}><Check size={12} weight="bold"
                                                                          className={action.menuChecked ? undefined : 'opacity-0'}
                                                                          aria-hidden/><span>{action.menuItemLabel}</span></button></PopoverContent></Popover>

@@ -17,6 +17,8 @@ import {newWorkflowItem,parseWorkflowConfig,serializeWorkflow,WorkflowPanel} fro
 import type {WorkflowItem} from './JsonWorkflowEngine'
 import {useDebouncedWorkflowEvaluation} from './useDebouncedWorkflowEvaluation'
 import {pathCompletions as sharedPathCompletions} from './JsonPathCompletion'
+import '../styles/tools/editor.css'
+import '../styles/tools/json.css'
 
 type PathToken={type:'key'|'index'|'all';value:string}
 type SourceNode={start:number;end:number;children?:Record<string,SourceNode>|SourceNode[]}

@@ -21,10 +21,9 @@ export default function UpdatePill(){
   const errorHandled=useRef(false)
   const setState=(next:PillState|null)=>{stateRef.current=next;setStateRaw(next)}
   useEffect(()=>{
-    const on=(name:string,handler:(event:any)=>void)=>Events.On(name,handler)
+     const on=(name:string,handler:(event:any)=>void)=>{void Events.On(name,handler)}
     const onLocalCheck=(event:Event)=>{const state=(event as CustomEvent<PillState|'finished'|'available'>).detail;if(state==='checking'){dismissed.current=false;setPercent(0);setState('checking')}else if(state==='finished'&&stateRef.current==='checking')setState(null)}
     window.addEventListener('devutils:update-check',onLocalCheck)
-    const off=[
       on('wails:updater:update-available',e=>{if(dismissed.current)return;setVersion(formatVersion(payload(e)?.version));setPercent(0);errorHandled.current=false;setState('available')}),
       on('wails:updater:no-update',()=>setState(null)),
       on('wails:updater:download-started',()=>{setPercent(0);setState('downloading')}),
@@ -32,9 +31,8 @@ export default function UpdatePill(){
       on('wails:updater:verifying',()=>setState('applying')),
       on('wails:updater:installing',()=>setState('applying')),
       on('wails:updater:update-ready',()=>{setState('restarting');void RestartApp().catch(()=>{if(!errorHandled.current){toast(t('updatePill.error'),{variant:'danger'});setState('available')}})}),
-      on('wails:updater:error',e=>{if(stateRef.current==='downloading'||stateRef.current==='applying'||stateRef.current==='restarting'){errorHandled.current=true;toast(t('updatePill.error'),{description:payload(e)?.message||'',variant:'danger'});setState('available')}}),
-    ]
-    return()=>{off.forEach(cancel=>cancel?.());window.removeEventListener('devutils:update-check',onLocalCheck)}
+       on('wails:updater:error',e=>{if(stateRef.current==='downloading'||stateRef.current==='applying'||stateRef.current==='restarting'){errorHandled.current=true;toast(t('updatePill.error'),{description:payload(e)?.message||'',variant:'danger'});setState('available')}})
+     return()=>{window.removeEventListener('devutils:update-check',onLocalCheck)}
   },[t])
   const start=()=>{errorHandled.current=false;setState('downloading');void InstallUpdate().catch(()=>{if(!errorHandled.current){toast(t('updatePill.error'),{variant:'danger'});setState('available')}})}
   const dismiss=()=>{dismissed.current=true;setState(null)}

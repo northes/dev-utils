@@ -14,7 +14,7 @@
 .json-workflow-index{width:24px;min-width:24px;color:var(--muted-foreground);font:500 10px/1 var(--font-mono);text-align:center}
 .json-workflow-type{width:100%;min-width:0}
 .json-workflow-enabled{width:36px;height:20px;justify-self:end}
-.json-workflow-item-header>[data-state]{flex:none}
+.json-workflow-item-header>[data-checked],.json-workflow-item-header>[data-unchecked]{flex:none}
 .json-workflow-item-body{min-width:0;padding:10px 0 0 66px}
 .json-workflow-field{display:flex;min-width:0;align-items:center;gap:8px}
 .json-workflow-field>span{width:86px;min-width:86px;color:var(--muted-foreground);font:500 10px/1 var(--font-mono);letter-spacing:.02em;white-space:nowrap}

@@ -42,14 +42,14 @@ export function DataTable<TData, TValue>({
   })
 
   return (
-    <div className={cn("rounded-md border", className)}>
-      <Table containerClassName={containerClassName} className={tableClassName}>
+    <div className={cn("flex min-h-0 flex-1 flex-col overflow-hidden rounded-(--radius) border border-border bg-card", className)}>
+      <Table containerClassName={cn("min-h-0 overflow-auto [scrollbar-gutter:auto]", containerClassName)} className={cn("table-fixed", tableClassName)}>
         <TableHeader>
           {table.getHeaderGroups().map((headerGroup) => (
-            <TableRow key={headerGroup.id}>
+            <TableRow key={headerGroup.id} className="h-[34px] bg-muted">
               {headerGroup.headers.map((header) => {
                 return (
-                  <TableHead key={header.id}>
+                   <TableHead key={header.id} className="h-[34px] px-3 py-1 font-mono text-[9px] font-medium uppercase tracking-[.08em] text-muted-foreground">
                     {header.isPlaceholder
                       ? null
                       : flexRender(
@@ -80,14 +80,10 @@ export function DataTable<TData, TValue>({
                     : undefined
                 }
                 tabIndex={onRowClick ? 0 : undefined}
-                className={
-                  onRowClick
-                    ? "cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-inset"
-                    : undefined
-                }
+                 className={cn("h-[52px] border-b border-border/70 transition-none hover:bg-accent",onRowClick&&"cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-inset")}
               >
                 {row.getVisibleCells().map((cell) => (
-                  <TableCell key={cell.id}>
+                  <TableCell key={cell.id} className="px-3 py-2 first:pl-3.5 last:pr-3.5">
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
                   </TableCell>
                 ))}

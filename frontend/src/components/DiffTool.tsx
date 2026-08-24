@@ -9,6 +9,8 @@ import {quietEditorTheme} from './codeMirrorTheme'
 import {ArrowsLeftRight,Trash} from '@phosphor-icons/react'
 import {useTranslation} from 'react-i18next'
 import {Reveal,ToolActionBar,ToolLayout,type PendingAction} from './shared'
+import '../styles/tools/editor.css'
+import '../styles/tools/diff.css'
 
 type Counts={deletions:number;additions:number}
 export type HighlightMode='word-alt'|'word'|'character'|'none'
