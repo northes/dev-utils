@@ -45,6 +45,7 @@ Wails v3(beta)桌面托盘应用:Go 后端 + React 19 前端。本地优先的�
 - 代码刻意保持压缩单行风格(每个组件一行、最少空格)。不要重新格式化或美化;编辑时匹配这种紧凑风格。
 - 样式入口在 `frontend/src/index.css`(Tailwind v4 + shadcn/ui),主题变量定义在 `frontend/src/styles/globals.css`(shadcn `:root`/`.dark` oklch 变量 + 功能必需的 `--success`/`--warning` 语义色)。body 为 `user-select:none`。
 - UI 组件统一用 shadcn/ui(`frontend/src/components/ui/`,复制进项目的源码,非黑盒 npm 包):`Button` 用 `onClick`+`disabled`,`Switch` 用 `checked`+`onCheckedChange`,`Select` 用 `value`+`onValueChange`,`Toggle` 用 `pressed`+`onPressedChange`,`AlertDialog` 用 `open`+`onOpenChange`(在 Root 上)。variant 语义映射:项目内部 `primary`→`default`、`secondary`→`outline`、`tertiary`→`ghost`、`danger`→`destructive`。
+- Base UI Select 使用受控 `value` + `SelectValue` 时，Select Root 必须传入与 `SelectItem` 对应的 `items`（`value`/`label`）；`options` 必须复用 i18n label，避免选中态显示内部 ID 而泄漏给用户。
 - 图标来自 `@phosphor-icons/react`,统一 `weight="duotone"` 双色风格(状态区分除外,如选中态用 `fill`)。字体用系统默认栈,`frontend/public/` 内的 Inter TTF 未引用,勿在 CSS 引入。
 - 图标按钮位于 flex 布局(尤其输入框右侧操作区)时,必须显式设置相等的 `width` 与 `min-width`、`flex:none`/`flex-shrink:0`，并按需要清除横向 padding；否则长输入或窄窗口会把按钮左右压扁。
 - 窗口拖拽区域由 `--wails-draggable: drag/no-drag` CSS 控制(titlebar 用 `data-wails-drag`),不用 JS。
