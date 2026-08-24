@@ -1,37 +1,553 @@
-import {useMemo,useRef} from 'react'
-import {useTranslation} from 'react-i18next'
-import CodeMirror from '@uiw/react-codemirror'
-import {json5} from 'codemirror-json5'
-import {EditorView,keymap} from '@codemirror/view'
-import {acceptCompletion} from '@codemirror/autocomplete'
-import {DndContext,closestCenter,KeyboardSensor,PointerSensor,useSensor,useSensors,type DragEndEvent} from '@dnd-kit/core'
-import {SortableContext,sortableKeyboardCoordinates,useSortable,verticalListSortingStrategy} from '@dnd-kit/sortable'
-import {CSS} from '@dnd-kit/utilities'
-import {Button} from './ui/button'
-import {Select,SelectContent,SelectItem,SelectTrigger,SelectValue} from './ui/select'
-import {Switch} from './ui/switch'
-import {DotsSixVertical,Trash,WarningCircle} from '@phosphor-icons/react'
-import type {Extension} from '@codemirror/state'
-import {pathCompletions,valueCompletions} from './JsonPathCompletion'
-import {isObject} from './JsonWorkflowEngine'
-import type {WorkflowContexts,WorkflowDirection,WorkflowError,WorkflowItem,WorkflowItemType,WorkflowSortMode} from './JsonWorkflowEngine'
-import './JsonWorkflow.css'
+import { useMemo, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
+import CodeMirror from '@uiw/react-codemirror';
+import { json5 } from 'codemirror-json5';
+import { EditorView, keymap } from '@codemirror/view';
+import { acceptCompletion } from '@codemirror/autocomplete';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { Button } from './ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { Switch } from './ui/switch';
+import { DotsSixVertical, Trash, WarningCircle } from '@phosphor-icons/react';
+import type { Extension } from '@codemirror/state';
+import { pathCompletions, valueCompletions } from './JsonPathCompletion';
+import { isObject } from './JsonWorkflowEngine';
+import type {
+  WorkflowContexts,
+  WorkflowDirection,
+  WorkflowError,
+  WorkflowItem,
+  WorkflowItemType,
+  WorkflowSortMode,
+} from './JsonWorkflowEngine';
+import './JsonWorkflow.css';
 
+class WorkflowConfigError extends Error {
+  constructor() {
+    super('invalidConfig');
+  }
+}
+const createWorkflowId = () => `workflow-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+function newWorkflowItem(type: WorkflowItemType = 'extract'): WorkflowItem {
+  return {
+    id: createWorkflowId(),
+    enabled: true,
+    type,
+    path: '$',
+    sortMode: 'key',
+    direction: 'asc',
+    arrayPath: '$',
+    itemPath: '$',
+    filterValue: '',
+    template: '{$.name}?token={$.token}',
+  };
+}
+const typeOptions: WorkflowItemType[] = ['extract', 'sort', 'arraySort', 'filter', 'template'];
+const configString = (item: Record<string, unknown>, key: string, fallback: string) => {
+  const value = item[key];
+  if (value === undefined) return fallback;
+  if (typeof value !== 'string') throw new WorkflowConfigError();
+  return value;
+};
+export function parseWorkflowConfig(source: string): WorkflowItem[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(source);
+  } catch {
+    throw new WorkflowConfigError();
+  }
+  if (isObject(parsed) && parsed.version !== undefined && parsed.version !== 1)
+    throw new WorkflowConfigError();
+  const items = Array.isArray(parsed)
+    ? parsed
+    : isObject(parsed) && Array.isArray(parsed.items)
+      ? parsed.items
+      : null;
+  if (!items) throw new WorkflowConfigError();
+  const result = items.map((raw) => {
+    if (
+      !isObject(raw) ||
+      typeof raw.type !== 'string' ||
+      !typeOptions.includes(raw.type as WorkflowItemType)
+    )
+      throw new WorkflowConfigError();
+    if (raw.enabled !== undefined && typeof raw.enabled !== 'boolean')
+      throw new WorkflowConfigError();
+    if (raw.sortMode !== undefined && raw.sortMode !== 'key' && raw.sortMode !== 'value')
+      throw new WorkflowConfigError();
+    if (raw.direction !== undefined && raw.direction !== 'asc' && raw.direction !== 'desc')
+      throw new WorkflowConfigError();
+    const item: WorkflowItem = {
+      id: createWorkflowId(),
+      enabled: raw.enabled ?? true,
+      type: raw.type as WorkflowItemType,
+      path: configString(raw, 'path', '$'),
+      sortMode: (raw.sortMode ?? 'key') as WorkflowSortMode,
+      direction: (raw.direction ?? 'asc') as WorkflowDirection,
+      arrayPath: configString(raw, 'arrayPath', '$'),
+      itemPath: configString(raw, 'itemPath', '$'),
+      filterValue: configString(raw, 'filterValue', ''),
+      template: configString(raw, 'template', '{$.name}?token={$.token}'),
+    };
+    return item;
+  });
+  if (result.filter((item) => item.type === 'template').length > 1) throw new WorkflowConfigError();
+  return result;
+}
+export function serializeWorkflow(rules: WorkflowItem[]): string {
+  return JSON.stringify({ version: 1, items: rules.map(({ id, ...item }) => item) }, null, 2);
+}
 
-class WorkflowConfigError extends Error{constructor(){super('invalidConfig')}}
-const createWorkflowId=()=>`workflow-${Date.now()}-${Math.random().toString(36).slice(2)}`
-function newWorkflowItem(type:WorkflowItemType='extract'):WorkflowItem{return{id:createWorkflowId(),enabled:true,type,path:'$',sortMode:'key',direction:'asc',arrayPath:'$',itemPath:'$',filterValue:'',template:'{$.name}?token={$.token}'}}
-const typeOptions:WorkflowItemType[]=['extract','sort','arraySort','filter','template']
-const configString=(item:Record<string,unknown>,key:string,fallback:string)=>{const value=item[key];if(value===undefined)return fallback;if(typeof value!=='string')throw new WorkflowConfigError();return value}
-export function parseWorkflowConfig(source:string):WorkflowItem[]{let parsed:unknown;try{parsed=JSON.parse(source)}catch{throw new WorkflowConfigError()}if(isObject(parsed)&&parsed.version!==undefined&&parsed.version!==1)throw new WorkflowConfigError();const items=Array.isArray(parsed)?parsed:isObject(parsed)&&Array.isArray(parsed.items)?parsed.items:null;if(!items)throw new WorkflowConfigError();const result=items.map(raw=>{if(!isObject(raw)||typeof raw.type!=='string'||!typeOptions.includes(raw.type as WorkflowItemType))throw new WorkflowConfigError();if(raw.enabled!==undefined&&typeof raw.enabled!=='boolean')throw new WorkflowConfigError();if(raw.sortMode!==undefined&&raw.sortMode!=='key'&&raw.sortMode!=='value')throw new WorkflowConfigError();if(raw.direction!==undefined&&raw.direction!=='asc'&&raw.direction!=='desc')throw new WorkflowConfigError();const item:WorkflowItem={id:createWorkflowId(),enabled:raw.enabled??true,type:raw.type as WorkflowItemType,path:configString(raw,'path','$'),sortMode:(raw.sortMode??'key') as WorkflowSortMode,direction:(raw.direction??'asc') as WorkflowDirection,arrayPath:configString(raw,'arrayPath','$'),itemPath:configString(raw,'itemPath','$'),filterValue:configString(raw,'filterValue',''),template:configString(raw,'template','{$.name}?token={$.token}')};return item});if(result.filter(item=>item.type==='template').length>1)throw new WorkflowConfigError();return result}
-export function serializeWorkflow(rules:WorkflowItem[]):string{return JSON.stringify({version:1,items:rules.map(({id,...item})=>item)},null,2)}
+function WorkflowSelect({
+  label,
+  value,
+  options,
+  onSelect,
+  className = '',
+}: {
+  label: string;
+  value: string;
+  options: Array<{ key: string; label: string }>;
+  onSelect: (value: string) => void;
+  className?: string;
+}) {
+  return (
+    <Select
+      items={options.map((option) => ({ value: option.key, label: option.label }))}
+      value={value}
+      onValueChange={(next) => {
+        if (next !== null) onSelect(next);
+      }}
+    >
+      <SelectTrigger className={`json-workflow-select ${className}`.trim()} aria-label={label}>
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((option) => (
+          <SelectItem key={option.key} value={option.key}>
+            {option.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+function PathField({
+  label,
+  value,
+  placeholder,
+  onChange,
+  root,
+  theme,
+  template = false,
+  completion = true,
+  values,
+}: {
+  label: string;
+  value: string;
+  placeholder: string;
+  onChange: (value: string) => void;
+  root: unknown;
+  theme: Extension;
+  template?: boolean;
+  completion?: boolean;
+  values?: unknown[];
+}) {
+  const rootRef = useRef(root);
+  const valuesRef = useRef(values);
+  if (root !== undefined) rootRef.current = root;
+  if (values !== undefined) valuesRef.current = values;
+  const extensions = useMemo(
+    () => [
+      EditorView.lineWrapping,
+      ...(!completion
+        ? valueCompletions(() => valuesRef.current ?? [])
+        : pathCompletions(() => rootRef.current, template)),
+      keymap.of([{ key: 'Tab', run: (view) => acceptCompletion(view) }]),
+    ],
+    [completion, template],
+  );
+  return (
+    <label className="json-workflow-field">
+      <span>{label}</span>
+      <CodeMirror
+        className="json-cm json-workflow-path-cm"
+        height="30px"
+        value={value}
+        placeholder={placeholder}
+        onChange={onChange}
+        spellCheck={false}
+        theme={theme}
+        indentWithTab={false}
+        basicSetup={{
+          lineNumbers: false,
+          foldGutter: false,
+          highlightActiveLine: false,
+          highlightActiveLineGutter: false,
+          autocompletion: false,
+          closeBrackets: false,
+        }}
+        extensions={extensions}
+        onCreateEditor={(view) => view.contentDOM.setAttribute('aria-label', label)}
+      />
+    </label>
+  );
+}
+function SelectField({
+  label,
+  value,
+  options,
+  onSelect,
+}: {
+  label: string;
+  value: string;
+  options: Array<{ key: string; label: string }>;
+  onSelect: (value: string) => void;
+}) {
+  return (
+    <label className="json-workflow-field json-workflow-select-field">
+      <span>{label}</span>
+      <WorkflowSelect label={label} value={value} options={options} onSelect={onSelect} />
+    </label>
+  );
+}
 
-function WorkflowSelect({label,value,options,onSelect,className=''}:{label:string;value:string;options:Array<{key:string;label:string}>;onSelect:(value:string)=>void;className?:string}){return <Select items={options.map(option=>({value:option.key,label:option.label}))} value={value} onValueChange={next=>{if(next!==null)onSelect(next)}}><SelectTrigger className={`json-workflow-select ${className}`.trim()} aria-label={label}><SelectValue/></SelectTrigger><SelectContent>{options.map(option=><SelectItem key={option.key} value={option.key}>{option.label}</SelectItem>)}</SelectContent></Select>}
-function PathField({label,value,placeholder,onChange,root,theme,template=false,completion=true,values}:{label:string;value:string;placeholder:string;onChange:(value:string)=>void;root:unknown;theme:Extension;template?:boolean;completion?:boolean;values?:unknown[]}){const rootRef=useRef(root);const valuesRef=useRef(values);if(root!==undefined)rootRef.current=root;if(values!==undefined)valuesRef.current=values;const extensions=useMemo(()=>[EditorView.lineWrapping,...(!completion?valueCompletions(()=>valuesRef.current??[]):pathCompletions(()=>rootRef.current,template)),keymap.of([{key:'Tab',run:view=>acceptCompletion(view)}])],[completion,template]);return <label className="json-workflow-field"><span>{label}</span><CodeMirror className="json-cm json-workflow-path-cm" height="30px" value={value} placeholder={placeholder} onChange={onChange} spellCheck={false} theme={theme} indentWithTab={false} basicSetup={{lineNumbers:false,foldGutter:false,highlightActiveLine:false,highlightActiveLineGutter:false,autocompletion:false,closeBrackets:false}} extensions={extensions} onCreateEditor={view=>view.contentDOM.setAttribute('aria-label',label)}/></label>}
-function SelectField({label,value,options,onSelect}:{label:string;value:string;options:Array<{key:string;label:string}>;onSelect:(value:string)=>void}){return <label className="json-workflow-field json-workflow-select-field"><span>{label}</span><WorkflowSelect label={label} value={value} options={options} onSelect={onSelect}/></label>}
+function WorkflowRuleRow({
+  item,
+  index,
+  root,
+  itemRoot,
+  filterValues,
+  labels,
+  theme,
+  onUpdate,
+  onTypeChange,
+  onRemove,
+}: {
+  item: WorkflowItem;
+  index: number;
+  root: unknown;
+  itemRoot: unknown;
+  filterValues: unknown[];
+  labels: Record<WorkflowItemType, string>;
+  theme: Extension;
+  onUpdate: (id: string, patch: Partial<WorkflowItem>) => void;
+  onTypeChange: (item: WorkflowItem, type: WorkflowItemType) => void;
+  onRemove: (id: string) => void;
+}) {
+  const { t } = useTranslation();
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: item.id });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 1 : undefined,
+  };
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`json-workflow-item${item.enabled ? '' : ' disabled'}${isDragging ? ' dragging' : ''}`}
+    >
+      <div className="json-workflow-item-header">
+        <Button
+          ref={setActivatorNodeRef}
+          variant="ghost"
+          className="json-workflow-drag"
+          {...attributes}
+          {...listeners}
+          aria-label={t('jsonTool.workflow.drag')}
+          title={t('jsonTool.workflow.drag')}
+        >
+          <DotsSixVertical size={14} weight="duotone" />
+        </Button>
+        <span className="json-workflow-index">{String(index + 1).padStart(2, '0')}</span>
+        <WorkflowSelect
+          label={t('jsonTool.workflow.type')}
+          value={item.type}
+          options={typeOptions.map((type) => ({ key: type, label: labels[type] }))}
+          onSelect={(value) => onTypeChange(item, value as WorkflowItemType)}
+          className="json-workflow-type"
+        />
+        <Switch
+          className="json-workflow-enabled"
+          checked={item.enabled}
+          onCheckedChange={(checked) => onUpdate(item.id, { enabled: checked })}
+          aria-label={t('jsonTool.workflow.enableItem')}
+        />
+        <Button
+          variant="ghost"
+          className="json-workflow-delete"
+          onClick={() => onRemove(item.id)}
+          aria-label={t('jsonTool.workflow.delete')}
+          title={t('jsonTool.workflow.delete')}
+        >
+          <Trash size={14} weight="duotone" />
+        </Button>
+      </div>
+      <div className="json-workflow-item-body">
+        {item.type === 'extract' && (
+          <PathField
+            label={t('jsonTool.workflow.path')}
+            value={item.path}
+            placeholder={t('jsonTool.workflow.pathPlaceholder')}
+            onChange={(value) => onUpdate(item.id, { path: value })}
+            root={root}
+            theme={theme}
+          />
+        )}{' '}
+        {item.type === 'sort' && (
+          <div className="json-workflow-inline-fields">
+            <SelectField
+              label={t('jsonTool.workflow.sortMode')}
+              value={item.sortMode}
+              options={[
+                { key: 'key', label: t('jsonTool.sortByKey') },
+                { key: 'value', label: t('jsonTool.sortByValue') },
+              ]}
+              onSelect={(value) => onUpdate(item.id, { sortMode: value as WorkflowSortMode })}
+            />
+            <SelectField
+              label={t('jsonTool.workflow.direction')}
+              value={item.direction}
+              options={[
+                { key: 'asc', label: t('jsonTool.sortOrderAsc') },
+                { key: 'desc', label: t('jsonTool.sortOrderDesc') },
+              ]}
+              onSelect={(value) => onUpdate(item.id, { direction: value as WorkflowDirection })}
+            />
+          </div>
+        )}{' '}
+        {item.type === 'arraySort' && (
+          <div className="json-workflow-fields">
+            <PathField
+              label={t('jsonTool.workflow.arrayPath')}
+              value={item.arrayPath}
+              placeholder={t('jsonTool.workflow.arrayPathPlaceholder')}
+              onChange={(value) => onUpdate(item.id, { arrayPath: value })}
+              root={root}
+              theme={theme}
+            />
+            <PathField
+              label={t('jsonTool.workflow.itemPath')}
+              value={item.itemPath}
+              placeholder={t('jsonTool.workflow.itemPathPlaceholder')}
+              onChange={(value) => onUpdate(item.id, { itemPath: value })}
+              root={itemRoot}
+              theme={theme}
+            />
+            <SelectField
+              label={t('jsonTool.workflow.direction')}
+              value={item.direction}
+              options={[
+                { key: 'asc', label: t('jsonTool.sortOrderAsc') },
+                { key: 'desc', label: t('jsonTool.sortOrderDesc') },
+              ]}
+              onSelect={(value) => onUpdate(item.id, { direction: value as WorkflowDirection })}
+            />
+          </div>
+        )}{' '}
+        {item.type === 'filter' && (
+          <div className="json-workflow-fields">
+            <PathField
+              label={t('jsonTool.workflow.arrayPath')}
+              value={item.arrayPath}
+              placeholder={t('jsonTool.workflow.arrayPathPlaceholder')}
+              onChange={(value) => onUpdate(item.id, { arrayPath: value })}
+              root={root}
+              theme={theme}
+            />
+            <PathField
+              label={t('jsonTool.workflow.itemPath')}
+              value={item.itemPath}
+              placeholder={t('jsonTool.workflow.itemPathPlaceholder')}
+              onChange={(value) => onUpdate(item.id, { itemPath: value })}
+              root={itemRoot}
+              theme={theme}
+            />
+            <PathField
+              label={t('jsonTool.workflow.filterValue')}
+              value={item.filterValue}
+              placeholder={t('jsonTool.workflow.filterValuePlaceholder')}
+              onChange={(value) => onUpdate(item.id, { filterValue: value })}
+              root={root}
+              theme={theme}
+              completion={false}
+              values={filterValues}
+            />
+          </div>
+        )}{' '}
+        {item.type === 'template' && (
+          <PathField
+            label={t('jsonTool.workflow.template')}
+            value={item.template}
+            placeholder={t('jsonTool.workflow.templatePlaceholder')}
+            onChange={(value) => onUpdate(item.id, { template: value })}
+            root={root}
+            theme={theme}
+            template
+          />
+        )}{' '}
+      </div>
+    </div>
+  );
+}
 
-function WorkflowRuleRow({item,index,root,itemRoot,filterValues,labels,theme,onUpdate,onTypeChange,onRemove}:{item:WorkflowItem;index:number;root:unknown;itemRoot:unknown;filterValues:unknown[];labels:Record<WorkflowItemType,string>;theme:Extension;onUpdate:(id:string,patch:Partial<WorkflowItem>)=>void;onTypeChange:(item:WorkflowItem,type:WorkflowItemType)=>void;onRemove:(id:string)=>void}){const{t}=useTranslation();const{attributes,listeners,setNodeRef,setActivatorNodeRef,transform,transition,isDragging}=useSortable({id:item.id});const style={transform:CSS.Transform.toString(transform),transition,zIndex:isDragging?1:undefined};return <div ref={setNodeRef} style={style} className={`json-workflow-item${item.enabled?'':' disabled'}${isDragging?' dragging':''}`}><div className="json-workflow-item-header"><Button ref={setActivatorNodeRef} variant="ghost" className="json-workflow-drag" {...attributes} {...listeners} aria-label={t('jsonTool.workflow.drag')} title={t('jsonTool.workflow.drag')}><DotsSixVertical size={14} weight="duotone"/></Button><span className="json-workflow-index">{String(index+1).padStart(2,'0')}</span><WorkflowSelect label={t('jsonTool.workflow.type')} value={item.type} options={typeOptions.map(type=>({key:type,label:labels[type]}))} onSelect={value=>onTypeChange(item,value as WorkflowItemType)} className="json-workflow-type"/><Switch className="json-workflow-enabled" checked={item.enabled} onCheckedChange={checked=>onUpdate(item.id,{enabled:checked})} aria-label={t('jsonTool.workflow.enableItem')}/><Button variant="ghost" className="json-workflow-delete" onClick={()=>onRemove(item.id)} aria-label={t('jsonTool.workflow.delete')} title={t('jsonTool.workflow.delete')}><Trash size={14} weight="duotone"/></Button></div><div className="json-workflow-item-body">{item.type==='extract'&&<PathField label={t('jsonTool.workflow.path')} value={item.path} placeholder={t('jsonTool.workflow.pathPlaceholder')} onChange={value=>onUpdate(item.id,{path:value})} root={root} theme={theme}/>} {item.type==='sort'&&<div className="json-workflow-inline-fields"><SelectField label={t('jsonTool.workflow.sortMode')} value={item.sortMode} options={[{key:'key',label:t('jsonTool.sortByKey')},{key:'value',label:t('jsonTool.sortByValue')}]} onSelect={value=>onUpdate(item.id,{sortMode:value as WorkflowSortMode})}/><SelectField label={t('jsonTool.workflow.direction')} value={item.direction} options={[{key:'asc',label:t('jsonTool.sortOrderAsc')},{key:'desc',label:t('jsonTool.sortOrderDesc')}]} onSelect={value=>onUpdate(item.id,{direction:value as WorkflowDirection})}/></div>} {item.type==='arraySort'&&<div className="json-workflow-fields"><PathField label={t('jsonTool.workflow.arrayPath')} value={item.arrayPath} placeholder={t('jsonTool.workflow.arrayPathPlaceholder')} onChange={value=>onUpdate(item.id,{arrayPath:value})} root={root} theme={theme}/><PathField label={t('jsonTool.workflow.itemPath')} value={item.itemPath} placeholder={t('jsonTool.workflow.itemPathPlaceholder')} onChange={value=>onUpdate(item.id,{itemPath:value})} root={itemRoot} theme={theme}/><SelectField label={t('jsonTool.workflow.direction')} value={item.direction} options={[{key:'asc',label:t('jsonTool.sortOrderAsc')},{key:'desc',label:t('jsonTool.sortOrderDesc')}]} onSelect={value=>onUpdate(item.id,{direction:value as WorkflowDirection})}/></div>} {item.type==='filter'&&<div className="json-workflow-fields"><PathField label={t('jsonTool.workflow.arrayPath')} value={item.arrayPath} placeholder={t('jsonTool.workflow.arrayPathPlaceholder')} onChange={value=>onUpdate(item.id,{arrayPath:value})} root={root} theme={theme}/><PathField label={t('jsonTool.workflow.itemPath')} value={item.itemPath} placeholder={t('jsonTool.workflow.itemPathPlaceholder')} onChange={value=>onUpdate(item.id,{itemPath:value})} root={itemRoot} theme={theme}/><PathField label={t('jsonTool.workflow.filterValue')} value={item.filterValue} placeholder={t('jsonTool.workflow.filterValuePlaceholder')} onChange={value=>onUpdate(item.id,{filterValue:value})} root={root} theme={theme} completion={false} values={filterValues}/></div>} {item.type==='template'&&<PathField label={t('jsonTool.workflow.template')} value={item.template} placeholder={t('jsonTool.workflow.templatePlaceholder')} onChange={value=>onUpdate(item.id,{template:value})} root={root} theme={theme} template/>} </div></div>}
+export function WorkflowPanel({
+  rules,
+  contexts,
+  output,
+  error,
+  theme,
+  onChange,
+  onRemove,
+  onMove,
+}: {
+  rules: WorkflowItem[];
+  contexts: WorkflowContexts;
+  output: string;
+  error: WorkflowError | null;
+  theme: Extension;
+  onChange: (update: WorkflowItem[] | ((rules: WorkflowItem[]) => WorkflowItem[])) => void;
+  onRemove: (id: string) => void;
+  onMove: (from: number, to: number) => void;
+}) {
+  const { t } = useTranslation();
+  const { roots: root, itemRoots, filterValues } = contexts;
+  const hasTemplate = rules.some((item) => item.type === 'template');
+  const labels = {
+    extract: t('jsonTool.workflow.types.extract'),
+    sort: t('jsonTool.workflow.types.sort'),
+    arraySort: t('jsonTool.workflow.types.arraySort'),
+    filter: t('jsonTool.workflow.types.filter'),
+    template: t('jsonTool.workflow.types.template'),
+  };
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+  const update = (id: string, patch: Partial<WorkflowItem>) =>
+    onChange((current) => current.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+  const updateType = (item: WorkflowItem, type: WorkflowItemType) => {
+    if (type === 'template' && hasTemplate && item.type !== 'template') return;
+    update(item.id, { type });
+  };
+  const move = (from: number, to: number) => {
+    if (from === to || to < 0 || to >= rules.length) return;
+    onMove(from, to);
+  };
+  const onDragEnd = ({ active, over }: DragEndEvent) => {
+    if (!over || active.id === over.id) return;
+    const from = rules.findIndex((item) => item.id === String(active.id));
+    const to = rules.findIndex((item) => item.id === String(over.id));
+    move(from, to);
+  };
+  return (
+    <div className="json-workflow-panel">
+      <section className="json-workflow-rules">
+        <div className="json-workflow-section-header">
+          <span className="json-pane-label">{t('jsonTool.workflow.rules')}</span>
+        </div>
+        <div className="json-workflow-list">
+          {rules.length === 0 ? (
+            <div className="json-workflow-empty">{t('jsonTool.workflow.empty')}</div>
+          ) : (
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+              <SortableContext
+                items={rules.map((item) => item.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                {rules.map((item, index) => (
+                  <WorkflowRuleRow
+                    key={item.id}
+                    item={item}
+                    index={index}
+                    root={root[index]}
+                    itemRoot={itemRoots[index]}
+                    filterValues={filterValues[index]}
+                    labels={labels}
+                    theme={theme}
+                    onUpdate={update}
+                    onTypeChange={updateType}
+                    onRemove={onRemove}
+                  />
+                ))}
+              </SortableContext>
+            </DndContext>
+          )}
+        </div>
+      </section>
+      <section className="json-workflow-output">
+        <div className="json-workflow-section-header">
+          <span className="json-pane-label">{t('jsonTool.workflow.output')}</span>
+        </div>
+        <div className="json-workflow-output-field">
+          {error ? (
+            <div className="json-workflow-error" role="alert">
+              <div className="json-workflow-error-icon" aria-hidden="true">
+                <WarningCircle size={18} weight="duotone" />
+              </div>
+              <div className="json-workflow-error-content">
+                <div className="json-workflow-error-heading">
+                  <strong>{t('jsonTool.workflow.errorTitle')}</strong>
+                  {error.item !== undefined && (
+                    <span className="json-workflow-error-item">
+                      {t('jsonTool.workflow.errorItem', {
+                        item: String(error.item + 1).padStart(2, '0'),
+                      })}
+                    </span>
+                  )}
+                </div>
+                <p className="json-workflow-error-message">
+                  {t(`jsonTool.workflow.errors.${error.code}`)}
+                </p>
+                {error.path && (
+                  <div className="json-workflow-error-path-row">
+                    <span>{t('jsonTool.workflow.errorPath')}</span>
+                    <code>{error.path}</code>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <CodeMirror
+              className="json-cm json-workflow-cm"
+              height="100%"
+              value={output}
+              editable={false}
+              theme={theme}
+              extensions={[json5(), EditorView.lineWrapping]}
+              onCreateEditor={(view) =>
+                view.contentDOM.setAttribute('aria-label', t('jsonTool.workflow.output'))
+              }
+            />
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
 
-export function WorkflowPanel({rules,contexts,output,error,theme,onChange,onRemove,onMove}:{rules:WorkflowItem[];contexts:WorkflowContexts;output:string;error:WorkflowError|null;theme:Extension;onChange:(update:WorkflowItem[]|((rules:WorkflowItem[])=>WorkflowItem[]))=>void;onRemove:(id:string)=>void;onMove:(from:number,to:number)=>void}){const{t}=useTranslation();const{roots:root,itemRoots,filterValues}=contexts;const hasTemplate=rules.some(item=>item.type==='template');const labels={extract:t('jsonTool.workflow.types.extract'),sort:t('jsonTool.workflow.types.sort'),arraySort:t('jsonTool.workflow.types.arraySort'),filter:t('jsonTool.workflow.types.filter'),template:t('jsonTool.workflow.types.template')};const sensors=useSensors(useSensor(PointerSensor,{activationConstraint:{distance:4}}),useSensor(KeyboardSensor,{coordinateGetter:sortableKeyboardCoordinates}));const update=(id:string,patch:Partial<WorkflowItem>)=>onChange(current=>current.map(item=>item.id===id?{...item,...patch}:item));const updateType=(item:WorkflowItem,type:WorkflowItemType)=>{if(type==='template'&&hasTemplate&&item.type!=='template')return;update(item.id,{type})};const move=(from:number,to:number)=>{if(from===to||to<0||to>=rules.length)return;onMove(from,to)};const onDragEnd=({active,over}:DragEndEvent)=>{if(!over||active.id===over.id)return;const from=rules.findIndex(item=>item.id===String(active.id));const to=rules.findIndex(item=>item.id===String(over.id));move(from,to)};return <div className="json-workflow-panel"><section className="json-workflow-rules"><div className="json-workflow-section-header"><span className="json-pane-label">{t('jsonTool.workflow.rules')}</span></div><div className="json-workflow-list">{rules.length===0?<div className="json-workflow-empty">{t('jsonTool.workflow.empty')}</div>:<DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}><SortableContext items={rules.map(item=>item.id)} strategy={verticalListSortingStrategy}>{rules.map((item,index)=><WorkflowRuleRow key={item.id} item={item} index={index} root={root[index]} itemRoot={itemRoots[index]} filterValues={filterValues[index]} labels={labels} theme={theme} onUpdate={update} onTypeChange={updateType} onRemove={onRemove}/>)}</SortableContext></DndContext>}</div></section><section className="json-workflow-output"><div className="json-workflow-section-header"><span className="json-pane-label">{t('jsonTool.workflow.output')}</span></div><div className="json-workflow-output-field">{error?<div className="json-workflow-error" role="alert"><div className="json-workflow-error-icon" aria-hidden="true"><WarningCircle size={18} weight="duotone"/></div><div className="json-workflow-error-content"><div className="json-workflow-error-heading"><strong>{t('jsonTool.workflow.errorTitle')}</strong>{error.item!==undefined&&<span className="json-workflow-error-item">{t('jsonTool.workflow.errorItem',{item:String(error.item+1).padStart(2,'0')})}</span>}</div><p className="json-workflow-error-message">{t(`jsonTool.workflow.errors.${error.code}`)}</p>{error.path&&<div className="json-workflow-error-path-row"><span>{t('jsonTool.workflow.errorPath')}</span><code>{error.path}</code></div>}</div></div>:<CodeMirror className="json-cm json-workflow-cm" height="100%" value={output} editable={false} theme={theme} extensions={[json5(),EditorView.lineWrapping]} onCreateEditor={view=>view.contentDOM.setAttribute('aria-label',t('jsonTool.workflow.output'))}/>}</div></section></div>}
-
-export {newWorkflowItem}
+export { newWorkflowItem };

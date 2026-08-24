@@ -1,7 +1,105 @@
-type Base64Request={id:number;action:'encode'|'decodeText'|'decodeImage'|'decodeFile';input:string}
-function toBase64(bytes:Uint8Array){let out='';for(let i=0;i<bytes.length;i+=0x8000){let part='';for(let j=i;j<Math.min(i+0x8000,bytes.length);j++)part+=String.fromCharCode(bytes[j]);out+=btoa(part)}return out}
-function clean(input:string){const value=input.replace(/^data:[^,]+,/,'').replace(/^,/,'').replace(/\s/g,'').replace(/-/g,'+').replace(/_/g,'/');return value.padEnd(Math.ceil(value.length/4)*4,'=')}
-function bytes(input:string){const raw=atob(clean(input));const out=new Uint8Array(raw.length);for(let i=0;i<raw.length;i++)out[i]=raw.charCodeAt(i);return out}
-function imageMime(b:Uint8Array){if(b.length>8&&b[0]===137&&b[1]===80&&b[2]===78&&b[3]===71&&String.fromCharCode(...b.slice(-8,-4))==='IEND')return'image/png';if(b.length>4&&b[0]===255&&b[1]===216&&b[b.length-2]===255&&b[b.length-1]===217)return'image/jpeg';if(b.length>7&&String.fromCharCode(...b.slice(0,6)).startsWith('GIF')&&b[b.length-1]===0x3b)return'image/gif';if(b.length>12&&String.fromCharCode(...b.slice(8,12))==='WEBP')return'image/webp';return''}
-function fileType(b:Uint8Array){const head=String.fromCharCode(...b.slice(0,8));if(head.startsWith('%PDF'))return{mime:'application/pdf',ext:'pdf'};if(b[0]===0x50&&b[1]===0x4b)return{mime:'application/zip',ext:'zip'};if(b[0]===0x1f&&b[1]===0x8b)return{mime:'application/gzip',ext:'gz'};if(head.startsWith('\x7fELF'))return{mime:'application/x-executable',ext:'bin'};return{mime:'application/octet-stream',ext:'bin'}}
-self.onmessage=(e:MessageEvent<Base64Request>)=>{try{const{id,action,input}=e.data;if(action==='encode'){const b=new TextEncoder().encode(input);self.postMessage({id,output:toBase64(b),bytes:b.length});return}const b=bytes(input);if(action==='decodeText'){self.postMessage({id,output:new TextDecoder('utf-8',{fatal:true}).decode(b),bytes:b.length});return}if(action==='decodeImage'){const mime=imageMime(b);if(!mime)throw Error();self.postMessage({id,output:`data:${mime};base64,${clean(input)}`,bytes:b.length,mime,ext:mime.split('/')[1].replace('jpeg','jpg')});return}const type=fileType(b);self.postMessage({id,output:`data:${type.mime};base64,${clean(input)}`,bytes:b.length,...type})}catch{self.postMessage({id:-1,error:true})}}
+type Base64Request = {
+  id: number;
+  action: 'encode' | 'decodeText' | 'decodeImage' | 'decodeFile';
+  input: string;
+};
+function toBase64(bytes: Uint8Array) {
+  let out = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    let part = '';
+    for (let j = i; j < Math.min(i + 0x8000, bytes.length); j++)
+      part += String.fromCharCode(bytes[j]);
+    out += btoa(part);
+  }
+  return out;
+}
+function clean(input: string) {
+  const value = input
+    .replace(/^data:[^,]+,/, '')
+    .replace(/^,/, '')
+    .replace(/\s/g, '')
+    .replace(/-/g, '+')
+    .replace(/_/g, '/');
+  return value.padEnd(Math.ceil(value.length / 4) * 4, '=');
+}
+function bytes(input: string) {
+  const raw = atob(clean(input));
+  const out = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+  return out;
+}
+function imageMime(b: Uint8Array) {
+  if (
+    b.length > 8 &&
+    b[0] === 137 &&
+    b[1] === 80 &&
+    b[2] === 78 &&
+    b[3] === 71 &&
+    String.fromCharCode(...b.slice(-8, -4)) === 'IEND'
+  )
+    return 'image/png';
+  if (
+    b.length > 4 &&
+    b[0] === 255 &&
+    b[1] === 216 &&
+    b[b.length - 2] === 255 &&
+    b[b.length - 1] === 217
+  )
+    return 'image/jpeg';
+  if (
+    b.length > 7 &&
+    String.fromCharCode(...b.slice(0, 6)).startsWith('GIF') &&
+    b[b.length - 1] === 0x3b
+  )
+    return 'image/gif';
+  if (b.length > 12 && String.fromCharCode(...b.slice(8, 12)) === 'WEBP') return 'image/webp';
+  return '';
+}
+function fileType(b: Uint8Array) {
+  const head = String.fromCharCode(...b.slice(0, 8));
+  if (head.startsWith('%PDF')) return { mime: 'application/pdf', ext: 'pdf' };
+  if (b[0] === 0x50 && b[1] === 0x4b) return { mime: 'application/zip', ext: 'zip' };
+  if (b[0] === 0x1f && b[1] === 0x8b) return { mime: 'application/gzip', ext: 'gz' };
+  if (head.startsWith('\x7fELF')) return { mime: 'application/x-executable', ext: 'bin' };
+  return { mime: 'application/octet-stream', ext: 'bin' };
+}
+self.onmessage = (e: MessageEvent<Base64Request>) => {
+  try {
+    const { id, action, input } = e.data;
+    if (action === 'encode') {
+      const b = new TextEncoder().encode(input);
+      self.postMessage({ id, output: toBase64(b), bytes: b.length });
+      return;
+    }
+    const b = bytes(input);
+    if (action === 'decodeText') {
+      self.postMessage({
+        id,
+        output: new TextDecoder('utf-8', { fatal: true }).decode(b),
+        bytes: b.length,
+      });
+      return;
+    }
+    if (action === 'decodeImage') {
+      const mime = imageMime(b);
+      if (!mime) throw Error();
+      self.postMessage({
+        id,
+        output: `data:${mime};base64,${clean(input)}`,
+        bytes: b.length,
+        mime,
+        ext: mime.split('/')[1].replace('jpeg', 'jpg'),
+      });
+      return;
+    }
+    const type = fileType(b);
+    self.postMessage({
+      id,
+      output: `data:${type.mime};base64,${clean(input)}`,
+      bytes: b.length,
+      ...type,
+    });
+  } catch {
+    self.postMessage({ id: -1, error: true });
+  }
+};

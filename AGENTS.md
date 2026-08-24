@@ -42,7 +42,7 @@ Wails v3(beta)桌面托盘应用:Go 后端 + React 19 前端。本地优先的�
 ## 前端约定
 
 - UI 分层:根布局与状态(`App.tsx`:页面路由、侧栏、命令面板、持久化)与工具组件分离。**每个工具封装为独立组件文件** `frontend/src/components/`(如 `JsonTool.tsx`、`TimeTool.tsx`、`TextTool.tsx`),在 `App.tsx` 引入;共享 UI 原语与类型(`Reveal`/`ToolHeader`/`samples`/`ToolId`/`PendingAction`/`Icon`)集中在 `frontend/src/components/shared.tsx`。
-- 代码刻意保持压缩单行风格(每个组件一行、最少空格)。不要重新格式化或美化;编辑时匹配这种紧凑风格。
+- 前端代码使用 Prettier 格式化；编辑时保持现有格式，避免产生无关的格式化变更。
 - 样式入口在 `frontend/src/index.css`(Tailwind v4 + shadcn/ui),主题变量定义在 `frontend/src/styles/globals.css`(shadcn `:root`/`.dark` oklch 变量 + 功能必需的 `--success`/`--warning` 语义色)。body 为 `user-select:none`。
 - UI 组件统一用 shadcn/ui(`frontend/src/components/ui/`,复制进项目的源码,非黑盒 npm 包):`Button` 用 `onClick`+`disabled`,`Switch` 用 `checked`+`onCheckedChange`,`Select` 用 `value`+`onValueChange`,`Toggle` 用 `pressed`+`onPressedChange`,`AlertDialog` 用 `open`+`onOpenChange`(在 Root 上)。variant 语义映射:项目内部 `primary`→`default`、`secondary`→`outline`、`tertiary`→`ghost`、`danger`→`destructive`。
 - Base UI Select 使用受控 `value` + `SelectValue` 时，Select Root 必须传入与 `SelectItem` 对应的 `items`（`value`/`label`）；`options` 必须复用 i18n label，避免选中态显示内部 ID 而泄漏给用户。
