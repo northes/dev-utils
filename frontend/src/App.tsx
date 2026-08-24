@@ -122,7 +122,7 @@ function App(){
   useEffect(()=>{const onPopState=()=>{const next=pageFromLocation();pageRef.current=next;setVisited(current=>current.has(next)?current:new Set(current).add(next));setPage(next);dismissOverlays()};window.addEventListener('popstate',onPopState);return()=>window.removeEventListener('popstate',onPopState)},[])
   useEffect(()=>{const onMouseDown=(event:MouseEvent)=>{if(event.button!==3&&event.button!==4)return;event.preventDefault();if(event.button===3)window.history.back();else window.history.forward()};window.addEventListener('mousedown',onMouseDown,true);return()=>window.removeEventListener('mousedown',onMouseDown,true)},[])
   useEffect(()=>{const next=pageFromLocation();window.history.replaceState({page:next},'',`/${next}`);pageRef.current=next;setPage(next)},[])
-  useEffect(()=>{void Events.On('tray:analyze',()=>{void analyzeClipboard()})},[settings])
+  useEffect(()=>{const off=Events.On('tray:analyze',()=>{void analyzeClipboard()});return off},[settings])
   useLayoutEffect(()=>workspaceRef.current?.scrollTo(0,0),[page])
   useEffect(()=>{GetConfig().then(c=>{settingsReady.current=true;setSettings(c)}).catch(()=>{settingsReady.current=true})},[])
   useEffect(()=>{if(!settingsReady.current)return;void SaveConfig(settings);void SetAutoCheckEnabled(settings.autoCheckUpdates)},[settings])
