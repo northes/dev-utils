@@ -8,6 +8,8 @@ import {
   useRef,
   useState,
 } from 'react';
+import { flushSync } from 'react-dom';
+import type { SetStateAction } from 'react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -870,6 +872,24 @@ function AppShell() {
     settings.darkTheme,
     systemDark,
   );
+  const setSettingsWithThemeTransition = (update: SetStateAction<Settings>) => {
+    const current = settingsRef.current;
+    const next = typeof update === 'function' ? update(current) : update;
+    const nextTheme = resolveTheme(next.themeMode, next.lightTheme, next.darkTheme, systemDark);
+    if (nextTheme === theme) {
+      setSettings(next);
+      return;
+    }
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const viewTransitionDocument = document as Document & {
+      startViewTransition?: (updateCallback: () => void) => unknown;
+    };
+    if (!viewTransitionDocument.startViewTransition || reducedMotion) {
+      setSettings(next);
+      return;
+    }
+    viewTransitionDocument.startViewTransition(() => flushSync(() => setSettings(next)));
+  };
   const currentHistoryIndex = historyIndex();
   const [maxHistoryIndex, setMaxHistoryIndex] = useState(currentHistoryIndex);
   const canGoBack = currentHistoryIndex > 0;
@@ -892,7 +912,7 @@ function AppShell() {
     );
     if (location.pathname !== routePath(next)) routerNavigate(routePath(next), { replace: true });
   }, [location.key, location.pathname, navigationType, routerNavigate]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const root = document.documentElement;
     const dark = theme.endsWith('-dark');
     root.classList.toggle('dark', dark);
@@ -1414,7 +1434,7 @@ function AppShell() {
                 <Suspense fallback={null}>
                   <SettingsPage
                     settings={settings}
-                    setSettings={setSettings}
+                    setSettings={setSettingsWithThemeTransition}
                     tools={tools}
                     clearHistory={clearHistory}
                   />
