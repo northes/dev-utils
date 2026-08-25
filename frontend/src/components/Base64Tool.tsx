@@ -475,16 +475,6 @@ export default function Base64Tool({
           {inputPane}
           {resultPane}
         </div>
-        <div className="flex items-center justify-between border-y border-border px-3 py-2.5 font-mono text-[10px] uppercase tracking-[.04em] text-muted-foreground">
-          <span>{t('base64Tool.detected')}</span>
-          <strong className="font-medium text-success">
-            {outputKind === 'image'
-              ? t('base64Tool.image')
-              : outputKind === 'file'
-                ? t('base64Tool.file')
-                : t('base64Tool.text')}
-          </strong>
-        </div>
       </ToolLayout>
     </Reveal>
   );

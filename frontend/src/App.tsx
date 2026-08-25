@@ -45,6 +45,7 @@ import {
   Key,
   LinkSimple,
   SidebarSimple,
+  TextAa,
   TextT,
 } from '@phosphor-icons/react';
 import type { HighlightMode } from './components/DiffTool';
@@ -161,7 +162,7 @@ const tools: ToolDefinition[] = [
     id: 'text' as const,
     nameKey: 'tools.text.name',
     descriptionKey: 'tools.text.description',
-    icon: TextT,
+    icon: TextAa,
     keywords: 'text count trim spaces lines bytes',
   },
   {
@@ -230,7 +231,7 @@ const paletteItems: PaletteItem[] = [
     id: 'open:text',
     labelKey: 'commands.openText',
     groupKey: 'groups.tools',
-    icon: TextT,
+    icon: TextAa,
     keywords: 'text toolkit 文本 打开工具',
     page: 'text',
   },

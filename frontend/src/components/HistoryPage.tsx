@@ -23,7 +23,7 @@ import {
   Hash,
   Key,
   LinkSimple,
-  TextT,
+  TextAa,
   Trash,
   X,
 } from '@phosphor-icons/react';
@@ -82,7 +82,7 @@ export function HistoryIcon({ tool }: { tool: ToolId }) {
   ) : tool === 'url' ? (
     <LinkSimple weight="duotone" />
   ) : (
-    <TextT weight="duotone" />
+    <TextAa weight="duotone" />
   );
 }
 

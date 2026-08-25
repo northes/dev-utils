@@ -204,20 +204,6 @@ export default function JwtTool({
             <JwtPane label={t('jwtTool.payload')} value={decoded?.payload ?? ''} readOnly />
           </div>
         </div>
-        <div className="flex items-center justify-between border-y border-border px-3 py-2.5 font-mono text-[10px] uppercase tracking-[.04em] text-muted-foreground">
-          <span>{t('jwtTool.detected')}</span>
-          <strong
-            className={
-              input
-                ? decoded
-                  ? 'font-medium text-success'
-                  : 'font-medium text-destructive'
-                : 'font-normal text-muted-foreground'
-            }
-          >
-            {input ? (decoded ? t('jwtTool.valid') : t('jwtTool.invalid')) : t('jwtTool.emptyHint')}
-          </strong>
-        </div>
       </ToolLayout>
     </Reveal>
   );
