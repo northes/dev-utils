@@ -524,7 +524,7 @@ export function WorkflowPanel({
     if (view) focusAddedItem(focusItemId, view);
   }, [focusItemId]);
   return (
-    <div className="json-workflow-panel grid h-full min-h-0 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-3 @max-[959px]/json-page:grid-cols-2 @max-[959px]/json-page:grid-rows-1 @min-[960px]/json-page:contents">
+    <div className="json-workflow-panel grid h-full min-h-0 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-3 @max-[959px]/json-page:contents @min-[960px]/json-page:contents">
       <section className="json-workflow-rules flex min-h-0 min-w-0 flex-col [container-name:workflow-rules] [container-type:inline-size] @min-[960px]/json-page:h-full @min-[960px]/json-page:min-h-0">
         <div className="json-workflow-section-header flex h-[18px] min-h-[18px] flex-none items-start justify-between gap-2">
           <span className="font-mono text-[10px] font-medium leading-none tracking-[.04em] text-muted-foreground uppercase">

@@ -682,12 +682,13 @@ export default function JsonTool({
     />
   );
   const jsonGridClass = workflowMode
-    ? 'grid-cols-2 grid-rows-[minmax(0,1fr)] gap-3 @max-[959px]/json-page:grid-cols-2 @max-[959px]/json-page:grid-rows-1 @min-[960px]/json-page:grid-cols-3 @min-[960px]/json-page:grid-rows-1'
+    ? 'grid-cols-3 grid-rows-[minmax(0,1fr)] gap-3 @max-[959px]/json-page:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_minmax(0,1fr)] @max-[959px]/json-page:grid-rows-1 @min-[960px]/json-page:grid-cols-3 @min-[960px]/json-page:grid-rows-1'
     : schema
       ? 'grid-cols-2 grid-rows-[minmax(0,1fr)] gap-3 @max-[959px]/json-page:grid-cols-2 @max-[959px]/json-page:grid-rows-1 @min-[960px]/json-page:grid-cols-3 @min-[960px]/json-page:grid-rows-1'
       : 'grid-cols-1 grid-rows-[minmax(0,1fr)] gap-0';
-  const footerGridClass =
-    schema || workflowMode
+  const footerGridClass = workflowMode
+    ? 'grid-cols-3 @max-[959px]/json-page:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_minmax(0,1fr)] @min-[960px]/json-page:grid-cols-3'
+    : schema
       ? 'grid-cols-[minmax(0,1fr)_minmax(0,1fr)] @max-[959px]/json-page:grid-cols-2 @min-[960px]/json-page:grid-cols-3'
       : 'grid-cols-1';
   useEffect(() => {
@@ -838,14 +839,12 @@ export default function JsonTool({
             {editorActions('input')}
             {schema && editorActions('result')}
             {workflowMode && (
-              <div className="json-workflow-rules-footer-actions min-w-0 @max-[959px]/json-page:col-start-2 @max-[959px]/json-page:min-w-0 @min-[960px]/json-page:min-w-0">
+              <div className="json-workflow-rules-footer-actions min-w-0">
                 {workflowRuleActions}
               </div>
             )}
             {workflowMode && (
-              <div className="json-workflow-footer-actions min-w-0 @max-[959px]/json-page:col-start-2 @max-[959px]/json-page:min-w-0 @min-[960px]/json-page:min-w-0">
-                {workflowActions}
-              </div>
+              <div className="json-workflow-footer-actions min-w-0">{workflowActions}</div>
             )}
           </div>
         }
@@ -866,7 +865,7 @@ export default function JsonTool({
               formatOnPaste={autoFormatOnFill ? tryAutoFormat : undefined}
             />
             <div
-              className={`json-schema-right grid min-h-0 min-w-0 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-3 @max-[959px]/json-page:grid @min-[960px]/json-page:contents${schema || workflowMode ? '' : ' hidden'}`}
+              className={`json-schema-right grid min-h-0 min-w-0 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-3 ${workflowMode ? '@max-[959px]/json-page:contents' : '@max-[959px]/json-page:grid'} @min-[960px]/json-page:contents${schema || workflowMode ? '' : ' hidden'}`}
             >
               {schema && (
                 <>
@@ -926,7 +925,7 @@ export default function JsonTool({
                 </>
               )}
               {workflowMode && (
-                <div className="json-workflow-slot min-h-0 min-w-0 @max-[959px]/json-page:row-span-full @max-[959px]/json-page:block @min-[960px]/json-page:contents">
+                <div className="json-workflow-slot min-h-0 min-w-0 @max-[959px]/json-page:contents @min-[960px]/json-page:contents">
                   <WorkflowPanel
                     contexts={workflow.contexts}
                     rules={workflowRules}
