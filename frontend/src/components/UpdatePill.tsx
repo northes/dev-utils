@@ -128,7 +128,7 @@ export default function UpdatePill() {
     );
   return (
     <div
-      className="relative top-px z-[3] flex h-6 max-w-[min(340px,calc(100vw-220px))] flex-none items-center self-center gap-1.5 ml-auto rounded-full border border-border bg-card py-0 pl-2 pr-1 text-foreground [--wails-draggable:no-drag] cursor-pointer hover:border-muted-foreground hover:bg-muted"
+      className="relative top-px z-[3] flex h-6 max-w-[min(340px,calc(100vw-220px))] flex-none items-center self-center gap-1.5 ml-auto overflow-hidden rounded-full border border-border bg-card py-0 pl-2 pr-1 text-foreground [--wails-draggable:no-drag] cursor-pointer hover:border-muted-foreground hover:bg-muted"
       role="status"
     >
       <Button
