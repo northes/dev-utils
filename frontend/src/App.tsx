@@ -52,6 +52,7 @@ import type { ToolDefinition } from './components/SettingsPage';
 import { type HistoryItem, normalizeHistoryDetail } from './components/HistoryPage';
 import {
   decodeBase64,
+  decodeBase64Text,
   parseJsonLoose,
   type Icon,
   type PendingAction,
@@ -744,9 +745,12 @@ function detectBase64(s: string): 'text' | 'image' | null {
   const data = /^data:[^,]+;base64,([A-Za-z0-9+/_=-]+)$/i.exec(s);
   const raw = data?.[1] ?? s;
   const isDataUrl = Boolean(data);
-  const isObviousBase64 = raw.length >= 16 && /[=+/_-]/.test(raw);
-  if (!isDataUrl && !isObviousBase64) return null;
-  if (raw.length > 16 * 1024 * 1024 || raw.includes('.') || !/^[A-Za-z0-9+/_-]+={0,2}$/.test(raw))
+  if (
+    raw.length < 4 ||
+    raw.length > 16 * 1024 * 1024 ||
+    raw.includes('.') ||
+    !/^[A-Za-z0-9+/_-]+={0,2}$/.test(raw)
+  )
     return null;
   const decoded = decodeBase64(raw);
   if (decoded === null) return null;
@@ -758,7 +762,8 @@ function detectBase64(s: string): 'text' | 'image' | null {
         (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) ||
         String.fromCharCode(...bytes.slice(0, 6)).startsWith('GIF') ||
         String.fromCharCode(...bytes.slice(8, 12)) === 'WEBP');
-    return image ? 'image' : 'text';
+    if (image) return 'image';
+    return isDataUrl || decodeBase64Text(raw) !== null ? 'text' : null;
   } catch {
     return null;
   }

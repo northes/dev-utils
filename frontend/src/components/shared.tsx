@@ -96,6 +96,21 @@ export function decodeBase64(raw: string): string | null {
   }
 }
 
+export function decodeBase64Text(raw: string): string | null {
+  const decoded = decodeBase64(raw);
+  if (decoded === null) return null;
+  try {
+    const bytes = Uint8Array.from(decoded, (c) => c.charCodeAt(0));
+    const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    const encoded = btoa(String.fromCharCode(...new TextEncoder().encode(text)));
+    const normalize = (value: string) =>
+      value.replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
+    return normalize(encoded) === normalize(raw) ? text : null;
+  } catch {
+    return null;
+  }
+}
+
 export function hasComments(s: string) {
   return stripJsonComments(s) !== s;
 }
