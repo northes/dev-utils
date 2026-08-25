@@ -14,7 +14,7 @@ import {
   type PendingAction,
   type ToolId,
 } from './shared';
-import { toast } from './AppToast';
+import { toast } from './ui/toast';
 
 type Decoded = { header: string; payload: string };
 function decodeSegment(segment: string): string | null {
@@ -123,7 +123,7 @@ export default function JwtTool({
     const value = decoded[kind];
     await navigator.clipboard?.writeText(value).catch(() => {});
     const bytes = new TextEncoder().encode(value).length;
-    toast(t('toast.copied', { value: `${bytes} B` }));
+    toast.add({ title: t('toast.copied', { value: `${bytes} B` }) });
     record(
       'jwt',
       t(kind === 'header' ? 'jwtTool.copyHeader' : 'jwtTool.copyPayload'),
@@ -142,7 +142,7 @@ export default function JwtTool({
     }
     if (pending.action === 'copyHeader' || pending.action === 'copyPayload') {
       if (!decoded) {
-        toast(t('jwtTool.invalid'), { variant: 'warning' });
+        toast.add({ title: t('jwtTool.invalid'), type: 'warning' });
         return;
       }
       void copy(pending.action === 'copyHeader' ? 'header' : 'payload');

@@ -54,7 +54,7 @@ import {
   getTimeZoneOptions,
   parseTimeInput,
 } from '../utils/time';
-import { toast } from './AppToast';
+import { toast } from './ui/toast';
 
 const resultIds = [
   'local',
@@ -322,7 +322,7 @@ export default function TimeTool({
     const label = t(`timeTool.${id}`),
       value = values[id];
     navigator.clipboard?.writeText(value).catch(() => {});
-    toast(t('toast.copied', { value }));
+    toast.add({ title: t('toast.copied', { value }) });
     record('time', t('timeTool.converted'), label, input);
   };
   const startEditing = () => {

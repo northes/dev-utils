@@ -33,7 +33,7 @@ import {
   type ToolBarAction,
   type ToolId,
 } from './shared';
-import { toast } from './AppToast';
+import { toast } from './ui/toast';
 import {
   newWorkflowItem,
   parseWorkflowConfig,
@@ -425,9 +425,10 @@ export default function JsonTool({
         try {
           parseJsonLoose(next);
         } catch {
-          toast(t('jsonTool.formatFailed'), {
+          toast.add({
+            title: t('jsonTool.formatFailed'),
             description: t('jsonTool.invalidJsonDesc'),
-            variant: 'danger',
+            type: 'error',
           });
           return;
         }
@@ -443,9 +444,10 @@ export default function JsonTool({
         next,
       );
     } catch {
-      toast(t(minify ? 'jsonTool.minifyFailed' : 'jsonTool.formatFailed'), {
+      toast.add({
+        title: t(minify ? 'jsonTool.minifyFailed' : 'jsonTool.formatFailed'),
         description: t('jsonTool.invalidJsonDesc'),
-        variant: 'danger',
+        type: 'error',
       });
     }
   };
@@ -506,11 +508,12 @@ export default function JsonTool({
     try {
       if (!navigator.clipboard) throw new Error('clipboard');
       await navigator.clipboard.writeText(serializeWorkflow(workflowRules));
-      toast(t('jsonTool.workflow.exported'));
+      toast.add({ title: t('jsonTool.workflow.exported') });
     } catch {
-      toast(t('jsonTool.workflow.exportFailed'), {
+      toast.add({
+        title: t('jsonTool.workflow.exportFailed'),
         description: t('jsonTool.workflow.clipboardWriteFailed'),
-        variant: 'danger',
+        type: 'error',
       });
     }
   };
@@ -518,22 +521,24 @@ export default function JsonTool({
     try {
       const source = (await Clipboard.Text().catch(() => '')) || '';
       if (!source.trim()) {
-        toast(t('jsonTool.workflow.importEmpty'), { variant: 'warning' });
+        toast.add({ title: t('jsonTool.workflow.importEmpty'), type: 'warning' });
         return;
       }
       setWorkflowRules(parseWorkflowConfig(source));
-      toast(t('jsonTool.workflow.imported'));
+      toast.add({ title: t('jsonTool.workflow.imported') });
     } catch (error) {
       if (error instanceof Error && error.message === 'invalidConfig') {
-        toast(t('jsonTool.workflow.importFailed'), {
+        toast.add({
+          title: t('jsonTool.workflow.importFailed'),
           description: t('jsonTool.workflow.invalidConfig'),
-          variant: 'danger',
+          type: 'error',
         });
         return;
       }
-      toast(t('jsonTool.workflow.importFailed'), {
+      toast.add({
+        title: t('jsonTool.workflow.importFailed'),
         description: t('jsonTool.workflow.clipboardReadFailed'),
-        variant: 'danger',
+        type: 'error',
       });
     }
   };
@@ -541,7 +546,7 @@ export default function JsonTool({
     if (workflow.error || !workflow.output) return;
     void navigator.clipboard?.writeText(workflow.output).catch(() => {});
     const bytes = new TextEncoder().encode(workflow.output).length;
-    toast(t('toast.copied', { value: `${bytes} ${t('jsonTool.bytes')}` }));
+    toast.add({ title: t('toast.copied', { value: `${bytes} ${t('jsonTool.bytes')}` }) });
     record(
       'json',
       t('jsonTool.workflow.copy'),
@@ -554,7 +559,7 @@ export default function JsonTool({
     const value = pane === 'input' ? input : result;
     await navigator.clipboard?.writeText(value).catch(() => {});
     const bytes = new TextEncoder().encode(value).length;
-    toast(t('toast.copied', { value: `${bytes} ${t('jsonTool.bytes')}` }));
+    toast.add({ title: t('toast.copied', { value: `${bytes} ${t('jsonTool.bytes')}` }) });
   };
   const editorActions = (pane: 'input' | 'result') => {
     const value = pane === 'input' ? input : result;
@@ -707,15 +712,16 @@ export default function JsonTool({
     if (pending.action === 'copy') {
       const toCopy = (pane === 'input' ? input : result).trim() || pending.input;
       if (!toCopy.trim()) {
-        toast(t('toast.clipboardEmpty'), {
+        toast.add({
+          title: t('toast.clipboardEmpty'),
           description: t('toast.clipboardEmptyDesc'),
-          variant: 'warning',
+          type: 'warning',
         });
         return;
       }
       void navigator.clipboard?.writeText(toCopy).catch(() => {});
       const bytes = new TextEncoder().encode(toCopy).length;
-      toast(t('toast.copied', { value: `${bytes} ${t('jsonTool.bytes')}` }));
+      toast.add({ title: t('toast.copied', { value: `${bytes} ${t('jsonTool.bytes')}` }) });
       record('json', t('jsonTool.copied'), `${bytes} ${t('jsonTool.bytes')}`, toCopy);
       return;
     }

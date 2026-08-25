@@ -13,7 +13,7 @@ import {
   type PendingAction,
   type ToolId,
 } from './shared';
-import { toast } from './AppToast';
+import { toast } from './ui/toast';
 import { parseSupportedUrl, urlParamsJson } from '../utils/url';
 
 function UrlPart({
@@ -98,7 +98,7 @@ export default function UrlTool({
     await navigator.clipboard?.writeText(value).catch(() => {});
     setCopied(id);
     window.setTimeout(() => setCopied((current) => (current === id ? '' : current)), 1600);
-    toast(t('toast.copied', { value: label }));
+    toast.add({ title: t('toast.copied', { value: label }) });
   };
   const copy = async () => {
     if (!parts) return;
@@ -120,7 +120,7 @@ export default function UrlTool({
       return;
     }
     if (pending.action === 'copy') {
-      if (!parts) toast(t('urlTool.invalid'), { variant: 'warning' });
+      if (!parts) toast.add({ title: t('urlTool.invalid'), type: 'warning' });
       else void copy();
       return;
     }

@@ -23,7 +23,7 @@ import {
   type PendingAction,
   type ToolId,
 } from './shared';
-import { toast } from './AppToast';
+import { toast } from './ui/toast';
 
 type OutputKind = 'text' | 'image' | 'file';
 type FileInfo = { name: string; type: string; size: number; data: string; image: boolean };
@@ -212,7 +212,7 @@ export default function Base64Tool({
         setOutputKind('text');
         setOutputFile(null);
         setOutput('');
-        toast(t('base64Tool.invalid'), { variant: 'warning' });
+        toast.add({ title: t('base64Tool.invalid'), type: 'warning' });
       }
     }
   };
@@ -232,11 +232,14 @@ export default function Base64Tool({
   };
   const copy = async () => {
     await navigator.clipboard?.writeText(output).catch(() => {});
-    toast(t('toast.copied', { value: bytesLabel(output.length) }));
+    toast.add({ title: t('toast.copied', { value: bytesLabel(output.length) }) });
   };
   const load = async (file: File) => {
     if (file.size > MAX_BYTES) {
-      toast(t('base64Tool.tooLarge', { size: bytesLabel(MAX_BYTES) }), { variant: 'warning' });
+      toast.add({
+        title: t('base64Tool.tooLarge', { size: bytesLabel(MAX_BYTES) }),
+        type: 'warning',
+      });
       return;
     }
     try {
@@ -269,7 +272,7 @@ export default function Base64Tool({
         },
       );
     } catch {
-      toast(t('base64Tool.invalid'), { variant: 'danger' });
+      toast.add({ title: t('base64Tool.invalid'), type: 'error' });
     }
   };
   useEffect(() => {
@@ -282,9 +285,10 @@ export default function Base64Tool({
     }
     if (pending.action === 'copy') {
       if (!output)
-        toast(t('toast.clipboardEmpty'), {
+        toast.add({
+          title: t('toast.clipboardEmpty'),
           description: t('toast.clipboardEmptyDesc'),
-          variant: 'warning',
+          type: 'warning',
         });
       else void copy();
       return;
@@ -315,10 +319,10 @@ export default function Base64Tool({
       });
       if (path) {
         await SaveBase64File(path, outputFile.data);
-        toast(t('base64Tool.saved', { name: outputFile.name }));
+        toast.add({ title: t('base64Tool.saved', { name: outputFile.name }) });
       }
     } catch {
-      toast(t('base64Tool.saveFailed'), { variant: 'danger' });
+      toast.add({ title: t('base64Tool.saveFailed'), type: 'error' });
     }
   };
   const inputPane = sourceFile ? (

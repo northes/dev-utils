@@ -59,7 +59,7 @@ import {
 } from './components/shared';
 import { parseTimeInput } from './utils/time';
 import { parseSupportedUrl } from './utils/url';
-import { AppToastProvider, toast } from './components/AppToast';
+import { toast, Toaster } from './components/ui/toast';
 import UpdatePill from './components/UpdatePill';
 import OverlayScrollbar from './components/OverlayScrollbar';
 import {
@@ -982,7 +982,7 @@ function AppShell() {
       bytes: meta?.bytes ?? new TextEncoder().encode(input).length,
       input,
       output,
-    }).catch(() => toast(t('toast.historyFailed'), { variant: 'danger' }));
+    }).catch(() => toast.add({ title: t('toast.historyFailed'), type: 'error' }));
   };
   const openHistory = async (item: HistoryItem) => {
     try {
@@ -996,11 +996,11 @@ function AppShell() {
       });
       navigate(item.tool);
     } catch {
-      toast(t('toast.historyFailed'), { variant: 'danger' });
+      toast.add({ title: t('toast.historyFailed'), type: 'error' });
     }
   };
   const clearHistory = () => {
-    void ClearHistory().catch(() => toast(t('toast.historyFailed'), { variant: 'danger' }));
+    void ClearHistory().catch(() => toast.add({ title: t('toast.historyFailed'), type: 'error' }));
   };
   const cycleSidebar = () =>
     setSettings((s) => ({
@@ -1022,9 +1022,10 @@ function AppShell() {
     setPaletteOpen(false);
     const text = (await Clipboard.Text().catch(() => '')) || '';
     if (!text.trim()) {
-      toast(t('toast.clipboardEmpty'), {
+      toast.add({
+        title: t('toast.clipboardEmpty'),
         description: t('toast.clipboardEmptyDesc'),
-        variant: 'warning',
+        type: 'warning',
       });
       return;
     }
@@ -1033,7 +1034,7 @@ function AppShell() {
       !(target instanceof HTMLElement) ||
       (!target.isContentEditable && target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA')
     ) {
-      toast(t('toast.pasteTarget'), { variant: 'warning' });
+      toast.add({ title: t('toast.pasteTarget'), type: 'warning' });
       return;
     }
     requestAnimationFrame(() => {
@@ -1075,9 +1076,10 @@ function AppShell() {
         if (!input.trim()) {
           setPending(null);
           navigate(tool);
-          toast(t('toast.clipboardEmpty'), {
+          toast.add({
+            title: t('toast.clipboardEmpty'),
             description: t('toast.clipboardEmptyDesc'),
-            variant: 'warning',
+            type: 'warning',
           });
           return;
         }
@@ -1160,8 +1162,9 @@ function AppShell() {
         target: match.target,
       });
       navigate(match.tool);
-      toast(t('toast.trayAutoFilled', { tool: t(`tools.${match.tool}.name`) }), {
-        variant: 'success',
+      toast.add({
+        title: t('toast.trayAutoFilled', { tool: t(`tools.${match.tool}.name`) }),
+        type: 'success',
       });
     };
     const match = { tool, input: text, mode, target };
@@ -1170,7 +1173,7 @@ function AppShell() {
   };
   return (
     <>
-      <AppToastProvider />
+      <Toaster />
       <OverlayScrollbar />
       <div className="app-shell relative grid h-dvh grid-rows-[var(--titlebar-height)_minmax(0,1fr)] bg-background">
         <div className="ambient pointer-events-none absolute inset-0 z-0" />

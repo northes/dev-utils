@@ -5,7 +5,7 @@ import { Button } from './ui/button';
 import { Spinner } from './ui/spinner';
 import { useTranslation } from 'react-i18next';
 import { InstallUpdate, RestartApp } from '../../bindings/changeme/updateservice';
-import { toast } from './AppToast';
+import { toast } from './ui/toast';
 
 type PillState = 'checking' | 'available' | 'downloading' | 'applying' | 'restarting';
 const payload = (event: any) => event?.data ?? event;
@@ -63,7 +63,7 @@ export default function UpdatePill() {
         setState('restarting');
         void RestartApp().catch(() => {
           if (!errorHandled.current) {
-            toast(t('updatePill.error'), { variant: 'danger' });
+            toast.add({ title: t('updatePill.error'), type: 'error' });
             setState('available');
           }
         });
@@ -75,9 +75,10 @@ export default function UpdatePill() {
           stateRef.current === 'restarting'
         ) {
           errorHandled.current = true;
-          toast(t('updatePill.error'), {
+          toast.add({
+            title: t('updatePill.error'),
             description: payload(e)?.message || '',
-            variant: 'danger',
+            type: 'error',
           });
           setState('available');
         }
@@ -91,7 +92,7 @@ export default function UpdatePill() {
     setState('downloading');
     void InstallUpdate().catch(() => {
       if (!errorHandled.current) {
-        toast(t('updatePill.error'), { variant: 'danger' });
+        toast.add({ title: t('updatePill.error'), type: 'error' });
         setState('available');
       }
     });

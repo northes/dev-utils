@@ -10,7 +10,7 @@ import { CheckForUpdates, GetCurrentVersion } from '../../bindings/changeme/upda
 import type { Icon, ToolId } from './shared';
 import { ClearHistoryDialog } from './HistoryPage';
 import { Reveal } from './shared';
-import { toast } from './AppToast';
+import { toast } from './ui/toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 
 export type ToolDefinition = {
@@ -159,16 +159,17 @@ export default function SettingsPage({
     window.dispatchEvent(new CustomEvent('devutils:update-check', { detail: 'checking' }));
     try {
       const available = await CheckForUpdates();
-      if (!available) toast(t('settings.upToDate'), { variant: 'success' });
+      if (!available) toast.add({ title: t('settings.upToDate'), type: 'success' });
       window.dispatchEvent(
         new CustomEvent('devutils:update-check', {
           detail: available ? 'available' : 'finished',
         }),
       );
     } catch {
-      toast(t('settings.updateFailed'), {
+      toast.add({
+        title: t('settings.updateFailed'),
         description: t('settings.updateFailedDesc'),
-        variant: 'danger',
+        type: 'error',
       });
       window.dispatchEvent(new CustomEvent('devutils:update-check', { detail: 'finished' }));
     } finally {

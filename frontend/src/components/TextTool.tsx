@@ -15,7 +15,7 @@ import {
   ToolLayout,
   useFocusOnActivate,
 } from './shared';
-import { toast } from './AppToast';
+import { toast } from './ui/toast';
 
 const countDetails = (characters: string[]) =>
   Array.from(
@@ -99,13 +99,15 @@ export default function TextTool({
   };
   const copy = () => {
     navigator.clipboard?.writeText(value).catch(() => {});
-    toast(t('toast.copied', { value: `${[...value].length} ${t('textTool.characters')}` }));
+    toast.add({
+      title: t('toast.copied', { value: `${[...value].length} ${t('textTool.characters')}` }),
+    });
     record('text', t('textTool.copy'), `${[...value].length} ${t('textTool.characters')}`, value);
   };
   const copyDetail = (entry: string, count: number) => {
     const copied = `${entry}: ${count}`;
     navigator.clipboard?.writeText(copied).catch(() => {});
-    toast(t('toast.copied', { value: copied }));
+    toast.add({ title: t('toast.copied', { value: copied }) });
     record('text', t('textTool.copied'), copied, value);
   };
   const sorted = (details: Array<[string, number]>) =>

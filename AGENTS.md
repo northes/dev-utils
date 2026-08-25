@@ -44,7 +44,8 @@ Wails v3(beta)桌面托盘应用:Go 后端 + React 19 前端。本地优先的�
 - UI 分层:根布局与状态(`App.tsx`:页面路由、侧栏、命令面板、持久化)与工具组件分离。**每个工具封装为独立组件文件** `frontend/src/components/`(如 `JsonTool.tsx`、`TimeTool.tsx`、`TextTool.tsx`),在 `App.tsx` 引入;共享 UI 原语与类型(`Reveal`/`ToolHeader`/`samples`/`ToolId`/`PendingAction`/`Icon`)集中在 `frontend/src/components/shared.tsx`。
 - 前端代码使用 Prettier 格式化；编辑时保持现有格式，避免产生无关的格式化变更。
 - 样式入口在 `frontend/src/index.css`(Tailwind v4 + shadcn/ui),主题变量定义在 `frontend/src/styles/globals.css`(shadcn `:root`/`.dark` oklch 变量 + 功能必需的 `--success`/`--warning` 语义色)。body 为 `user-select:none`。
-- UI 组件统一用 shadcn/ui(`frontend/src/components/ui/`,复制进项目的源码,非黑盒 npm 包):`Button` 用 `onClick`+`disabled`,`Switch` 用 `checked`+`onCheckedChange`,`Select` 用 `value`+`onValueChange`,`Toggle` 用 `pressed`+`onPressedChange`,`AlertDialog` 用 `open`+`onOpenChange`(在 Root 上)。variant 语义映射:项目内部 `primary`→`default`、`secondary`→`outline`、`tertiary`→`ghost`、`danger`→`destructive`。
+- UI 组件统一用 shadcn/ui(`frontend/src/components/ui/`,复制进项目的源码,非黑盒 npm 包):安装、检索、查看文档和更新组件必须使用 shadcn skill 及 `npx shadcn@latest` CLI，禁止使用 Context7 查询，也不要手工从 GitHub/raw URL 抓取组件源码。新增前先检查已安装组件并使用 `npx shadcn@latest search`，安装使用 `npx shadcn@latest add`；更新已有组件先使用 `--dry-run` 和 `--diff`，未经用户明确同意不得使用 `--overwrite`。安装或更新后必须阅读涉及文件，检查依赖、导入路径、组件组合和项目约束。
+- UI 组件使用约定:`Button` 用 `onClick`+`disabled`,`Switch` 用 `checked`+`onCheckedChange`,`Select` 用 `value`+`onValueChange`,`Toggle` 用 `pressed`+`onPressedChange`,`AlertDialog` 用 `open`+`onOpenChange`(在 Root 上)。variant 语义映射:项目内部 `primary`→`default`、`secondary`→`outline`、`tertiary`→`ghost`、`danger`→`destructive`。
 - Base UI Select 使用受控 `value` + `SelectValue` 时，Select Root 必须传入与 `SelectItem` 对应的 `items`（`value`/`label`）；`options` 必须复用 i18n label，避免选中态显示内部 ID 而泄漏给用户。
 - 图标来自 `@phosphor-icons/react`,统一 `weight="duotone"` 双色风格(状态区分除外,如选中态用 `fill`)。字体用系统默认栈,`frontend/public/` 内的 Inter TTF 未引用,勿在 CSS 引入。
 - 图标按钮位于 flex 布局(尤其输入框右侧操作区)时,必须显式设置相等的 `width` 与 `min-width`、`flex:none`/`flex-shrink:0`，并按需要清除横向 padding；否则长输入或窄窗口会把按钮左右压扁。
@@ -152,7 +153,9 @@ Wails v3(beta)桌面托盘应用:Go 后端 + React 19 前端。本地优先的�
 - 破坏性操作(清空历史、注释压缩等)执行前必须 AlertDialog 二次确认,确认按钮额外加 `className="bg-destructive text-destructive-foreground hover:bg-destructive/90"`。
 
 ### shadcn/ui 易踩坑
-- shadcn 组件是复制进 `frontend/src/components/ui/` 的源码,直接改源码(图标已统一换成 `@phosphor-icons/react`),不要当黑盒 npm 包用。
+- shadcn 组件是复制进 `frontend/src/components/ui/` 的源码,通过 shadcn skill 和 CLI 安装后可直接改源码(图标已统一换成 `@phosphor-icons/react`),不要当黑盒 npm 包用；组件不存在时先用 shadcn CLI 搜索，不要直接编写重复的自定义组件。
+- 遵循 shadcn skill 的组合规则：优先使用已有组件和内置 variant；表单使用 `FieldGroup`/`Field`，选项组使用 `ToggleGroup`，提示使用 `Alert`，空状态使用 `Empty`，分隔线使用 `Separator`，加载占位使用 `Skeleton`，不要用等价的手写 markup 替代。
+- 使用组件前按 shadcn skill 流程运行 `npx shadcn@latest docs <component>` 获取文档和示例；不得通过 Context7 查询组件 API 或文档。
 - 项目内部的语义 variant(`primary/secondary/tertiary/danger`)只在 `ToolActionBar` 等自有类型里使用,落到 shadcn `Button` 时按 `default/outline/ghost/destructive` 映射,不要直接给 shadcn 组件传 `variant="primary"`。
 
 ### 托盘与窗口、配置持久化
