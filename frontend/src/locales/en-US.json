@@ -137,6 +137,7 @@
       "clipboardReadFailed": "Unable to read the clipboard; check permissions",
       "clipboardWriteFailed": "Unable to write to the clipboard; check permissions",
       "addItem": "Add node",
+      "templateNotice": "A template step already exists. The new node was added before it because the template must be last",
       "empty": "Add a node to start the workflow",
       "type": "Step type",
       "enableItem": "Enable step",

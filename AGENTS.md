@@ -127,6 +127,7 @@ Wails v3(beta)桌面托盘应用:Go 后端 + React 19 前端。本地优先的�
 ### CodeMirror 与 JSON
 - CodeMirror 基础主题给聚焦编辑器 `outline:1px dotted`(虚线);统一加 `.cm-editor.cm-focused{outline:none}`,用容器 `:focus-within` 实线边框表示聚焦,否则 `overflow:visible` 的编辑器会露出虚线。
 - 支持注释的 JSON:语法高亮用 `codemirror-json5`(节点名与 lezer-json 一致,折叠可用);解析前用 shared.tsx 的 `stripJsonComments`/`stripTrailingCommas`/`parseJsonLoose`(字符串感知)剥离注释与尾逗号。
+- 所有展示 JSON/JSON5 结构的 CodeMirror 都必须接入统一的 `codeFolding` 扩展;对象和数组折叠占位符分别显示 key 与 items 数量,工作流输出也必须遵守,不得只接入 `json5()`。
 - 带注释内容执行格式化/压缩:先弹 AlertDialog 询问(格式化:尝试保留/清除注释/取消;压缩:清除/取消);失败用 toast 提示,不静默忽略。
 
 ### 新增工具接线清单(JWT 等)

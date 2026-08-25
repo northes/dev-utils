@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react';
+import { useLayoutEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import CodeMirror from '@uiw/react-codemirror';
 import { json5 } from 'codemirror-json5';
@@ -23,9 +23,10 @@ import { CSS } from '@dnd-kit/utilities';
 import { Button } from './ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Switch } from './ui/switch';
-import { DotsSixVertical, Trash, WarningCircle } from '@phosphor-icons/react';
+import { DotsSixVertical, Trash } from '@phosphor-icons/react';
 import type { Extension } from '@codemirror/state';
 import { pathCompletions, valueCompletions } from './JsonPathCompletion';
+import { JsonErrorPanel } from './JsonErrorPanel';
 import { isObject } from './JsonWorkflowEngine';
 import type {
   WorkflowContexts,
@@ -106,7 +107,8 @@ export function parseWorkflowConfig(source: string): WorkflowItem[] {
     return item;
   });
   if (result.filter((item) => item.type === 'template').length > 1) throw new WorkflowConfigError();
-  return result;
+  const template = result.find((item) => item.type === 'template');
+  return template ? [...result.filter((item) => item !== template), template] : result;
 }
 export function serializeWorkflow(rules: WorkflowItem[]): string {
   return JSON.stringify({ version: 1, items: rules.map(({ id, ...item }) => item) }, null, 2);
@@ -159,6 +161,7 @@ function PathField({
   template = false,
   completion = true,
   values,
+  onCreate,
 }: {
   label: string;
   value: string;
@@ -169,6 +172,7 @@ function PathField({
   template?: boolean;
   completion?: boolean;
   values?: unknown[];
+  onCreate?: (view: EditorView) => void;
 }) {
   const rootRef = useRef(root);
   const valuesRef = useRef(values);
@@ -207,7 +211,10 @@ function PathField({
           closeBrackets: false,
         }}
         extensions={extensions}
-        onCreateEditor={(view) => view.contentDOM.setAttribute('aria-label', label)}
+        onCreateEditor={(view) => {
+          view.contentDOM.setAttribute('aria-label', label);
+          onCreate?.(view);
+        }}
       />
     </label>
   );
@@ -244,6 +251,7 @@ function WorkflowRuleRow({
   onUpdate,
   onTypeChange,
   onRemove,
+  onFirstEditorCreate,
 }: {
   item: WorkflowItem;
   index: number;
@@ -255,6 +263,7 @@ function WorkflowRuleRow({
   onUpdate: (id: string, patch: Partial<WorkflowItem>) => void;
   onTypeChange: (item: WorkflowItem, type: WorkflowItemType) => void;
   onRemove: (id: string) => void;
+  onFirstEditorCreate: (id: string, view: EditorView) => void;
 }) {
   const { t } = useTranslation();
   const {
@@ -327,6 +336,7 @@ function WorkflowRuleRow({
             onChange={(value) => onUpdate(item.id, { path: value })}
             root={root}
             theme={theme}
+            onCreate={(view) => onFirstEditorCreate(item.id, view)}
           />
         )}{' '}
         {item.type === 'sort' && (
@@ -360,6 +370,7 @@ function WorkflowRuleRow({
               onChange={(value) => onUpdate(item.id, { arrayPath: value })}
               root={root}
               theme={theme}
+              onCreate={(view) => onFirstEditorCreate(item.id, view)}
             />
             <PathField
               label={t('jsonTool.workflow.itemPath')}
@@ -389,6 +400,7 @@ function WorkflowRuleRow({
               onChange={(value) => onUpdate(item.id, { arrayPath: value })}
               root={root}
               theme={theme}
+              onCreate={(view) => onFirstEditorCreate(item.id, view)}
             />
             <PathField
               label={t('jsonTool.workflow.itemPath')}
@@ -419,6 +431,7 @@ function WorkflowRuleRow({
             root={root}
             theme={theme}
             template
+            onCreate={(view) => onFirstEditorCreate(item.id, view)}
           />
         )}{' '}
       </div>
@@ -432,21 +445,31 @@ export function WorkflowPanel({
   output,
   error,
   theme,
+  foldExt,
   onChange,
   onRemove,
   onMove,
+  focusItemId,
+  onFocusHandled,
 }: {
   rules: WorkflowItem[];
   contexts: WorkflowContexts;
   output: string;
   error: WorkflowError | null;
   theme: Extension;
+  foldExt: Extension;
   onChange: (update: WorkflowItem[] | ((rules: WorkflowItem[]) => WorkflowItem[])) => void;
   onRemove: (id: string) => void;
   onMove: (from: number, to: number) => void;
+  focusItemId: string | null;
+  onFocusHandled: () => void;
 }) {
   const { t } = useTranslation();
   const { roots: root, itemRoots, filterValues } = contexts;
+  const listRef = useRef<HTMLDivElement>(null);
+  const editorViews = useRef(new Map<string, EditorView>());
+  const focusItemIdRef = useRef(focusItemId);
+  focusItemIdRef.current = focusItemId;
   const hasTemplate = rules.some((item) => item.type === 'template');
   const labels = {
     extract: t('jsonTool.workflow.types.extract'),
@@ -463,7 +486,18 @@ export function WorkflowPanel({
     onChange((current) => current.map((item) => (item.id === id ? { ...item, ...patch } : item)));
   const updateType = (item: WorkflowItem, type: WorkflowItemType) => {
     if (type === 'template' && hasTemplate && item.type !== 'template') return;
-    update(item.id, { type });
+    if (type !== 'template') {
+      update(item.id, { type });
+      return;
+    }
+    onChange((current) => {
+      const next = current.map((currentItem) =>
+        currentItem.id === item.id ? { ...currentItem, type } : currentItem,
+      );
+      const changed = next.find((currentItem) => currentItem.id === item.id);
+      if (!changed) return current;
+      return [...next.filter((currentItem) => currentItem.id !== item.id), changed];
+    });
   };
   const move = (from: number, to: number) => {
     if (from === to || to < 0 || to >= rules.length) return;
@@ -475,15 +509,32 @@ export function WorkflowPanel({
     const to = rules.findIndex((item) => item.id === String(over.id));
     move(from, to);
   };
+  const focusAddedItem = (id: string, view: EditorView) => {
+    editorViews.current.set(id, view);
+    if (focusItemIdRef.current !== id) return;
+    const list = listRef.current;
+    if (!list) return;
+    list.scrollTop = list.scrollHeight;
+    view.focus();
+    onFocusHandled();
+  };
+  useLayoutEffect(() => {
+    if (!focusItemId) return;
+    const view = editorViews.current.get(focusItemId);
+    if (view) focusAddedItem(focusItemId, view);
+  }, [focusItemId]);
   return (
     <div className="json-workflow-panel grid h-full min-h-0 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-3 @max-[959px]/json-page:grid-cols-2 @max-[959px]/json-page:grid-rows-1 @min-[960px]/json-page:contents">
       <section className="json-workflow-rules flex min-h-0 min-w-0 flex-col [container-name:workflow-rules] [container-type:inline-size] @min-[960px]/json-page:h-full @min-[960px]/json-page:min-h-0">
-        <div className="json-workflow-section-header flex min-h-7 flex-none items-center justify-between gap-2 border-b border-border">
+        <div className="json-workflow-section-header flex h-[18px] min-h-[18px] flex-none items-start justify-between gap-2">
           <span className="font-mono text-[10px] font-medium leading-none tracking-[.04em] text-muted-foreground uppercase">
             {t('jsonTool.workflow.rules')}
           </span>
         </div>
-        <div className="json-workflow-list min-h-0 overflow-auto [scrollbar-gutter:auto]">
+        <div
+          ref={listRef}
+          className="json-workflow-list min-h-0 overflow-auto [scrollbar-gutter:auto]"
+        >
           {rules.length === 0 ? (
             <div className="json-workflow-empty flex min-h-[74px] items-center justify-center text-[11px] text-muted-foreground">
               {t('jsonTool.workflow.empty')}
@@ -507,6 +558,7 @@ export function WorkflowPanel({
                     onUpdate={update}
                     onTypeChange={updateType}
                     onRemove={onRemove}
+                    onFirstEditorCreate={focusAddedItem}
                   />
                 ))}
               </SortableContext>
@@ -515,49 +567,29 @@ export function WorkflowPanel({
         </div>
       </section>
       <section className="json-workflow-output flex min-h-0 min-w-0 flex-col @min-[960px]/json-page:h-full @min-[960px]/json-page:min-h-0">
-        <div className="json-workflow-section-header flex min-h-7 flex-none items-center justify-between gap-2 border-b border-border">
+        <div className="json-workflow-section-header flex h-[18px] min-h-[18px] flex-none items-start justify-between gap-2">
           <span className="font-mono text-[10px] font-medium leading-none tracking-[.04em] text-muted-foreground uppercase">
             {t('jsonTool.workflow.output')}
           </span>
         </div>
-        <div className="json-workflow-output-field flex min-h-0 flex-1 pt-2">
+        <div className="json-workflow-output-field flex min-h-0 flex-1">
           {error ? (
-            <div
-              className="json-workflow-error grid min-h-0 flex-1 grid-cols-[30px_minmax(0,420px)] content-start justify-center gap-3 border border-[color-mix(in_oklch,var(--destructive)_24%,var(--border))] bg-[color-mix(in_oklch,var(--destructive)_3%,var(--card))] px-[22px] pt-[clamp(32px,14%,140px)] pb-6 text-[11px] text-foreground"
-              role="alert"
-            >
-              <div
-                className="json-workflow-error-icon grid size-7 place-items-center rounded-full border border-[color-mix(in_oklch,var(--destructive)_58%,var(--border))] text-destructive"
-                aria-hidden="true"
-              >
-                <WarningCircle size={18} weight="duotone" />
-              </div>
-              <div className="json-workflow-error-content grid min-w-0 gap-2 pt-0.5">
-                <div className="json-workflow-error-heading flex min-w-0 flex-wrap items-center gap-[9px] leading-tight">
-                  <strong className="text-[13px] font-semibold tracking-[-.01em]">
-                    {t('jsonTool.workflow.errorTitle')}
-                  </strong>
-                  {error.item !== undefined && (
-                    <span className="json-workflow-error-item rounded-[calc(var(--radius)-4px)] border border-[color-mix(in_oklch,var(--destructive)_30%,var(--border))] bg-[color-mix(in_oklch,var(--destructive)_5%,var(--card))] px-1.5 py-1 font-mono text-[10px] font-medium leading-none tracking-[.04em] text-destructive">
-                      {t('jsonTool.workflow.errorItem', {
-                        item: String(error.item + 1).padStart(2, '0'),
-                      })}
-                    </span>
-                  )}
-                </div>
-                <p className="json-workflow-error-message m-0 text-xs leading-6 text-muted-foreground">
-                  {t(`jsonTool.workflow.errors.${error.code}`)}
-                </p>
-                {error.path && (
-                  <div className="json-workflow-error-path-row grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-2 pt-0.5 font-mono text-[10px] font-medium leading-none text-muted-foreground">
-                    <span className="font-sans">{t('jsonTool.workflow.errorPath')}</span>
-                    <code className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap rounded-[calc(var(--radius)-4px)] bg-muted px-2 py-1.5 font-inherit text-foreground">
-                      {error.path}
-                    </code>
-                  </div>
-                )}
-              </div>
-            </div>
+            <JsonErrorPanel
+              title={t('jsonTool.workflow.errorTitle')}
+              description={t(`jsonTool.workflow.errors.${error.code}`)}
+              item={
+                error.item !== undefined
+                  ? t('jsonTool.workflow.errorItem', {
+                      item: String(error.item + 1).padStart(2, '0'),
+                    })
+                  : undefined
+              }
+              path={
+                error.path
+                  ? { label: t('jsonTool.workflow.errorPath'), value: error.path }
+                  : undefined
+              }
+            />
           ) : (
             <CodeMirror
               className="json-cm json-workflow-cm flex min-h-0 flex-1"
@@ -565,7 +597,7 @@ export function WorkflowPanel({
               value={output}
               editable={false}
               theme={theme}
-              extensions={[json5(), EditorView.lineWrapping]}
+              extensions={[json5(), foldExt, EditorView.lineWrapping]}
               onCreateEditor={(view) =>
                 view.contentDOM.setAttribute('aria-label', t('jsonTool.workflow.output'))
               }

@@ -139,6 +139,7 @@
       "clipboardReadFailed": "无法读取剪贴板，请检查权限",
       "clipboardWriteFailed": "无法写入剪贴板，请检查权限",
       "addItem": "添加节点",
+      "templateNotice": "已存在模板步骤，新节点会添加到模板之前，因为模板必须是最后一步",
       "empty": "添加节点开始执行工作流",
       "type": "步骤类型",
       "enableItem": "启用步骤",

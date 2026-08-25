@@ -19,7 +19,7 @@ import { codeFolding, syntaxTree } from '@codemirror/language';
 import { EditorView, keymap } from '@codemirror/view';
 import { acceptCompletion } from '@codemirror/autocomplete';
 import { quietEditorTheme } from './codeMirrorTheme';
-import { Copy, DownloadSimple, Trash, UploadSimple, X } from '@phosphor-icons/react';
+import { Copy, DownloadSimple, Trash, UploadSimple } from '@phosphor-icons/react';
 import {
   formatJsonPreserve,
   hasComments,
@@ -34,6 +34,7 @@ import {
   type ToolId,
 } from './shared';
 import { toast } from './ui/toast';
+import { JsonErrorPanel } from './JsonErrorPanel';
 import '../styles/tools/editor.css';
 import '../styles/tools/json.css';
 import {
@@ -352,6 +353,7 @@ export default function JsonTool({
   const [result, setResult] = useState('');
   const [pathError, setPathError] = useState('');
   const [workflowRules, setWorkflowRules] = useState<WorkflowItem[]>([]);
+  const [workflowFocusId, setWorkflowFocusId] = useState<string | null>(null);
   const [commentDialog, setCommentDialog] = useState<null | {
     mode: 'format' | 'minify';
     pane: 'input' | 'result';
@@ -488,14 +490,17 @@ export default function JsonTool({
     window.dispatchEvent(new CustomEvent('devutils:json-workflow', { detail: workflowMode }));
   }, [workflowMode]);
   const workflow = useDebouncedWorkflowEvaluation(workflowMode, input, workflowRules);
-  const addWorkflowItem = () =>
+  const addWorkflowItem = () => {
+    const next = newWorkflowItem();
+    const hasTemplate = workflowRules.some((item) => item.type === 'template');
+    setWorkflowFocusId(next.id);
+    if (hasTemplate) toast.add({ title: t('jsonTool.workflow.templateNotice'), type: 'warning' });
     setWorkflowRules((r) => {
-      const next = newWorkflowItem();
-      const templateIndex = r.findIndex((item) => item.type === 'template');
-      return templateIndex < 0
-        ? [...r, next]
-        : [...r.slice(0, templateIndex), next, ...r.slice(templateIndex)];
+      const template = r.find((item) => item.type === 'template');
+      if (!template) return [...r, next];
+      return [...r.filter((item) => item.id !== template.id), next, template];
     });
+  };
   const removeWorkflowItem = (id: string) =>
     setWorkflowRules((r) => r.filter((item) => item.id !== id));
   const moveWorkflowItem = (from: number, to: number) =>
@@ -503,7 +508,13 @@ export default function JsonTool({
       if (from === to || to < 0 || to >= r.length) return r;
       const next = [...r];
       const [moved] = next.splice(from, 1);
-      next.splice(to, 0, moved);
+      if (!moved || moved.type === 'template') return r;
+      const templateIndex = next.findIndex((item) => item.type === 'template');
+      next.splice(
+        templateIndex < 0 ? Math.min(to, next.length) : Math.min(to, templateIndex),
+        0,
+        moved,
+      );
       return next;
     });
   const exportWorkflow = async () => {
@@ -770,9 +781,19 @@ export default function JsonTool({
   }, []);
   useEffect(() => {
     if (!schema) return;
+    if (!input.trim()) {
+      setResult('');
+      setPathError('');
+      return;
+    }
     const m = matchPath(input, path);
-    if (m.ok) setResult(m.source ?? JSON.stringify(m.value, null, 2));
-    setPathError(m.ok ? '' : fmtErr(m.error));
+    if (m.ok) {
+      setResult(m.source ?? JSON.stringify(m.value, null, 2));
+      setPathError('');
+    } else {
+      setResult('');
+      setPathError(fmtErr(m.error));
+    }
   }, [schema, input, path]);
   useEffect(() => {
     for (const v of views.current.values()) v.requestMeasure();
@@ -855,7 +876,7 @@ export default function JsonTool({
                     </span>
                     <div className="json-path-field flex min-h-0 min-w-0 flex-1">
                       <CodeMirror
-                        className="json-cm json-path-cm overflow-visible"
+                        className="json-cm json-path-cm"
                         height="100%"
                         value={path}
                         onChange={setPath}
@@ -875,21 +896,33 @@ export default function JsonTool({
                         placeholder={t('jsonTool.schemaPathPlaceholder')}
                       />
                     </div>
-                    {pathError ? (
-                      <span className="json-path-error flex items-center gap-1.5 overflow-hidden text-ellipsis whitespace-nowrap text-[11px] text-destructive">
-                        <X size={12} weight="duotone" />
-                        <span>{pathError}</span>
-                      </span>
-                    ) : null}
                   </div>
-                  <JsonEditorPane
-                    label={t('jsonTool.result')}
-                    value={result}
-                    readOnly
-                    foldExt={foldExt}
-                    onCreate={(v) => views.current.set('result', v)}
-                    theme={cmTheme}
-                  />
+                  <div className="json-pane flex min-h-0 min-w-0 flex-1 flex-col gap-2">
+                    <span className="json-pane-label flex-none font-mono text-[10px] font-medium leading-none tracking-[.04em] text-muted-foreground uppercase">
+                      {t('jsonTool.result')}
+                    </span>
+                    <div className="json-pane-editor flex min-h-0 min-w-0 flex-1">
+                      {pathError ? (
+                        <JsonErrorPanel
+                          title={t('jsonTool.workflow.errorTitle')}
+                          description={pathError}
+                        />
+                      ) : (
+                        <CodeMirror
+                          className="json-cm"
+                          height="100%"
+                          value={result}
+                          editable={false}
+                          theme={cmTheme}
+                          onCreateEditor={(v) => {
+                            v.contentDOM.setAttribute('aria-label', t('jsonTool.result'));
+                            views.current.set('result', v);
+                          }}
+                          extensions={[json5(), foldExt]}
+                        />
+                      )}
+                    </div>
+                  </div>
                 </>
               )}
               {workflowMode && (
@@ -900,6 +933,9 @@ export default function JsonTool({
                     output={workflow.output}
                     error={workflow.error}
                     theme={cmTheme}
+                    foldExt={foldExt}
+                    focusItemId={workflowFocusId}
+                    onFocusHandled={() => setWorkflowFocusId(null)}
                     onChange={setWorkflowRules}
                     onRemove={removeWorkflowItem}
                     onMove={moveWorkflowItem}

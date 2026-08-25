@@ -22,9 +22,6 @@
 .json-cm .cm-editor.cm-focused {
   outline: none;
 }
-.json-path-cm {
-  overflow: visible;
-}
 .json-workflow-path-cm {
   overflow: visible;
   border-color: var(--input);
