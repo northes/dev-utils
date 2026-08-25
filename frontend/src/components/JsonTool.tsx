@@ -670,6 +670,14 @@ export default function JsonTool({
       ]}
     />
   );
+  const jsonGridClass = workflowMode
+    ? 'grid-cols-2 grid-rows-[minmax(0,1fr)] gap-3 @max-[959px]/json-page:grid-cols-2 @max-[959px]/json-page:grid-rows-1 @min-[960px]/json-page:grid-cols-3 @min-[960px]/json-page:grid-rows-1'
+    : schema
+      ? 'grid-cols-2 grid-rows-[minmax(0,1fr)] gap-3 @max-[959px]/json-page:grid-cols-2 @max-[959px]/json-page:grid-rows-1 @min-[960px]/json-page:grid-cols-3 @min-[960px]/json-page:grid-rows-1'
+      : 'grid-cols-1 grid-rows-[minmax(0,1fr)] gap-0';
+  const footerGridClass = schema || workflowMode
+    ? 'grid-cols-[minmax(0,1fr)_minmax(0,1fr)] @max-[959px]/json-page:grid-cols-2 @min-[960px]/json-page:grid-cols-3'
+    : 'grid-cols-1';
   useEffect(() => {
     if (!pending || pending.tool !== 'json' || consumed.current === pending) return;
     consumed.current = pending;
@@ -803,7 +811,7 @@ export default function JsonTool({
         contentMode="fixed"
         footer={
           <div
-            className={`json-footer-actions grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-start gap-3 @max-[959px]/json-page:grid-cols-2 @min-[960px]/json-page:grid-cols-3${workflowMode ? ' workflow-layout' : ''}${schema || workflowMode ? '' : ' single grid-cols-1'}`}
+            className={`json-footer-actions grid items-start gap-3 ${footerGridClass}${workflowMode ? ' workflow-layout' : ''}`}
           >
             {editorActions('input')}
             {schema && editorActions('result')}
@@ -822,7 +830,7 @@ export default function JsonTool({
       >
         <div className="json-content h-full min-h-0 overflow-hidden">
           <div
-            className={`json-schema-layout grid h-full min-h-0 min-w-0 grid-cols-2 grid-rows-[minmax(0,1fr)] gap-3 @max-[959px]/json-page:grid-cols-2 @max-[959px]/json-page:grid-rows-1 @min-[960px]/json-page:grid-cols-3 @min-[960px]/json-page:grid-rows-1${workflowMode ? ' workflow-layout' : ''}${schema || workflowMode ? '' : ' single grid-cols-1 gap-0'}`}
+            className={`json-schema-layout grid h-full min-h-0 min-w-0 ${jsonGridClass}${workflowMode ? ' workflow-layout' : ''}`}
           >
             <JsonEditorPane
               label={t('jsonTool.input')}

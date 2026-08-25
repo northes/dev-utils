@@ -134,7 +134,7 @@ function WorkflowSelect({
       }}
     >
       <SelectTrigger
-        className={`json-workflow-select h-[30px] min-h-[30px] min-w-0 flex-1 px-[9px] text-[11px] ${className}`.trim()}
+        className={`json-workflow-select h-[30px] min-h-[30px] w-full min-w-0 flex-1 justify-self-stretch px-[9px] text-[11px] ${className}`.trim()}
         aria-label={label}
       >
         <SelectValue />
@@ -275,9 +275,9 @@ function WorkflowRuleRow({
     <div
       ref={setNodeRef}
       style={style}
-      className={`json-workflow-item border-b border-border px-3 pt-3.5 pb-4${item.enabled ? '' : ' opacity-[.55]'}${isDragging ? ' bg-[color-mix(in_oklch,var(--primary)_12%,transparent)]' : ''}`}
+      className={`json-workflow-item border-b border-border px-3 pt-3.5 pb-6${item.enabled ? '' : ' opacity-[.55]'}${isDragging ? ' bg-[color-mix(in_oklch,var(--primary)_12%,transparent)]' : ''}`}
     >
-      <div className="json-workflow-item-header grid min-w-0 grid-cols-[28px_24px_minmax(0,1fr)_36px_28px] items-center gap-2">
+      <div className="json-workflow-item-header grid min-w-0 grid-cols-[28px_24px_minmax(0,1fr)_28px_28px] items-center gap-2">
         <Button
           ref={setActivatorNodeRef}
           variant="ghost"
@@ -298,7 +298,7 @@ function WorkflowRuleRow({
           value={item.type}
           options={typeOptions.map((type) => ({ key: type, label: labels[type] }))}
           onSelect={(value) => onTypeChange(item, value as WorkflowItemType)}
-          className="json-workflow-type w-full min-w-0"
+          className="json-workflow-type w-full min-w-0 justify-self-stretch"
         />
         <Switch
           size="sm"
@@ -318,7 +318,7 @@ function WorkflowRuleRow({
           <Trash size={14} weight="duotone" />
         </Button>
       </div>
-      <div className="json-workflow-item-body min-w-0 pt-2.5 pl-[66px] max-[700px]:pl-0">
+      <div className="json-workflow-item-body min-w-0 pt-2.5 pl-[66px] @max-[520px]/workflow-rules:pl-0">
         {item.type === 'extract' && (
           <PathField
             label={t('jsonTool.workflow.path')}
@@ -330,7 +330,7 @@ function WorkflowRuleRow({
           />
         )}{' '}
         {item.type === 'sort' && (
-          <div className="json-workflow-inline-fields grid grid-cols-2 gap-x-2 gap-y-2.5 max-[700px]:grid-cols-1">
+          <div className="json-workflow-inline-fields grid grid-cols-2 gap-x-2 gap-y-2.5 @max-[520px]/workflow-rules:grid-cols-1">
             <SelectField
               label={t('jsonTool.workflow.sortMode')}
               value={item.sortMode}
@@ -352,7 +352,7 @@ function WorkflowRuleRow({
           </div>
         )}{' '}
         {item.type === 'arraySort' && (
-          <div className="json-workflow-fields grid grid-cols-2 gap-x-2 gap-y-2.5 max-[700px]:grid-cols-1">
+          <div className="json-workflow-fields grid grid-cols-2 gap-x-2 gap-y-2.5 @max-[520px]/workflow-rules:grid-cols-1">
             <PathField
               label={t('jsonTool.workflow.arrayPath')}
               value={item.arrayPath}
@@ -381,7 +381,7 @@ function WorkflowRuleRow({
           </div>
         )}{' '}
         {item.type === 'filter' && (
-          <div className="json-workflow-fields grid grid-cols-2 gap-x-2 gap-y-2.5 max-[700px]:grid-cols-1">
+          <div className="json-workflow-fields grid grid-cols-2 gap-x-2 gap-y-2.5 @max-[520px]/workflow-rules:grid-cols-1">
             <PathField
               label={t('jsonTool.workflow.arrayPath')}
               value={item.arrayPath}
@@ -476,7 +476,7 @@ export function WorkflowPanel({
     move(from, to);
   };
   return (
-    <div className="json-workflow-panel grid h-full min-h-0 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-3 @max-[959px]/json-page:grid-cols-2 @max-[959px]/json-page:grid-rows-1 @min-[960px]/json-page:grid-cols-3 @min-[960px]/json-page:grid-rows-1">
+    <div className="json-workflow-panel grid h-full min-h-0 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-3 @max-[959px]/json-page:grid-cols-2 @max-[959px]/json-page:grid-rows-1 @min-[960px]/json-page:contents">
       <section className="json-workflow-rules flex min-h-0 min-w-0 flex-col [container-name:workflow-rules] [container-type:inline-size] @min-[960px]/json-page:h-full @min-[960px]/json-page:min-h-0">
         <div className="json-workflow-section-header flex min-h-7 flex-none items-center justify-between gap-2 border-b border-border">
           <span className="font-mono text-[10px] font-medium leading-none tracking-[.04em] text-muted-foreground uppercase">
