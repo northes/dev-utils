@@ -1175,15 +1175,16 @@ function AppShell() {
     <>
       <Toaster />
       <OverlayScrollbar />
-      <div className="app-shell relative grid h-dvh grid-rows-[var(--titlebar-height)_minmax(0,1fr)] bg-background">
+      <div className="app-shell relative grid h-dvh grid-rows-[38px_minmax(0,1fr)] bg-background">
         <div className="ambient pointer-events-none absolute inset-0 z-0" />
         <header
-          className="titlebar relative z-[2] flex h-[var(--titlebar-height)] items-center border-b border-border bg-background px-4 pl-[76px] [--wails-draggable:drag]"
+          className="titlebar relative z-[2] flex h-full items-center border-b border-border bg-background px-4 pl-[76px] [--wails-draggable:drag]"
           data-wails-drag
         >
           <Button
             variant="ghost"
-            className="sidebar-toggle relative top-px grid size-7 min-w-7 flex-none place-items-center self-center rounded-(--radius) p-0 text-muted-foreground [--wails-draggable:no-drag] hover:bg-muted hover:text-foreground"
+            size="icon-sm"
+            className="sidebar-toggle relative top-px flex-none self-center rounded-lg text-muted-foreground [--wails-draggable:no-drag] hover:bg-muted hover:text-foreground"
             onClick={cycleSidebar}
             aria-label={t('sidebar.toggle')}
             title={t('sidebar.toggle')}
@@ -1194,7 +1195,8 @@ function AppShell() {
             <Button
               variant="ghost"
               disabled={!canGoBack}
-              className="titlebar-navigation-button grid size-7 min-w-7 flex-none place-items-center rounded-(--radius) p-0 text-muted-foreground hover:bg-muted hover:text-foreground [&_svg]:size-[15px]"
+              size="icon-sm"
+              className="titlebar-navigation-button flex-none text-muted-foreground hover:bg-muted hover:text-foreground [&_svg]:size-[15px]"
               onClick={() => routerNavigate(-1)}
               aria-label={t('titlebar.back')}
               title={t('titlebar.back')}
@@ -1204,7 +1206,8 @@ function AppShell() {
             <Button
               variant="ghost"
               disabled={!canGoForward}
-              className="titlebar-navigation-button grid size-7 min-w-7 flex-none place-items-center rounded-(--radius) p-0 text-muted-foreground hover:bg-muted hover:text-foreground [&_svg]:size-[15px]"
+              size="icon-sm"
+              className="titlebar-navigation-button flex-none text-muted-foreground hover:bg-muted hover:text-foreground [&_svg]:size-[15px]"
               onClick={() => routerNavigate(1)}
               aria-label={t('titlebar.forward')}
               title={t('titlebar.forward')}
@@ -1224,7 +1227,7 @@ function AppShell() {
           >
             {' '}
             <div
-              className={`tool-slot h-full min-h-0 overflow-hidden${page === 'json' ? '' : ' hidden'}`}
+              className={`tool-slot h-full min-h-0 overflow-hidden${page === 'json' ? '' : ' is-hidden absolute inset-0 invisible pointer-events-none'}`}
             >
               {visited.has('json') && (
                 <Suspense fallback={null}>
@@ -1243,7 +1246,7 @@ function AppShell() {
               )}
             </div>
             <div
-              className={`tool-slot h-full min-h-0 overflow-hidden${page === 'time' ? '' : ' hidden'}`}
+              className={`tool-slot h-full min-h-0 overflow-hidden${page === 'time' ? '' : ' is-hidden absolute inset-0 invisible pointer-events-none'}`}
             >
               {visited.has('time') && (
                 <Suspense fallback={null}>
@@ -1262,7 +1265,7 @@ function AppShell() {
               )}
             </div>
             <div
-              className={`tool-slot h-full min-h-0 overflow-hidden${page === 'text' ? '' : ' hidden'}`}
+              className={`tool-slot h-full min-h-0 overflow-hidden${page === 'text' ? '' : ' is-hidden absolute inset-0 invisible pointer-events-none'}`}
             >
               {visited.has('text') && (
                 <Suspense fallback={null}>
@@ -1277,7 +1280,7 @@ function AppShell() {
               )}
             </div>
             <div
-              className={`tool-slot h-full min-h-0 overflow-hidden${page === 'base64' ? '' : ' hidden'}`}
+              className={`tool-slot h-full min-h-0 overflow-hidden${page === 'base64' ? '' : ' is-hidden absolute inset-0 invisible pointer-events-none'}`}
             >
               {visited.has('base64') && (
                 <Suspense fallback={null}>
@@ -1292,7 +1295,7 @@ function AppShell() {
               )}
             </div>
             <div
-              className={`tool-slot h-full min-h-0 overflow-hidden${page === 'diff' ? '' : ' hidden'}`}
+              className={`tool-slot h-full min-h-0 overflow-hidden${page === 'diff' ? '' : ' is-hidden absolute inset-0 invisible pointer-events-none'}`}
             >
               {visited.has('diff') && (
                 <Suspense fallback={null}>
@@ -1315,7 +1318,7 @@ function AppShell() {
               )}
             </div>
             <div
-              className={`tool-slot h-full min-h-0 overflow-hidden${page === 'jwt' ? '' : ' hidden'}`}
+              className={`tool-slot h-full min-h-0 overflow-hidden${page === 'jwt' ? '' : ' is-hidden absolute inset-0 invisible pointer-events-none'}`}
             >
               {visited.has('jwt') && (
                 <Suspense fallback={null}>
@@ -1330,7 +1333,7 @@ function AppShell() {
               )}
             </div>
             <div
-              className={`tool-slot h-full min-h-0 overflow-hidden${page === 'url' ? '' : ' hidden'}`}
+              className={`tool-slot h-full min-h-0 overflow-hidden${page === 'url' ? '' : ' is-hidden absolute inset-0 invisible pointer-events-none'}`}
             >
               {visited.has('url') && (
                 <Suspense fallback={null}>
@@ -1345,7 +1348,7 @@ function AppShell() {
               )}
             </div>
             <div
-              className={`tool-slot h-full min-h-0 overflow-hidden${page === 'settings' ? '' : ' hidden'}`}
+              className={`tool-slot h-full min-h-0 overflow-hidden${page === 'settings' ? ' h-auto min-h-full overflow-visible' : ' is-hidden absolute inset-0 invisible pointer-events-none'}`}
             >
               {visited.has('settings') && (
                 <Suspense fallback={null}>
@@ -1360,7 +1363,7 @@ function AppShell() {
               )}
             </div>
             <div
-              className={`tool-slot h-full min-h-0 overflow-hidden${page === 'history' ? '' : ' hidden'}`}
+              className={`tool-slot h-full min-h-0 overflow-hidden${page === 'history' ? '' : ' is-hidden absolute inset-0 invisible pointer-events-none'}`}
             >
               {visited.has('history') && (
                 <Suspense fallback={null}>
@@ -1388,7 +1391,7 @@ function AppShell() {
           if (!open) setMatchDialog(null);
         }}
       >
-        <AlertDialogContent className="json-comment-dialog">
+        <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>{t('matchDialog.title')}</AlertDialogTitle>
             <AlertDialogDescription>
@@ -1400,6 +1403,7 @@ function AppShell() {
           <AlertDialogFooter>
             <AlertDialogCancel>{t('matchDialog.cancel')}</AlertDialogCancel>
             <AlertDialogAction
+              variant="destructive"
               onClick={() => {
                 const d = matchDialog;
                 setMatchDialog(null);
@@ -1559,13 +1563,13 @@ function Sidebar({
           <Button
             key={tool.id}
             variant="ghost"
-            className={`sidebar-item flex h-auto min-h-0 w-full items-center justify-start gap-2.5 rounded-(--radius) px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground [&_svg]:size-[17px]${page === tool.id ? ' bg-primary text-primary-foreground' : ''}`}
+            className={`sidebar-item flex h-auto min-h-0 w-full items-center justify-start gap-2.5 rounded-lg px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground [&_svg]:size-[17px]${page === tool.id ? ' bg-primary text-primary-foreground' : ''}`}
             aria-current={page === tool.id ? 'page' : undefined}
             aria-label={t(tool.nameKey)}
             title={t(tool.nameKey)}
             onClick={() => onNavigate(tool.id)}
           >
-            <tool.icon size={17} weight="duotone" />
+            <tool.icon data-icon="inline-start" size={17} weight="duotone" />
             <span>{t(tool.nameKey)}</span>
           </Button>
         ))}
@@ -1576,13 +1580,13 @@ function Sidebar({
         </div>
         <Button
           variant="ghost"
-          className={`sidebar-item flex h-auto min-h-0 w-full items-center justify-start gap-2.5 rounded-(--radius) px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground [&_svg]:size-[17px]${page === 'history' ? ' bg-primary text-primary-foreground' : ''}`}
+          className={`sidebar-item flex h-auto min-h-0 w-full items-center justify-start gap-2.5 rounded-lg px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground [&_svg]:size-[17px]${page === 'history' ? ' bg-primary text-primary-foreground' : ''}`}
           aria-current={page === 'history' ? 'page' : undefined}
           aria-label={t('titlebar.history')}
           title={t('titlebar.history')}
           onClick={() => onNavigate('history')}
         >
-          <ClockCounterClockwise size={17} weight="duotone" />
+          <ClockCounterClockwise data-icon="inline-start" size={17} weight="duotone" />
           <span>{t('titlebar.history')}</span>
         </Button>
       </nav>
@@ -1592,25 +1596,25 @@ function Sidebar({
         </div>
         <Button
           variant="ghost"
-          className={`sidebar-item flex h-auto min-h-0 w-full items-center justify-start gap-2.5 rounded-(--radius) px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground [&_svg]:size-[17px]${page === 'settings' ? ' bg-primary text-primary-foreground' : ''}`}
+          className={`sidebar-item flex h-auto min-h-0 w-full items-center justify-start gap-2.5 rounded-lg px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground [&_svg]:size-[17px]${page === 'settings' ? ' bg-primary text-primary-foreground' : ''}`}
           aria-current={page === 'settings' ? 'page' : undefined}
           aria-label={t('titlebar.settings')}
           title={t('titlebar.settings')}
           onClick={() => onNavigate('settings')}
         >
-          <GearSix size={17} weight="duotone" />
+          <GearSix data-icon="inline-start" size={17} weight="duotone" />
           <span>{t('titlebar.settings')}</span>
         </Button>
       </nav>
-      <div className="sidebar-footer">
+      <div className="sidebar-footer mt-auto flex-none border-t border-border pt-3.5">
         <Button
           variant="ghost"
-          className="sidebar-palette flex h-auto min-h-0 w-full items-center justify-start gap-2.5 rounded-(--radius) px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground [&_svg]:size-[17px]"
+          className="sidebar-palette flex h-auto min-h-0 w-full items-center justify-start gap-2.5 rounded-lg px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground [&_svg]:size-[17px]"
           onClick={onOpenPalette}
           aria-label={t('statusbar.openPalette')}
           title={t('statusbar.openPalette')}
         >
-          <CommandIcon size={17} weight="duotone" />
+          <CommandIcon data-icon="inline-start" size={17} weight="duotone" />
           <span className="min-w-0 flex-1 truncate">{t('statusbar.openPalette')}</span>
           <span className="ml-auto flex shrink-0 items-center gap-1">
             <kbd className="rounded-sm bg-muted px-1 text-[10px] leading-4 text-muted-foreground">

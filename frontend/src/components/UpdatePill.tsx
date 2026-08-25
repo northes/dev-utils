@@ -119,10 +119,7 @@ export default function UpdatePill() {
         className="relative top-px z-[3] flex h-6 max-w-[min(340px,calc(100vw-220px))] flex-none items-center self-center gap-1.5 ml-auto rounded-full border border-border bg-card px-2 py-0 text-foreground [--wails-draggable:no-drag]"
         role="status"
       >
-        <Spinner
-          className="flex-none self-center text-(--primary) motion-reduce:animate-none"
-          size={14}
-        />
+        <Spinner className="size-3.5 flex-none self-center text-primary motion-reduce:animate-none" />
         <span className="block min-w-0 self-center overflow-hidden text-ellipsis whitespace-nowrap text-[10px] leading-[14px] text-foreground">
           {label}
           {state === 'downloading' && percent > 0 ? ` ${percent}%` : ''}
@@ -140,19 +137,20 @@ export default function UpdatePill() {
         onClick={start}
         aria-label={label}
       >
-        <ArrowCircleUp size={14} weight="duotone" />
+        <ArrowCircleUp data-icon="inline-start" size={14} weight="duotone" />
         <span className="block min-w-0 self-center overflow-hidden text-ellipsis whitespace-nowrap text-[10px] leading-[14px] text-foreground">
           {label}
         </span>
       </Button>
       <Button
         variant="ghost"
-        className="grid h-3.5 min-w-3.5 w-3.5 flex-none cursor-pointer place-items-center rounded-full border-0 bg-transparent p-0 text-muted-foreground opacity-[.72] hover:bg-accent hover:text-foreground hover:opacity-100 [&_svg]:size-[11px] [&_svg]:shrink-0"
+        size="icon-xs"
+        className="flex-none cursor-pointer rounded-full border-0 bg-transparent text-muted-foreground opacity-[.72] hover:bg-accent hover:text-foreground hover:opacity-100 [&_svg]:size-[11px] [&_svg]:shrink-0"
         aria-label={t('updatePill.dismiss')}
         title={t('updatePill.dismiss')}
         onClick={dismiss}
       >
-        <X size={11} weight="bold" />
+        <X size={11} weight="duotone" />
       </Button>
     </div>
   );

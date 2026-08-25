@@ -1,25 +1,56 @@
-.json-tool-layout,
-.json-schema-layout {
-  --tool-gap: var(--space-4);
-}
 .json-cm .cm-foldPlaceholder {
-  background: var(--accent-soft) !important;
+  background: color-mix(in oklch, var(--primary) 12%, transparent) !important;
   color: var(--primary) !important;
   border-radius: var(--radius);
 }
-.json-path .json-cm {
-  overflow: hidden;
-}
-.json-path-error {
-  color: var(--destructive);
-}
-.json-content {
-  height: 100%;
+.json-cm {
+  flex: 1;
   min-height: 0;
+  min-width: 0;
   overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
 }
-.json-page .detected {
-  display: none;
+.json-cm:focus-within {
+  border-color: var(--muted-foreground);
+}
+.json-cm .cm-editor {
+  height: 100%;
+  font: var(--code-editor-font-size)/1.6 var(--font-mono);
+}
+.json-cm .cm-editor.cm-focused {
+  outline: none;
+}
+.json-path-cm {
+  overflow: visible;
+}
+.json-workflow-path-cm {
+  overflow: visible;
+  border-color: var(--input);
+  border-radius: var(--radius);
+  background: var(--card);
+}
+.json-workflow-path-cm:focus-within {
+  border-color: var(--ring);
+}
+.json-workflow-path-cm .cm-editor {
+  height: 30px;
+  overflow: hidden;
+  border-radius: inherit;
+  font: 12px/1.4 var(--font-mono);
+}
+.json-workflow-path-cm .cm-scroller {
+  border-radius: inherit;
+}
+.json-workflow-path-cm .cm-editor.cm-focused {
+  outline: none;
+}
+.json-workflow-path-cm .cm-content {
+  padding: 6px 9px;
+}
+.json-workflow-path-cm .cm-line {
+  padding: 0;
 }
 .json-cm .cm-tooltip-autocomplete,
 .json-path-autocomplete.cm-tooltip-autocomplete {
@@ -29,7 +60,7 @@
   background: var(--popover);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: var(--overlay-shadow);
+  box-shadow: var(--shadow-md);
   color: var(--popover-foreground);
   font: 12px/1.35 var(--font-mono);
   overflow: hidden;
@@ -97,9 +128,4 @@
 .json-path-autocomplete.cm-tooltip-autocomplete
   .cm-completionIcon.cm-completionIcon-keyword::after {
   content: '◇';
-}
-.json-workflow-slot {
-  grid-row: 1/-1;
-  min-height: 0;
-  min-width: 0;
 }

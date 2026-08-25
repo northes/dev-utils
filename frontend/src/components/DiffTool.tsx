@@ -409,10 +409,10 @@ function DiffMerge({
     if (active) mergeRef.current?.a.focus();
   }, [active]);
   return (
-    <div className="diff-merge-wrap">
+    <div className="diff-merge-wrap h-full min-h-0 min-w-0">
       <div
         ref={host}
-        className="diff-merge-host min-h-0 min-w-0 overflow-hidden [--wails-draggable:no-drag] select-text"
+        className="diff-merge-host h-full min-h-0 min-w-0 overflow-hidden border-0 bg-card [--wails-draggable:no-drag] select-text"
       />
       {lastFilled && (
         <div className={`diff-fill-notice diff-fill-notice--${lastFilled}`} role="status">
@@ -593,7 +593,7 @@ export default function DiffTool({
           />
         }
       >
-        <div className="diff-tool-content">
+        <div className="diff-tool-content grid h-full min-h-0 min-w-0 grid-rows-[minmax(0,1fr)] overflow-hidden rounded-lg border border-border bg-card shadow-none">
           <DiffMerge
             before={before}
             after={after}

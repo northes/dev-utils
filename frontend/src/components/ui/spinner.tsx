@@ -1,17 +1,18 @@
-import { CircleNotch } from '@phosphor-icons/react';
-
 import { cn } from '@/lib/utils';
+import { SpinnerIcon } from '@phosphor-icons/react';
+import { useTranslation } from 'react-i18next';
 
-function Spinner({ className, size = 16 }: { className?: string; size?: number }) {
+function Spinner({ className, ...props }: React.ComponentProps<'svg'>) {
+  const { t } = useTranslation();
   return (
-    <span
+    <SpinnerIcon
+      data-slot="spinner"
       role="status"
-      aria-label="Loading"
-      className={cn('inline-grid animate-spin origin-center place-items-center', className)}
-      style={{ width: size, height: size }}
-    >
-      <CircleNotch size={size} weight="bold" className="h-full w-full" aria-hidden="true" />
-    </span>
+      aria-label={t('common.loading')}
+      weight="duotone"
+      className={cn('size-4 animate-spin', className)}
+      {...props}
+    />
   );
 }
 

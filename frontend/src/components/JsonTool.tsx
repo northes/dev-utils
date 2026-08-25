@@ -34,6 +34,8 @@ import {
   type ToolId,
 } from './shared';
 import { toast } from './ui/toast';
+import '../styles/tools/editor.css';
+import '../styles/tools/json.css';
 import {
   newWorkflowItem,
   parseWorkflowConfig,
@@ -43,8 +45,6 @@ import {
 import type { WorkflowItem } from './JsonWorkflowEngine';
 import { useDebouncedWorkflowEvaluation } from './useDebouncedWorkflowEvaluation';
 import { pathCompletions as sharedPathCompletions } from './JsonPathCompletion';
-import '../styles/tools/editor.css';
-import '../styles/tools/json.css';
 
 type PathToken = { type: 'key' | 'index' | 'all'; value: string };
 type SourceNode = {
@@ -301,9 +301,11 @@ function JsonEditorPane({
     [],
   );
   return (
-    <div className="json-pane">
-      <span className="json-pane-label">{label}</span>
-      <div className="json-pane-editor">
+    <div className="json-pane flex min-h-0 min-w-0 flex-1 flex-col gap-2">
+      <span className="json-pane-label flex-none font-mono text-[10px] font-medium leading-none tracking-[.04em] text-muted-foreground uppercase">
+        {label}
+      </span>
+      <div className="json-pane-editor flex min-h-0 min-w-0 flex-1">
         <CodeMirror
           className={`json-cm${cmClassName ? ' ' + cmClassName : ''}`}
           height="100%"
@@ -797,24 +799,30 @@ export default function JsonTool({
             onPress: toggleWorkflow,
           },
         ]}
-        className="json-page"
+        className="json-page [container-name:json-page] [container-type:inline-size]"
         contentMode="fixed"
         footer={
           <div
-            className={`json-footer-actions${workflowMode ? ' workflow-layout' : ''}${schema || workflowMode ? '' : ' single'}`}
+            className={`json-footer-actions grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-start gap-3 @max-[959px]/json-page:grid-cols-2 @min-[960px]/json-page:grid-cols-3${workflowMode ? ' workflow-layout' : ''}${schema || workflowMode ? '' : ' single grid-cols-1'}`}
           >
             {editorActions('input')}
             {schema && editorActions('result')}
             {workflowMode && (
-              <div className="json-workflow-rules-footer-actions">{workflowRuleActions}</div>
+              <div className="json-workflow-rules-footer-actions min-w-0 @max-[959px]/json-page:col-start-2 @max-[959px]/json-page:min-w-0 @min-[960px]/json-page:min-w-0">
+                {workflowRuleActions}
+              </div>
             )}
-            {workflowMode && <div className="json-workflow-footer-actions">{workflowActions}</div>}
+            {workflowMode && (
+              <div className="json-workflow-footer-actions min-w-0 @max-[959px]/json-page:col-start-2 @max-[959px]/json-page:min-w-0 @min-[960px]/json-page:min-w-0">
+                {workflowActions}
+              </div>
+            )}
           </div>
         }
       >
-        <div className="json-content">
+        <div className="json-content h-full min-h-0 overflow-hidden">
           <div
-            className={`json-schema-layout${workflowMode ? ' workflow-layout' : ''}${schema || workflowMode ? '' : ' single'}`}
+            className={`json-schema-layout grid h-full min-h-0 min-w-0 grid-cols-2 grid-rows-[minmax(0,1fr)] gap-3 @max-[959px]/json-page:grid-cols-2 @max-[959px]/json-page:grid-rows-1 @min-[960px]/json-page:grid-cols-3 @min-[960px]/json-page:grid-rows-1${workflowMode ? ' workflow-layout' : ''}${schema || workflowMode ? '' : ' single grid-cols-1 gap-0'}`}
           >
             <JsonEditorPane
               label={t('jsonTool.input')}
@@ -827,14 +835,18 @@ export default function JsonTool({
               cmClassName="json-input-cm"
               formatOnPaste={autoFormatOnFill ? tryAutoFormat : undefined}
             />
-            <div className={`json-schema-right${schema || workflowMode ? '' : ' hidden'}`}>
+            <div
+              className={`json-schema-right grid min-h-0 min-w-0 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-3 @max-[959px]/json-page:grid @min-[960px]/json-page:contents${schema || workflowMode ? '' : ' hidden'}`}
+            >
               {schema && (
                 <>
-                  <div className="json-path">
-                    <span className="json-pane-label">{t('jsonTool.schema')}</span>
-                    <div className="json-path-field">
+                  <div className="json-path flex min-w-0 flex-col gap-2 min-h-0">
+                    <span className="flex-none font-mono text-[10px] font-medium leading-none tracking-[.04em] text-muted-foreground uppercase">
+                      {t('jsonTool.schema')}
+                    </span>
+                    <div className="json-path-field flex min-h-0 min-w-0 flex-1">
                       <CodeMirror
-                        className="json-cm json-path-cm"
+                        className="json-cm json-path-cm overflow-visible"
                         height="100%"
                         value={path}
                         onChange={setPath}
@@ -855,7 +867,7 @@ export default function JsonTool({
                       />
                     </div>
                     {pathError ? (
-                      <span className="json-path-error">
+                      <span className="json-path-error flex items-center gap-1.5 overflow-hidden text-ellipsis whitespace-nowrap text-[11px] text-destructive">
                         <X size={12} weight="duotone" />
                         <span>{pathError}</span>
                       </span>
@@ -872,7 +884,7 @@ export default function JsonTool({
                 </>
               )}
               {workflowMode && (
-                <div className="json-workflow-slot">
+                <div className="json-workflow-slot min-h-0 min-w-0 @max-[959px]/json-page:row-span-full @max-[959px]/json-page:block @min-[960px]/json-page:contents">
                   <WorkflowPanel
                     contexts={workflow.contexts}
                     rules={workflowRules}
@@ -887,7 +899,7 @@ export default function JsonTool({
               )}
             </div>
           </div>
-          <div className={`detected${input && !jsonValue ? ' invalid' : ''}`}>
+          <div className={`detected hidden${input && !jsonValue ? ' invalid' : ''}`}>
             <span>{t('jsonTool.detected')}</span>
             {input ? (
               <strong className={jsonValue ? undefined : 'empty'}>
@@ -905,7 +917,7 @@ export default function JsonTool({
           if (!open) setCommentDialog(null);
         }}
       >
-        <AlertDialogContent className="json-comment-dialog">
+        <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>{t('jsonTool.commentTitle')}</AlertDialogTitle>
             <AlertDialogDescription>
@@ -929,7 +941,7 @@ export default function JsonTool({
               </Button>
             )}
             <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              variant="destructive"
               onClick={() => {
                 const d = commentDialog;
                 setCommentDialog(null);

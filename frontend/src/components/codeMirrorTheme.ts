@@ -17,7 +17,7 @@ const quietBase = EditorView.theme({
   },
   '.cm-activeLineGutter': { backgroundColor: 'color-mix(in srgb,var(--primary) 8%,transparent)' },
   '.cm-foldPlaceholder': {
-    backgroundColor: 'var(--accent-soft)',
+    backgroundColor: 'color-mix(in oklch, var(--primary) 12%, transparent)',
     borderColor: 'var(--border)',
     color: 'var(--primary)',
   },

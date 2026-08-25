@@ -29,7 +29,7 @@ function UrlPart({
 }) {
   const { t } = useTranslation();
   return (
-    <div className="grid grid-cols-[104px_minmax(0,1fr)_30px] items-start gap-3 border-b border-border px-0.5 py-[13px] last:border-b-0">
+    <div className="grid grid-cols-[104px_minmax(0,1fr)_32px] items-start gap-3 border-b border-border px-0.5 py-[13px] last:border-b-0">
       <span className="pt-[7px] font-mono text-[10px] leading-[1.35] font-medium uppercase tracking-[.04em] text-muted-foreground">
         {label}
       </span>
@@ -39,7 +39,7 @@ function UrlPart({
       <Button
         variant="ghost"
         size="icon"
-        className="size-[30px] min-w-[30px] flex-none p-0"
+        className="flex-none"
         aria-label={t('urlTool.copy')}
         onClick={() => onCopy(id, value, label)}
       >
@@ -160,7 +160,7 @@ export default function UrlTool({
           <div className="flex min-h-0 min-w-0 flex-col gap-2 font-mono text-[10px] font-medium uppercase tracking-[.04em] text-muted-foreground">
             <span>{t('urlTool.input')}</span>
             <CodeMirror
-              className="min-h-0 flex-1 overflow-hidden rounded-(--radius) border border-border bg-card focus-within:border-muted-foreground [&_.cm-editor]:h-full [&_.cm-editor]:[font:var(--code-editor-font-size)/1.65_var(--font-mono)] [&_.cm-editor.cm-focused]:outline-none [&_.cm-scroller]:overflow-auto"
+              className="min-h-0 flex-1 overflow-hidden rounded-lg border border-border bg-card focus-within:border-muted-foreground [&_.cm-editor]:h-full [&_.cm-editor]:[font:var(--code-editor-font-size)/1.65_var(--font-mono)] [&_.cm-editor.cm-focused]:outline-none [&_.cm-scroller]:overflow-auto"
               height="100%"
               value={input}
               onChange={setInput}
@@ -207,7 +207,7 @@ export default function UrlTool({
                   <span className="pt-[7px] font-mono text-[10px] leading-[1.35] font-medium uppercase tracking-[.04em] text-muted-foreground">
                     {t('urlTool.params')}
                   </span>
-                  <div className="min-w-0 overflow-hidden rounded-(--radius) border border-border bg-border">
+                  <div className="min-w-0 overflow-hidden rounded-lg border border-border bg-border">
                     {parts.params.length ? (
                       parts.params.map(([key, value], index = 0) => (
                         <div
@@ -231,7 +231,7 @@ export default function UrlTool({
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="size-[30px] min-w-[30px] flex-none p-0"
+                    className="flex-none"
                     aria-label={t('urlTool.copy')}
                     onClick={() =>
                       void copyValue('params', urlParamsJson(parts.params), t('urlTool.params'))

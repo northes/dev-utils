@@ -38,7 +38,7 @@ function SettingSwitch({
       onCheckedChange={onChange}
       disabled={isDisabled}
       aria-label={ariaLabel}
-      className="origin-right scale-[.84]"
+      size="sm"
     />
   );
 }
@@ -87,7 +87,7 @@ function SettingsGroup({
           <div className="settings-list min-w-0">
             <Setting label={i18n.t('settings.quit')} description={i18n.t('settings.quitDesc')}>
               <Button variant="destructive" onClick={() => void Application.Quit()}>
-                <Power weight="duotone" />
+                <Power data-icon="inline-start" weight="duotone" />
                 {i18n.t('settings.quit')}
               </Button>
             </Setting>
@@ -248,13 +248,19 @@ export default function SettingsPage({
   return (
     <Reveal index={0}>
       <section className="settings-page min-h-full px-7 pb-[26px] pt-5 max-[700px]:px-[18px] max-[700px]:pb-4 max-[700px]:pt-3.5">
-        <header className="page-title">
-          <h1>{t('settings.title')}</h1>
-          <p>{t('settings.subtitle')}</p>
+        <header className="mb-3.5 mt-1.5">
+          <h1 className="text-[19px] font-semibold leading-tight tracking-[-0.01em]">
+            {t('settings.title')}
+          </h1>
+          <p className="mt-1 text-[10px] text-muted-foreground">{t('settings.subtitle')}</p>
         </header>
         <SettingsGroup title={t('settings.appearance')} subtitle={t('settings.appearanceSubtitle')}>
           <Setting className="setting--appearance">
-            <Select value={theme} onValueChange={(v) => setTheme(v as 'light' | 'dark')}>
+            <Select
+              items={themeOptions.map(({ id, label }) => ({ value: id, label }))}
+              value={theme}
+              onValueChange={(v) => setTheme(v as 'light' | 'dark')}
+            >
               <SelectTrigger
                 className="h-8 w-40 flex-none text-[11px]"
                 aria-label={t('settings.theme')}
@@ -275,12 +281,12 @@ export default function SettingsPage({
         </SettingsGroup>
         <SettingsGroup title={t('settings.editor')} subtitle={t('settings.editorSubtitle')}>
           <Setting className="setting--choice">
-            <div className="inline-flex rounded-(--radius) border border-border bg-card p-[3px]">
+            <div className="inline-flex rounded-lg border border-border bg-card p-[3px]">
               {[12, 14, 16, 18].map((size) => (
                 <Button
                   key={size}
                   variant="ghost"
-                  className={`min-w-[76px] rounded-(--radius) px-3 py-1.5 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground ${(settings.codeEditorFontSize || 12) === size ? 'bg-muted text-foreground' : ''}`}
+                  className={`min-w-[76px] rounded-lg px-3 py-1.5 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground ${(settings.codeEditorFontSize || 12) === size ? 'bg-muted text-foreground' : ''}`}
                   onClick={() =>
                     setSettings((current) => ({
                       ...current,
@@ -296,12 +302,12 @@ export default function SettingsPage({
         </SettingsGroup>
         <SettingsGroup title={t('settings.language')} subtitle={t('settings.languageSubtitle')}>
           <Setting className="setting--choice">
-            <div className="inline-flex rounded-(--radius) border border-border bg-card p-[3px]">
+            <div className="inline-flex rounded-lg border border-border bg-card p-[3px]">
               {SUPPORTED_LANGUAGES.map((l) => (
                 <Button
                   key={l.code}
                   variant="ghost"
-                  className={`min-w-[76px] rounded-(--radius) px-3 py-1.5 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground ${settings.language === l.code ? 'bg-muted text-foreground' : ''}`}
+                  className={`min-w-[76px] rounded-lg px-3 py-1.5 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground ${settings.language === l.code ? 'bg-muted text-foreground' : ''}`}
                   onClick={() => setLanguage(l.code)}
                 >
                   {t(l.labelKey)}
@@ -332,7 +338,7 @@ export default function SettingsPage({
                 disabled={checking}
                 onClick={() => void checkUpdates()}
               >
-                <ArrowsClockwise weight="duotone" />
+                <ArrowsClockwise data-icon="inline-start" weight="duotone" />
                 {t(checking ? 'settings.checkingUpdates' : 'settings.checkUpdates')}
               </Button>
             </Setting>
@@ -345,7 +351,7 @@ export default function SettingsPage({
               className="text-[11px]"
               onClick={() => setConfirmClear(true)}
             >
-              <Trash weight="duotone" />
+              <Trash data-icon="inline-start" weight="duotone" />
               {t('settings.clearHistory')}
             </Button>
           </Setting>
@@ -357,7 +363,7 @@ export default function SettingsPage({
               className="text-[11px]"
               onClick={() => void Browser.OpenURL(t('settings.projectUrl'))}
             >
-              <ArrowSquareOut weight="duotone" />
+              <ArrowSquareOut data-icon="inline-start" weight="duotone" />
               {t('settings.openProject')}
             </Button>
           </Setting>

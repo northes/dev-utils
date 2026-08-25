@@ -312,13 +312,13 @@ export function ToolHeader({
   actions?: ToolAction[];
 }) {
   return (
-    <header className="mt-[5px] mb-3.5 flex items-start justify-between gap-3 text-(--muted-foreground)">
+    <header className="mt-[5px] mb-3.5 flex items-start justify-between gap-3 text-muted-foreground">
       <div className="min-w-0">
-        <h1 className="m-0 text-[19px] leading-tight font-semibold tracking-[-.01em] text-(--foreground)">
+        <h1 className="m-0 text-[19px] leading-tight font-semibold tracking-[-.01em] text-foreground">
           {title}
         </h1>
         {desc ? (
-          <p className="mt-1 mb-0 text-[10px] font-normal text-(--muted-foreground)">{desc}</p>
+          <p className="mt-1 mb-0 text-[10px] font-normal text-muted-foreground">{desc}</p>
         ) : null}
       </div>
       {actions.length > 0 && (
@@ -355,24 +355,20 @@ export function ToolHeader({
             ) : a.type === 'toggle' ? (
               <Label
                 key={a.key}
-                className="flex h-8 flex-none items-center gap-2 border border-transparent bg-transparent py-0 pr-1.5 pl-3 text-[11px] text-(--muted-foreground)"
+                className="flex h-8 flex-none items-center gap-2 border border-transparent bg-transparent py-0 pr-1.5 pl-3 text-[11px] text-muted-foreground"
               >
                 <span>{a.label}</span>
-                <Switch
-                  checked={!!a.checked}
-                  onCheckedChange={a.onPress}
-                  className="origin-right scale-[.82]"
-                />
+                <Switch checked={!!a.checked} onCheckedChange={a.onPress} size="sm" />
               </Label>
             ) : (
               <Button
                 key={a.key}
                 variant={a.active ? 'default' : 'outline'}
-                className="h-8 flex-none rounded-(--radius) px-3 text-[11px] [&_svg]:size-3.5"
+                className="h-8 flex-none rounded-lg px-3 text-[11px] [&_svg]:size-3.5"
                 aria-pressed={a.active}
                 onClick={a.onPress}
               >
-                {a.icon && <a.icon size={14} weight="duotone" />}
+                {a.icon && <a.icon data-icon="inline-start" size={14} weight="duotone" />}
                 {a.label}
               </Button>
             ),
@@ -503,12 +499,13 @@ export function ToolActionBar({ label, actions }: { label: string; actions: Tool
                 render={
                   <Button
                     variant={buttonVariant[action.variant]}
-                    className="relative h-[30px] w-[26px] min-w-[26px] flex-none rounded-l-none px-0 text-[11px] before:pointer-events-none before:absolute before:top-[7px] before:bottom-[7px] before:left-0 before:w-px before:bg-[color-mix(in_srgb,var(--primary-foreground)_28%,transparent)] focus-visible:z-1 [&_svg]:size-3.5"
+                    size="icon-sm"
+                    className="relative flex-none rounded-l-none text-[11px] before:pointer-events-none before:absolute before:top-[6px] before:bottom-[6px] before:left-0 before:w-px before:bg-[color-mix(in_srgb,var(--primary-foreground)_28%,transparent)] focus-visible:z-1 [&_svg]:size-3.5"
                     aria-label={action.menuLabel}
                   />
                 }
               >
-                <CaretDown size={12} weight="bold" />
+                <CaretDown size={12} weight="duotone" />
               </PopoverTrigger>
               <PopoverContent
                 align="end"
@@ -523,8 +520,9 @@ export function ToolActionBar({ label, actions }: { label: string; actions: Tool
                   onClick={action.onMenuToggle}
                 >
                   <Check
+                    data-icon="inline-start"
                     size={12}
-                    weight="bold"
+                    weight="duotone"
                     className={action.menuChecked ? undefined : 'opacity-0'}
                     aria-hidden
                   />
@@ -541,7 +539,7 @@ export function ToolActionBar({ label, actions }: { label: string; actions: Tool
             onClick={action.onPress}
             className="h-[30px] flex-none px-[11px] text-[11px] [&_svg]:size-3.5"
           >
-            {action.icon && <action.icon size={14} weight="duotone" />}
+            {action.icon && <action.icon data-icon="inline-start" size={14} weight="duotone" />}
             {action.label}
           </Button>
         ),

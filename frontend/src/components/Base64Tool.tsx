@@ -81,7 +81,7 @@ function TextPane({
     <div className="flex h-full min-h-0 min-w-0 flex-col gap-2 font-mono text-[10px] font-medium uppercase tracking-[.04em] text-muted-foreground">
       <span>{label}</span>
       <CodeMirror
-        className="min-h-0 flex-1 overflow-hidden rounded-(--radius) border border-border bg-card focus-within:border-muted-foreground [&_.cm-editor]:h-full [&_.cm-editor]:[font:var(--code-editor-font-size)/1.6_var(--font-mono)] [&_.cm-editor.cm-focused]:outline-none [&_.cm-scroller]:overflow-auto"
+        className="min-h-0 flex-1 overflow-hidden rounded-lg border border-border bg-card focus-within:border-muted-foreground [&_.cm-editor]:h-full [&_.cm-editor]:[font:var(--code-editor-font-size)/1.6_var(--font-mono)] [&_.cm-editor.cm-focused]:outline-none [&_.cm-scroller]:overflow-auto"
         height="100%"
         value={value}
         onChange={onChange}
@@ -328,7 +328,7 @@ export default function Base64Tool({
   const inputPane = sourceFile ? (
     <div className="flex h-full min-h-0 flex-col gap-2 font-mono text-[10px] font-medium uppercase tracking-[.04em] text-muted-foreground">
       <span>{t('base64Tool.fileInput')}</span>
-      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 overflow-hidden rounded-(--radius) border border-border bg-card">
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 overflow-hidden rounded-lg border border-border bg-card">
         <>
           {sourceFile.image ? (
             <img
@@ -373,7 +373,7 @@ export default function Base64Tool({
         />
       </div>
       {!input && (
-        <div className="flex min-h-0 flex-col items-center justify-center gap-2 rounded-(--radius) border border-dashed border-border text-muted-foreground">
+        <div className="flex min-h-0 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border text-muted-foreground">
           <FileImage size={27} weight="duotone" />
           <span className="text-[10px]">{t('base64Tool.fileHint')}</span>
           <Button
@@ -381,7 +381,7 @@ export default function Base64Tool({
             onClick={() => fileInput?.click()}
             className="h-[30px] text-[10px] [&_svg]:size-3.5"
           >
-            <UploadSimple weight="duotone" />
+            <UploadSimple data-icon="inline-start" weight="duotone" />
             {t('base64Tool.chooseFile')}
           </Button>
           <input
@@ -406,7 +406,7 @@ export default function Base64Tool({
         <span>
           {outputKind === 'image' ? t('base64Tool.imageOutput') : t('base64Tool.fileOutput')}
         </span>
-        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 overflow-hidden rounded-(--radius) border border-border bg-card">
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 overflow-hidden rounded-lg border border-border bg-card">
           {outputKind === 'image' ? (
             <img
               className="max-h-[190px] max-w-full object-contain"
@@ -433,7 +433,7 @@ export default function Base64Tool({
               onClick={() => void save()}
               className="h-[29px] text-[10px] [&_svg]:size-3.5"
             >
-              <DownloadSimple weight="duotone" />
+              <DownloadSimple data-icon="inline-start" weight="duotone" />
               {t('base64Tool.save')}
             </Button>
           </footer>
@@ -477,7 +477,7 @@ export default function Base64Tool({
         </div>
         <div className="flex items-center justify-between border-y border-border px-3 py-2.5 font-mono text-[10px] uppercase tracking-[.04em] text-muted-foreground">
           <span>{t('base64Tool.detected')}</span>
-          <strong className="font-medium text-[var(--success)]">
+          <strong className="font-medium text-success">
             {outputKind === 'image'
               ? t('base64Tool.image')
               : outputKind === 'file'

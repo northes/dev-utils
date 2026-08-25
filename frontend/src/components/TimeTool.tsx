@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   DndContext,
@@ -98,10 +98,11 @@ function TimezoneCombobox({
   emptyLabel: string;
   label: string;
 }) {
+  const labelId = useId();
   const current = zones.find((zone) => zone.id === value);
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-2 pt-3.5 font-mono text-[10px] font-medium uppercase tracking-[.04em] text-muted-foreground">
-      <span>{label}</span>
+      <span id={labelId}>{label}</span>
       <Combobox
         items={zones}
         value={current ?? null}
@@ -114,19 +115,24 @@ function TimezoneCombobox({
           render={
             <Button
               variant="ghost"
-              className="h-[46px] w-full justify-between rounded-(--radius) border border-border bg-card px-3.5 text-[13px] font-normal"
+              className="h-[46px] w-full justify-between rounded-lg border border-border bg-card px-3.5 text-[13px] font-normal"
+              aria-labelledby={labelId}
             />
           }
         >
           <span className="flex min-w-0 items-center gap-2.5">
-            <Globe size={18} weight="duotone" />
+            <Globe data-icon="inline-start" size={18} weight="duotone" />
             <span className="min-w-0 truncate">
               <ComboboxValue placeholder={placeholder} />
             </span>
           </span>
         </ComboboxTrigger>
         <ComboboxContent className="min-w-(--anchor-width)">
-          <ComboboxInput showTrigger={false} placeholder={placeholder} />
+          <ComboboxInput
+            inputClassName="select-text"
+            showTrigger={false}
+            placeholder={placeholder}
+          />
           <ComboboxEmpty>{emptyLabel}</ComboboxEmpty>
           <ComboboxList>
             {(zone) => (
@@ -209,7 +215,8 @@ function TimeResultRow({
         <Button
           ref={sortable.setActivatorNodeRef}
           variant="ghost"
-          className="grid size-[30px] min-w-[30px] place-items-center p-0 cursor-grab active:cursor-grabbing"
+          size="icon-sm"
+          className="flex-none cursor-grab active:cursor-grabbing"
           {...sortable.attributes}
           {...sortable.listeners}
           aria-label={t('timeTool.dragResult', { label })}
@@ -220,18 +227,19 @@ function TimeResultRow({
       <span className="text-[10px] text-muted-foreground">{label}</span>
       <Button
         variant="ghost"
-        className="min-h-9 min-w-0 justify-start gap-2.5 rounded-(--radius) px-3"
+        className="min-h-9 min-w-0 justify-start gap-2.5 rounded-lg px-3"
         onClick={onCopy}
       >
         <code className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[10px] text-foreground">
           {value}
         </code>
-        <Copy size={15} weight="duotone" />
+        <Copy data-icon="inline-end" size={15} weight="duotone" />
       </Button>
       {editing && (
         <Button
           variant="ghost"
-          className="size-[30px] min-w-[30px] p-0"
+          size="icon-sm"
+          className="flex-none"
           onClick={onToggle}
           aria-label={t(hidden ? 'timeTool.showResult' : 'timeTool.hideResult', { label })}
         >
@@ -365,11 +373,11 @@ export default function TimeTool({
           <Label className="flex flex-col items-stretch gap-2 font-mono text-[10px] font-medium uppercase tracking-[.04em] text-muted-foreground">
             <span>{t('timeTool.input')}</span>
             <div className="flex items-center gap-2">
-              <div className="flex h-[46px] min-w-0 flex-1 items-center gap-2.5 rounded-(--radius) border border-border bg-card px-3.5 focus-within:border-muted-foreground">
+              <div className="flex h-[46px] min-w-0 flex-1 items-center gap-2.5 rounded-lg border border-border bg-card px-3.5 focus-within:border-muted-foreground">
                 <Clock size={18} weight="duotone" />
                 <Input
                   ref={inputRef}
-                  className="min-w-0 flex-1 border-0 bg-transparent px-0 py-0 text-[13px] shadow-none focus-visible:ring-0 dark:bg-transparent"
+                  className="min-w-0 flex-1 select-text border-0 bg-transparent px-0 py-0 text-[13px] shadow-none focus-visible:ring-0 dark:bg-transparent"
                   value={input}
                   onKeyDown={(event) => undoRedoKey(event, undo, redo)}
                   onChange={(event) => setInput(event.target.value)}
@@ -378,7 +386,8 @@ export default function TimeTool({
               </div>
               <Button
                 variant="ghost"
-                className="size-[42px] min-w-[42px] flex-none rounded-(--radius) p-0"
+                size="icon-lg"
+                className="flex-none rounded-lg"
                 aria-label={t('timeTool.refresh')}
                 onClick={() => {
                   const now = Math.floor(Date.now() / 1000).toString();
@@ -402,7 +411,8 @@ export default function TimeTool({
             />
             <Button
               variant="ghost"
-              className="size-[42px] min-w-[42px] flex-none rounded-(--radius) p-0"
+              size="icon-lg"
+              className="flex-none rounded-lg"
               aria-label={t('timeTool.useSystemTimezone')}
               onClick={() => setTimeZone(getSystemTimeZone())}
             >

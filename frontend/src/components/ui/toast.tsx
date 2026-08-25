@@ -1,8 +1,19 @@
+'use client';
+
+import * as React from 'react';
 import { Toast as ToastPrimitive } from '@base-ui/react/toast';
-import { CheckCircle, Info, Spinner, Warning, X, XCircle } from '@phosphor-icons/react';
-import { useTranslation } from 'react-i18next';
+
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import {
+  XIcon,
+  CheckCircleIcon,
+  InfoIcon,
+  WarningIcon,
+  XCircleIcon,
+  SpinnerIcon,
+} from '@phosphor-icons/react';
+import { useTranslation } from 'react-i18next';
 
 const toast = ToastPrimitive.createToastManager();
 
@@ -34,7 +45,7 @@ function Toast({ className, ...props }: ToastPrimitive.Root.Props) {
     <ToastPrimitive.Root
       data-slot="toast"
       className={cn(
-        'group/toast pointer-events-auto absolute right-0 bottom-0 z-[calc(1000-var(--toast-index))] w-full origin-bottom rounded-2xl border border-border bg-popover text-popover-foreground shadow-lg will-change-transform outline-none select-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50',
+        'group/toast pointer-events-auto absolute right-0 bottom-0 z-[calc(1000-var(--toast-index))] w-full origin-bottom rounded-2xl border bg-popover text-popover-foreground shadow-lg will-change-transform outline-none select-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50',
         '[--gap:0.75rem] [--height:var(--toast-frontmost-height,var(--toast-height))] [--offset-y:calc(var(--toast-offset-y)*-1+calc(var(--toast-index)*var(--gap)*-1)+var(--toast-swipe-movement-y))] [--peek:0.75rem] [--scale:calc(max(0,1-(var(--toast-index)*0.1)))] [--shrink:calc(1-var(--scale))]',
         'h-(--height) [transform:translateX(var(--toast-swipe-movement-x))_translateY(calc(var(--toast-swipe-movement-y)-(var(--toast-index)*var(--peek))-(var(--shrink)*var(--height))))_scale(var(--scale))] [transition:transform_500ms_cubic-bezier(0.22,1,0.36,1),opacity_500ms,height_150ms]',
         "after:absolute after:top-full after:left-0 after:h-[calc(var(--gap)+1px)] after:w-full after:content-['']",
@@ -107,7 +118,7 @@ function ToastAction({
 function ToastClose({
   className,
   children,
-  render = <Button variant="ghost" size="icon" />,
+  render = <Button variant="ghost" size="icon-sm" />,
   ...props
 }: ToastPrimitive.Close.Props) {
   const { t } = useTranslation();
@@ -122,35 +133,51 @@ function ToastClose({
       )}
       {...props}
     >
-      {children ?? <X size={16} weight="duotone" aria-hidden="true" />}
+      {children ?? <XIcon aria-hidden="true" />}
     </ToastPrimitive.Close>
   );
 }
 
 function ToastIcon({ type }: { type: string | undefined }) {
-  const iconProps = { size: 16, weight: 'duotone' as const, 'aria-hidden': true };
-  const icon =
-    type === 'success' ? (
-      <CheckCircle {...iconProps} />
-    ) : type === 'info' ? (
-      <Info {...iconProps} />
-    ) : type === 'warning' ? (
-      <Warning {...iconProps} />
-    ) : type === 'error' ? (
-      <XCircle {...iconProps} className="text-destructive" />
-    ) : type === 'loading' ? (
-      <Spinner {...iconProps} className="animate-spin" />
-    ) : null;
+  let icon: React.ReactNode = null;
 
-  return icon ? (
-    <span data-slot="toast-icon" className="shrink-0">
+  if (type === 'success') {
+    icon = <CheckCircleIcon weight="duotone" aria-hidden="true" />;
+  }
+
+  if (type === 'info') {
+    icon = <InfoIcon weight="duotone" aria-hidden="true" />;
+  }
+
+  if (type === 'warning') {
+    icon = <WarningIcon weight="duotone" aria-hidden="true" />;
+  }
+
+  if (type === 'error') {
+    icon = <XCircleIcon weight="duotone" className="text-destructive" aria-hidden="true" />;
+  }
+
+  if (type === 'loading') {
+    icon = <SpinnerIcon weight="duotone" className="animate-spin" aria-hidden="true" />;
+  }
+
+  if (!icon) {
+    return null;
+  }
+
+  return (
+    <span
+      data-slot="toast-icon"
+      className="shrink-0 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4"
+    >
       {icon}
     </span>
-  ) : null;
+  );
 }
 
 function ToastList() {
   const { toasts } = ToastPrimitive.useToastManager();
+
   return toasts.map((toastItem) => (
     <Toast key={toastItem.id} toast={toastItem}>
       <ToastContent>

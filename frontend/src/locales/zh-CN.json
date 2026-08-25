@@ -477,6 +477,10 @@
     "historyFailed": "历史记录操作失败",
     "pasteTarget": "请先聚焦要粘贴的输入框"
   },
+  "common": {
+    "close": "关闭",
+    "loading": "加载中"
+  },
   "matchDialog": {
     "title": "匹配到内容",
     "bodyPrefix": "剪贴板匹配到 ",

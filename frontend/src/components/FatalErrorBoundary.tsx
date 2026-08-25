@@ -27,12 +27,12 @@ function CrashScreen({ error, onReload }: { error: Error; onReload: () => void }
         <h1 className="text-base font-semibold">{t('crash.title')}</h1>
         <p className="mt-2 text-xs leading-5 text-muted-foreground">{t('crash.description')}</p>
         <Button className="mt-6" onClick={onReload}>
-          <ArrowsClockwise size={15} weight="duotone" />
+          <ArrowsClockwise data-icon="inline-start" size={15} weight="duotone" />
           {t('crash.reload')}
         </Button>
         <details className="mt-6 w-full text-left text-[10px] text-muted-foreground">
           <summary className="cursor-pointer text-center">{t('crash.details')}</summary>
-          <pre className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap rounded-(--radius) border border-border bg-muted/30 p-3">
+          <pre className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap rounded-lg border border-border bg-muted/30 p-3">
             {error.message}
           </pre>
         </details>

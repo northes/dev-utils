@@ -35,7 +35,6 @@ import type {
   WorkflowItemType,
   WorkflowSortMode,
 } from './JsonWorkflowEngine';
-import './JsonWorkflow.css';
 
 class WorkflowConfigError extends Error {
   constructor() {
@@ -134,7 +133,10 @@ function WorkflowSelect({
         if (next !== null) onSelect(next);
       }}
     >
-      <SelectTrigger className={`json-workflow-select ${className}`.trim()} aria-label={label}>
+      <SelectTrigger
+        className={`json-workflow-select h-[30px] min-h-[30px] min-w-0 flex-1 px-[9px] text-[11px] ${className}`.trim()}
+        aria-label={label}
+      >
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
@@ -183,10 +185,12 @@ function PathField({
     [completion, template],
   );
   return (
-    <label className="json-workflow-field">
-      <span>{label}</span>
+    <label className="json-workflow-field flex min-w-0 items-center gap-2 @max-[520px]/workflow-rules:items-stretch @max-[520px]/workflow-rules:flex-col @max-[520px]/workflow-rules:gap-[5px]">
+      <span className="w-[86px] min-w-[86px] whitespace-nowrap font-mono text-[10px] font-medium leading-none tracking-[.02em] text-muted-foreground @max-[520px]/workflow-rules:w-auto @max-[520px]/workflow-rules:min-w-0">
+        {label}
+      </span>
       <CodeMirror
-        className="json-cm json-workflow-path-cm"
+        className="json-cm json-workflow-path-cm min-w-0 flex-1 overflow-visible rounded-lg border border-input bg-card focus-within:border-ring"
         height="30px"
         value={value}
         placeholder={placeholder}
@@ -220,8 +224,10 @@ function SelectField({
   onSelect: (value: string) => void;
 }) {
   return (
-    <label className="json-workflow-field json-workflow-select-field">
-      <span>{label}</span>
+    <label className="json-workflow-field json-workflow-select-field flex min-w-0 items-center gap-2 @max-[520px]/workflow-rules:items-stretch @max-[520px]/workflow-rules:flex-col @max-[520px]/workflow-rules:gap-[5px]">
+      <span className="w-[86px] min-w-[86px] whitespace-nowrap font-mono text-[10px] font-medium leading-none tracking-[.02em] text-muted-foreground @max-[520px]/workflow-rules:w-auto @max-[520px]/workflow-rules:min-w-0">
+        {label}
+      </span>
       <WorkflowSelect label={label} value={value} options={options} onSelect={onSelect} />
     </label>
   );
@@ -269,13 +275,14 @@ function WorkflowRuleRow({
     <div
       ref={setNodeRef}
       style={style}
-      className={`json-workflow-item${item.enabled ? '' : ' disabled'}${isDragging ? ' dragging' : ''}`}
+      className={`json-workflow-item border-b border-border px-3 pt-3.5 pb-4${item.enabled ? '' : ' opacity-[.55]'}${isDragging ? ' bg-[color-mix(in_oklch,var(--primary)_12%,transparent)]' : ''}`}
     >
-      <div className="json-workflow-item-header">
+      <div className="json-workflow-item-header grid min-w-0 grid-cols-[28px_24px_minmax(0,1fr)_36px_28px] items-center gap-2">
         <Button
           ref={setActivatorNodeRef}
           variant="ghost"
-          className="json-workflow-drag"
+          size="icon-sm"
+          className="json-workflow-drag flex-none cursor-grab touch-none text-muted-foreground"
           {...attributes}
           {...listeners}
           aria-label={t('jsonTool.workflow.drag')}
@@ -283,23 +290,27 @@ function WorkflowRuleRow({
         >
           <DotsSixVertical size={14} weight="duotone" />
         </Button>
-        <span className="json-workflow-index">{String(index + 1).padStart(2, '0')}</span>
+        <span className="json-workflow-index w-6 min-w-6 text-center font-mono text-[10px] font-medium leading-none text-muted-foreground">
+          {String(index + 1).padStart(2, '0')}
+        </span>
         <WorkflowSelect
           label={t('jsonTool.workflow.type')}
           value={item.type}
           options={typeOptions.map((type) => ({ key: type, label: labels[type] }))}
           onSelect={(value) => onTypeChange(item, value as WorkflowItemType)}
-          className="json-workflow-type"
+          className="json-workflow-type w-full min-w-0"
         />
         <Switch
-          className="json-workflow-enabled"
+          size="sm"
+          className="json-workflow-enabled flex-none justify-self-end"
           checked={item.enabled}
           onCheckedChange={(checked) => onUpdate(item.id, { enabled: checked })}
           aria-label={t('jsonTool.workflow.enableItem')}
         />
         <Button
           variant="ghost"
-          className="json-workflow-delete"
+          size="icon-sm"
+          className="json-workflow-delete flex-none text-muted-foreground"
           onClick={() => onRemove(item.id)}
           aria-label={t('jsonTool.workflow.delete')}
           title={t('jsonTool.workflow.delete')}
@@ -307,7 +318,7 @@ function WorkflowRuleRow({
           <Trash size={14} weight="duotone" />
         </Button>
       </div>
-      <div className="json-workflow-item-body">
+      <div className="json-workflow-item-body min-w-0 pt-2.5 pl-[66px] max-[700px]:pl-0">
         {item.type === 'extract' && (
           <PathField
             label={t('jsonTool.workflow.path')}
@@ -319,7 +330,7 @@ function WorkflowRuleRow({
           />
         )}{' '}
         {item.type === 'sort' && (
-          <div className="json-workflow-inline-fields">
+          <div className="json-workflow-inline-fields grid grid-cols-2 gap-x-2 gap-y-2.5 max-[700px]:grid-cols-1">
             <SelectField
               label={t('jsonTool.workflow.sortMode')}
               value={item.sortMode}
@@ -341,7 +352,7 @@ function WorkflowRuleRow({
           </div>
         )}{' '}
         {item.type === 'arraySort' && (
-          <div className="json-workflow-fields">
+          <div className="json-workflow-fields grid grid-cols-2 gap-x-2 gap-y-2.5 max-[700px]:grid-cols-1">
             <PathField
               label={t('jsonTool.workflow.arrayPath')}
               value={item.arrayPath}
@@ -370,7 +381,7 @@ function WorkflowRuleRow({
           </div>
         )}{' '}
         {item.type === 'filter' && (
-          <div className="json-workflow-fields">
+          <div className="json-workflow-fields grid grid-cols-2 gap-x-2 gap-y-2.5 max-[700px]:grid-cols-1">
             <PathField
               label={t('jsonTool.workflow.arrayPath')}
               value={item.arrayPath}
@@ -465,14 +476,18 @@ export function WorkflowPanel({
     move(from, to);
   };
   return (
-    <div className="json-workflow-panel">
-      <section className="json-workflow-rules">
-        <div className="json-workflow-section-header">
-          <span className="json-pane-label">{t('jsonTool.workflow.rules')}</span>
+    <div className="json-workflow-panel grid h-full min-h-0 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-3 @max-[959px]/json-page:grid-cols-2 @max-[959px]/json-page:grid-rows-1 @min-[960px]/json-page:grid-cols-3 @min-[960px]/json-page:grid-rows-1">
+      <section className="json-workflow-rules flex min-h-0 min-w-0 flex-col [container-name:workflow-rules] [container-type:inline-size] @min-[960px]/json-page:h-full @min-[960px]/json-page:min-h-0">
+        <div className="json-workflow-section-header flex min-h-7 flex-none items-center justify-between gap-2 border-b border-border">
+          <span className="font-mono text-[10px] font-medium leading-none tracking-[.04em] text-muted-foreground uppercase">
+            {t('jsonTool.workflow.rules')}
+          </span>
         </div>
-        <div className="json-workflow-list">
+        <div className="json-workflow-list min-h-0 overflow-auto [scrollbar-gutter:auto]">
           {rules.length === 0 ? (
-            <div className="json-workflow-empty">{t('jsonTool.workflow.empty')}</div>
+            <div className="json-workflow-empty flex min-h-[74px] items-center justify-center text-[11px] text-muted-foreground">
+              {t('jsonTool.workflow.empty')}
+            </div>
           ) : (
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
               <SortableContext
@@ -499,41 +514,53 @@ export function WorkflowPanel({
           )}
         </div>
       </section>
-      <section className="json-workflow-output">
-        <div className="json-workflow-section-header">
-          <span className="json-pane-label">{t('jsonTool.workflow.output')}</span>
+      <section className="json-workflow-output flex min-h-0 min-w-0 flex-col @min-[960px]/json-page:h-full @min-[960px]/json-page:min-h-0">
+        <div className="json-workflow-section-header flex min-h-7 flex-none items-center justify-between gap-2 border-b border-border">
+          <span className="font-mono text-[10px] font-medium leading-none tracking-[.04em] text-muted-foreground uppercase">
+            {t('jsonTool.workflow.output')}
+          </span>
         </div>
-        <div className="json-workflow-output-field">
+        <div className="json-workflow-output-field flex min-h-0 flex-1 pt-2">
           {error ? (
-            <div className="json-workflow-error" role="alert">
-              <div className="json-workflow-error-icon" aria-hidden="true">
+            <div
+              className="json-workflow-error grid min-h-0 flex-1 grid-cols-[30px_minmax(0,420px)] content-start justify-center gap-3 border border-[color-mix(in_oklch,var(--destructive)_24%,var(--border))] bg-[color-mix(in_oklch,var(--destructive)_3%,var(--card))] px-[22px] pt-[clamp(32px,14%,140px)] pb-6 text-[11px] text-foreground"
+              role="alert"
+            >
+              <div
+                className="json-workflow-error-icon grid size-7 place-items-center rounded-full border border-[color-mix(in_oklch,var(--destructive)_58%,var(--border))] text-destructive"
+                aria-hidden="true"
+              >
                 <WarningCircle size={18} weight="duotone" />
               </div>
-              <div className="json-workflow-error-content">
-                <div className="json-workflow-error-heading">
-                  <strong>{t('jsonTool.workflow.errorTitle')}</strong>
+              <div className="json-workflow-error-content grid min-w-0 gap-2 pt-0.5">
+                <div className="json-workflow-error-heading flex min-w-0 flex-wrap items-center gap-[9px] leading-tight">
+                  <strong className="text-[13px] font-semibold tracking-[-.01em]">
+                    {t('jsonTool.workflow.errorTitle')}
+                  </strong>
                   {error.item !== undefined && (
-                    <span className="json-workflow-error-item">
+                    <span className="json-workflow-error-item rounded-[calc(var(--radius)-4px)] border border-[color-mix(in_oklch,var(--destructive)_30%,var(--border))] bg-[color-mix(in_oklch,var(--destructive)_5%,var(--card))] px-1.5 py-1 font-mono text-[10px] font-medium leading-none tracking-[.04em] text-destructive">
                       {t('jsonTool.workflow.errorItem', {
                         item: String(error.item + 1).padStart(2, '0'),
                       })}
                     </span>
                   )}
                 </div>
-                <p className="json-workflow-error-message">
+                <p className="json-workflow-error-message m-0 text-xs leading-6 text-muted-foreground">
                   {t(`jsonTool.workflow.errors.${error.code}`)}
                 </p>
                 {error.path && (
-                  <div className="json-workflow-error-path-row">
-                    <span>{t('jsonTool.workflow.errorPath')}</span>
-                    <code>{error.path}</code>
+                  <div className="json-workflow-error-path-row grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-2 pt-0.5 font-mono text-[10px] font-medium leading-none text-muted-foreground">
+                    <span className="font-sans">{t('jsonTool.workflow.errorPath')}</span>
+                    <code className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap rounded-[calc(var(--radius)-4px)] bg-muted px-2 py-1.5 font-inherit text-foreground">
+                      {error.path}
+                    </code>
                   </div>
                 )}
               </div>
             </div>
           ) : (
             <CodeMirror
-              className="json-cm json-workflow-cm"
+              className="json-cm json-workflow-cm flex min-h-0 flex-1"
               height="100%"
               value={output}
               editable={false}

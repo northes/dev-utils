@@ -228,7 +228,7 @@ export default function TextTool({
         <div className="flex min-h-0 min-w-0 flex-col gap-2 font-mono text-[10px] font-medium uppercase tracking-[.04em] text-muted-foreground">
           <span>{t('textTool.input')}</span>
           <CodeMirror
-            className="min-h-0 flex-1 overflow-hidden rounded-(--radius) border border-border bg-card focus-within:border-muted-foreground [&_.cm-editor]:h-full [&_.cm-editor]:[font:var(--code-editor-font-size)/1.6_var(--font-mono)] [&_.cm-editor.cm-focused]:outline-none [&_.cm-scroller]:overflow-auto"
+            className="min-h-0 flex-1 overflow-hidden rounded-lg border border-border bg-card focus-within:border-muted-foreground [&_.cm-editor]:h-full [&_.cm-editor]:[font:var(--code-editor-font-size)/1.6_var(--font-mono)] [&_.cm-editor.cm-focused]:outline-none [&_.cm-scroller]:overflow-auto"
             height="100%"
             value={value}
             onChange={setValue}
@@ -248,7 +248,7 @@ export default function TextTool({
             }}
           />
         </div>
-        <div className="grid grid-cols-7 gap-px overflow-hidden rounded-(--radius) border border-border bg-border">
+        <div className="grid grid-cols-7 gap-px overflow-hidden rounded-lg border border-border bg-border">
           {stats.map((stat) => (
             <div className="flex flex-col gap-1.5 bg-card p-3.5 text-foreground" key={stat.key}>
               {stat.detail ? (
@@ -270,58 +270,60 @@ export default function TextTool({
                     </strong>
                   </PopoverTrigger>
                   <PopoverContent className="w-[320px] overflow-hidden p-0">
-                    <Table>
-                      <TableHeader className="sticky top-0 bg-card">
-                        <TableRow>
-                          <TableHead className="h-8 px-2.5 text-left">
-                            <Button
-                              variant="ghost"
-                              className="h-8 w-full justify-start gap-1 rounded-none px-0 text-[9px] uppercase"
-                              onClick={() => toggle('entry')}
-                            >
-                              {t('textTool.detailEntry')}
-                              {sort.column === 'entry' &&
-                                (sort.direction === 'ascending' ? (
-                                  <CaretUp size={10} />
-                                ) : (
-                                  <CaretDown size={10} />
-                                ))}
-                            </Button>
-                          </TableHead>
-                          <TableHead className="h-8 px-2.5 text-right">
-                            <Button
-                              variant="ghost"
-                              className="h-8 w-full justify-end gap-1 rounded-none px-0 text-[9px] uppercase"
-                              onClick={() => toggle('count')}
-                            >
-                              {t('textTool.detailCount')}
-                              {sort.column === 'count' &&
-                                (sort.direction === 'ascending' ? (
-                                  <CaretUp size={10} />
-                                ) : (
-                                  <CaretDown size={10} />
-                                ))}
-                            </Button>
-                          </TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {sorted(stat.details).map(([entry, count]) => (
-                          <TableRow
-                            key={entry}
-                            onClick={() => copyDetail(entry, count)}
-                            className="cursor-pointer hover:bg-accent"
-                          >
-                            <TableCell className="h-8 px-2.5 py-1 font-mono text-[11px]">
-                              {entry}
-                            </TableCell>
-                            <TableCell className="h-8 px-2.5 py-1 text-right font-mono text-[10px] text-muted-foreground">
-                              {count.toLocaleString()}
-                            </TableCell>
+                    <div className="max-h-[min(420px,calc(100vh-32px))] overflow-auto [scrollbar-gutter:auto]">
+                      <Table>
+                        <TableHeader className="sticky top-0 bg-card">
+                          <TableRow>
+                            <TableHead className="h-8 px-2.5 text-left">
+                              <Button
+                                variant="ghost"
+                                className="h-8 w-full justify-start gap-1 rounded-none px-0 text-[9px] uppercase"
+                                onClick={() => toggle('entry')}
+                              >
+                                {t('textTool.detailEntry')}
+                                {sort.column === 'entry' &&
+                                  (sort.direction === 'ascending' ? (
+                                    <CaretUp data-icon="inline-end" size={10} weight="duotone" />
+                                  ) : (
+                                    <CaretDown data-icon="inline-end" size={10} weight="duotone" />
+                                  ))}
+                              </Button>
+                            </TableHead>
+                            <TableHead className="h-8 px-2.5 text-right">
+                              <Button
+                                variant="ghost"
+                                className="h-8 w-full justify-end gap-1 rounded-none px-0 text-[9px] uppercase"
+                                onClick={() => toggle('count')}
+                              >
+                                {t('textTool.detailCount')}
+                                {sort.column === 'count' &&
+                                  (sort.direction === 'ascending' ? (
+                                    <CaretUp data-icon="inline-end" size={10} weight="duotone" />
+                                  ) : (
+                                    <CaretDown data-icon="inline-end" size={10} weight="duotone" />
+                                  ))}
+                              </Button>
+                            </TableHead>
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                        </TableHeader>
+                        <TableBody>
+                          {sorted(stat.details).map(([entry, count]) => (
+                            <TableRow
+                              key={entry}
+                              onClick={() => copyDetail(entry, count)}
+                              className="cursor-pointer hover:bg-accent"
+                            >
+                              <TableCell className="h-8 px-2.5 py-1 font-mono text-[11px]">
+                                {entry}
+                              </TableCell>
+                              <TableCell className="h-8 px-2.5 py-1 text-right font-mono text-[10px] text-muted-foreground">
+                                {count.toLocaleString()}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
                   </PopoverContent>
                 </Popover>
               ) : (

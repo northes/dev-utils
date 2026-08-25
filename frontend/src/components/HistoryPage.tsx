@@ -30,6 +30,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { type DateRange } from 'react-day-picker';
 import { type ColumnDef } from '@tanstack/react-table';
+import { enUS, zhCN } from 'date-fns/locale';
 import type { HistoryItem as StoredHistoryItem } from '../../bindings/changeme/models';
 import { QueryHistory } from '../../bindings/changeme/configservice';
 import { Reveal, type ToolId } from './shared';
@@ -114,7 +115,7 @@ export function ClearHistoryDialog({
               onConfirm();
               onClose();
             }}
-            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            variant="destructive"
           >
             {t('clearHistoryDialog.confirm')}
           </AlertDialogAction>
@@ -278,11 +279,14 @@ export default function HistoryPage({
           />
         }
       >
-        <CalendarBlank size={14} weight="duotone" className="flex-none text-(--muted-foreground)" />
+        <CalendarBlank
+          data-icon="inline-start"
+          size={14}
+          weight="duotone"
+          className="flex-none text-muted-foreground"
+        />
         <span
-          className={
-            range?.from ? 'truncate text-(--foreground)' : 'truncate text-(--muted-foreground)'
-          }
+          className={range?.from ? 'truncate text-foreground' : 'truncate text-muted-foreground'}
         >
           {formatRange(range, i18n.language) || t('history.filterRange')}
         </span>
@@ -292,6 +296,7 @@ export default function HistoryPage({
           mode="range"
           selected={range}
           onSelect={(v) => changeRange(v)}
+          locale={i18n.language === 'zh-CN' ? zhCN : enUS}
           numberOfMonths={2}
           disabled={{ after: new Date() }}
           classNames={{
@@ -352,7 +357,8 @@ export default function HistoryPage({
               {range && (
                 <Button
                   variant="ghost"
-                  className="h-[32px] min-w-[32px] w-[32px] flex-none p-0"
+                  size="icon"
+                  className="flex-none"
                   onClick={() => changeRange(undefined)}
                   aria-label={t('history.clearRange')}
                 >
@@ -367,7 +373,7 @@ export default function HistoryPage({
               className="ml-auto h-[32px] min-h-0 flex-none text-[11px] max-[700px]:ml-0 max-[700px]:self-end"
               onClick={() => setConfirmClear(true)}
             >
-              <Trash weight="duotone" />
+              <Trash data-icon="inline-start" weight="duotone" />
               {t('history.clear')}
             </Button>
           )}
@@ -381,7 +387,7 @@ export default function HistoryPage({
               setReload((r) => r + 1);
             }}
           >
-            <Hash size={28} weight="duotone" />
+            <Hash data-icon="inline-start" size={28} weight="duotone" />
             <span className="text-sm font-medium text-foreground">{t('history.loadFailed')}</span>
             <span className="text-xs text-muted-foreground">{t('history.loadFailedHint')}</span>
           </Button>
@@ -397,8 +403,8 @@ export default function HistoryPage({
               tableClassName="min-w-[560px]"
             />
             {total > 0 && (
-              <div className="history-pagination flex items-center justify-between gap-3 border-t border-(--border) p-2">
-                <span className="whitespace-nowrap text-[10px] text-(--muted-foreground)">
+              <div className="history-pagination flex items-center justify-between gap-3 border-t border-border p-2">
+                <span className="whitespace-nowrap text-[10px] text-muted-foreground">
                   {t('history.summary', {
                     start: (page - 1) * pageSize + 1,
                     end: Math.min(page * pageSize, total),
@@ -410,13 +416,13 @@ export default function HistoryPage({
                     variant="ghost"
                     disabled={page === 1}
                     onClick={() => setPage((p) => Math.max(1, p - 1))}
-                    className="h-auto rounded-(--radius) px-2 py-1 text-[11px] text-(--muted-foreground) hover:bg-(--accent) disabled:opacity-50"
+                    className="h-auto rounded-lg px-2 py-1 text-[11px] text-muted-foreground hover:bg-accent disabled:opacity-50"
                   >
                     {t('history.prev')}
                   </Button>
                   {pageNumbers.map((p, i) =>
                     p === 'ellipsis' ? (
-                      <span key={`e-${i}`} className="px-1 text-(--muted-foreground)">
+                      <span key={`e-${i}`} className="px-1 text-muted-foreground">
                         …
                       </span>
                     ) : (
@@ -424,7 +430,7 @@ export default function HistoryPage({
                         variant="ghost"
                         key={p}
                         onClick={() => setPage(p)}
-                        className={`h-auto rounded-(--radius) px-2 py-1 text-[11px] ${p === page ? 'bg-(--primary) text-(--primary-foreground)' : 'text-(--muted-foreground) hover:bg-(--accent)'}`}
+                        className={`h-auto rounded-lg px-2 py-1 text-[11px] ${p === page ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'}`}
                       >
                         {p}
                       </Button>
@@ -434,7 +440,7 @@ export default function HistoryPage({
                     variant="ghost"
                     disabled={page === totalPages}
                     onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                    className="h-auto rounded-(--radius) px-2 py-1 text-[11px] text-(--muted-foreground) hover:bg-(--accent) disabled:opacity-50"
+                    className="h-auto rounded-lg px-2 py-1 text-[11px] text-muted-foreground hover:bg-accent disabled:opacity-50"
                   >
                     {t('history.next')}
                   </Button>

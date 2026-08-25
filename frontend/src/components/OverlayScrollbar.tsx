@@ -54,7 +54,7 @@ function axesFor(el: HTMLElement): Axes {
     el.classList.contains('overlay-scroll') ||
     el.closest('.overlay-scroll') ||
     el.closest('[data-slot="command-list"]') ||
-    el.closest('.tool-slot.hidden')
+    el.closest('.tool-slot.is-hidden')
   )
     return { x: false, y: false };
   const s = getComputedStyle(el);
@@ -378,7 +378,7 @@ export default function OverlayScrollbar() {
       {panes.map((pane) => (
         <div
           key={pane.id}
-          className="overlay-scroll"
+          className="overlay-scroll fixed overflow-hidden pointer-events-none"
           style={
             {
               top: pane.top,
@@ -392,7 +392,7 @@ export default function OverlayScrollbar() {
         >
           {pane.v && (
             <div
-              className="overlay-scroll-thumb overlay-scroll-thumb-y"
+              className="overlay-scroll-thumb overlay-scroll-thumb-y absolute pointer-events-auto touch-none cursor-default outline-none"
               role="scrollbar"
               tabIndex={0}
               aria-label={t('scrollbar.vertical')}
@@ -408,7 +408,7 @@ export default function OverlayScrollbar() {
           )}{' '}
           {pane.h && (
             <div
-              className="overlay-scroll-thumb overlay-scroll-thumb-x"
+              className="overlay-scroll-thumb overlay-scroll-thumb-x absolute pointer-events-auto touch-none cursor-default outline-none"
               role="scrollbar"
               tabIndex={0}
               aria-label={t('scrollbar.horizontal')}

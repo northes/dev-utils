@@ -477,6 +477,10 @@
     "historyFailed": "History operation failed",
     "pasteTarget": "Focus an input to paste into"
   },
+  "common": {
+    "close": "Close",
+    "loading": "Loading"
+  },
   "matchDialog": {
     "title": "Content matched",
     "confirm": "Fill in",

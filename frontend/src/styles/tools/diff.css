@@ -1,36 +1,6 @@
 .diff-tool-layout {
-  --diff-added: var(--success);
-  --diff-removed: var(--destructive);
   --diff-added-bg: color-mix(in srgb, var(--success) 18%, transparent);
   --diff-removed-bg: color-mix(in srgb, var(--destructive) 18%, transparent);
-}
-.diff-tool-layout .tool-header {
-  margin-bottom: var(--space-4);
-}
-.diff-tool-layout .tool-header-actions {
-  gap: var(--space-2);
-}
-.diff-tool-content {
-  height: 100%;
-  min-height: 0;
-  min-width: 0;
-  display: grid;
-  grid-template-rows: minmax(0, 1fr);
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--card);
-  box-shadow: none;
-}
-.diff-merge-wrap,
-.diff-merge-host {
-  height: 100%;
-  min-height: 0;
-  min-width: 0;
-}
-.diff-merge-host {
-  border: 0;
-  background: var(--card);
 }
 .diff-merge-host:focus-within {
   box-shadow: inset 0 0 0 1px var(--ring);
@@ -152,9 +122,6 @@
   display: none;
 }
 @container (max-width:700px) {
-  .diff-tool-layout {
-    padding-inline: 18px;
-  }
   .diff-merge-host .cm-line {
     padding-left: 9px;
     padding-right: 8px;
