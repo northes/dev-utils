@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowsClockwise, Bug } from '@phosphor-icons/react';
+import { ArrowsClockwise, Bug, Check, Copy } from '@phosphor-icons/react';
 import { Window } from '@wailsio/runtime';
 import { useTranslation } from 'react-i18next';
 import { Button } from './ui/button';
@@ -20,6 +20,19 @@ function reload(force: boolean) {
 
 function CrashScreen({ error, onReload }: { error: Error; onReload: () => void }) {
   const { t } = useTranslation();
+  const [copied, setCopied] = React.useState(false);
+
+  const copyErrorDetails = async () => {
+    if (!navigator.clipboard) return;
+    try {
+      await navigator.clipboard.writeText(error.message);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
+    } catch {
+      // WebView 出错时可能无法访问剪贴板。
+    }
+  };
+
   return (
     <main className="flex h-dvh items-center justify-center bg-background px-6 text-foreground">
       <section className="flex w-full max-w-[420px] flex-col items-center text-center">
@@ -32,9 +45,21 @@ function CrashScreen({ error, onReload }: { error: Error; onReload: () => void }
         </Button>
         <details className="mt-6 w-full text-left text-[10px] text-muted-foreground">
           <summary className="cursor-pointer text-center">{t('crash.details')}</summary>
-          <pre className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap rounded-lg border border-border bg-muted/30 p-3">
-            {error.message}
-          </pre>
+          <div className="mt-2 flex items-start gap-2 rounded-lg border border-border bg-muted/30 p-3">
+            <pre className="min-w-0 flex-1 max-h-32 overflow-auto whitespace-pre-wrap">
+              {error.message}
+            </pre>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label={t(copied ? 'crash.copied' : 'crash.copy')}
+              title={t(copied ? 'crash.copied' : 'crash.copy')}
+              onClick={() => void copyErrorDetails()}
+            >
+              {copied ? <Check size={14} weight="duotone" /> : <Copy size={14} weight="duotone" />}
+            </Button>
+          </div>
         </details>
       </section>
     </main>

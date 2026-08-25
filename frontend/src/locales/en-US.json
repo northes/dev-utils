@@ -6,7 +6,9 @@
     "title": "The interface ran into a problem",
     "description": "The application interface did not load correctly. Reloading will usually restore it.",
     "reload": "Reload",
-    "details": "View error details"
+    "details": "View error details",
+    "copy": "Copy error details",
+    "copied": "Error details copied"
   },
   "titlebar": {
     "history": "History",

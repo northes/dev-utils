@@ -6,7 +6,9 @@
     "title": "界面遇到问题",
     "description": "应用界面没有正常加载。重新加载通常可以恢复使用。",
     "reload": "重新加载",
-    "details": "查看错误详情"
+    "details": "查看错误详情",
+    "copy": "复制错误详情",
+    "copied": "已复制错误详情"
   },
   "titlebar": {
     "history": "历史记录",
