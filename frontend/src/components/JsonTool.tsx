@@ -675,9 +675,10 @@ export default function JsonTool({
     : schema
       ? 'grid-cols-2 grid-rows-[minmax(0,1fr)] gap-3 @max-[959px]/json-page:grid-cols-2 @max-[959px]/json-page:grid-rows-1 @min-[960px]/json-page:grid-cols-3 @min-[960px]/json-page:grid-rows-1'
       : 'grid-cols-1 grid-rows-[minmax(0,1fr)] gap-0';
-  const footerGridClass = schema || workflowMode
-    ? 'grid-cols-[minmax(0,1fr)_minmax(0,1fr)] @max-[959px]/json-page:grid-cols-2 @min-[960px]/json-page:grid-cols-3'
-    : 'grid-cols-1';
+  const footerGridClass =
+    schema || workflowMode
+      ? 'grid-cols-[minmax(0,1fr)_minmax(0,1fr)] @max-[959px]/json-page:grid-cols-2 @min-[960px]/json-page:grid-cols-3'
+      : 'grid-cols-1';
   useEffect(() => {
     if (!pending || pending.tool !== 'json' || consumed.current === pending) return;
     consumed.current = pending;

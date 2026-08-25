@@ -490,7 +490,7 @@ export function ToolActionBar({ label, actions }: { label: string; actions: Tool
               variant={buttonVariant[action.variant]}
               disabled={action.disabled}
               onClick={action.onPress}
-               className="h-[30px] flex-none rounded-r-none px-2.5 text-[11px] focus-visible:z-1 [&_svg]:size-3.5"
+              className="h-[30px] flex-none rounded-r-none px-2.5 text-[11px] focus-visible:z-1 [&_svg]:size-3.5"
             >
               {action.label}
             </Button>
