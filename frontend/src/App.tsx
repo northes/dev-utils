@@ -1561,7 +1561,7 @@ function CommandPalette({
           value={input}
           onValueChange={(value) => setInput(value)}
         />
-        <CommandList ref={listRef}>
+        <CommandList listRef={listRef}>
           <CommandEmpty>{t('palette.empty')}</CommandEmpty>
           {groups.map((group, index) => (
             <Fragment key={group.heading}>
