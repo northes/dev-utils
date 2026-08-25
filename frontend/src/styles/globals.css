@@ -1,6 +1,9 @@
 :root {
-  color-scheme: light;
   --radius: 0.625rem;
+}
+:root[data-theme='default-light'],
+:root:not([data-theme]) {
+  color-scheme: light;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -27,7 +30,7 @@
   --success: oklch(73.29% 0.1941 150.81);
   --warning: oklch(78.19% 0.159 72.33);
 }
-.dark {
+:root[data-theme='default-dark'] {
   color-scheme: dark;
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);

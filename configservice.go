@@ -22,7 +22,9 @@ type Config struct {
 	AutoCheckUpdates             bool     `json:"autoCheckUpdates"`
 	Language                     string   `json:"language"`
 	SidebarMode                  string   `json:"sidebarMode"`
-	Theme                        string   `json:"theme"`
+	ThemeMode                    string   `json:"themeMode"`
+	LightTheme                   string   `json:"lightTheme"`
+	DarkTheme                    string   `json:"darkTheme"`
 	DiffHighlightMode            string   `json:"diffHighlightMode"`
 	DiffClipboardTargetMode      string   `json:"diffClipboardTargetMode"`
 	CodeEditorFontSize           int      `json:"codeEditorFontSize"`
@@ -63,7 +65,7 @@ type historyStored struct {
 }
 
 func defaultConfig() Config {
-	return Config{TrayMatchEnabled: true, TrayMatchTools: []string{"json", "time", "text", "base64", "diff", "jwt", "url"}, AutoOverwrite: true, AutoCheckUpdates: true, Language: "zh-CN", SidebarMode: "full", Theme: "dark", DiffHighlightMode: "character", DiffClipboardTargetMode: "alternate", CodeEditorFontSize: 12, TimeResultOrder: []string{"local", "dateTime", "dateOnly", "timeOnly", "zonedIso8601", "rfc3339", "utc", "compact", "underscore", "unixSeconds", "unixMilliseconds", "unixNanoseconds"}, JsonAutoFormatOnFill: true, JsonAutoFormatOnFillMigrated: true}
+	return Config{TrayMatchEnabled: true, TrayMatchTools: []string{"json", "time", "text", "base64", "diff", "jwt", "url"}, AutoOverwrite: true, AutoCheckUpdates: true, Language: "zh-CN", SidebarMode: "full", ThemeMode: "dark", LightTheme: "default-light", DarkTheme: "default-dark", DiffHighlightMode: "character", DiffClipboardTargetMode: "alternate", CodeEditorFontSize: 12, TimeResultOrder: []string{"local", "dateTime", "dateOnly", "timeOnly", "zonedIso8601", "rfc3339", "utc", "compact", "underscore", "unixSeconds", "unixMilliseconds", "unixNanoseconds"}, JsonAutoFormatOnFill: true, JsonAutoFormatOnFillMigrated: true}
 }
 func normalizeConfig(cfg Config) Config {
 	trayTools := []string{"json", "time", "text", "base64", "diff", "jwt", "url"}
@@ -97,10 +99,16 @@ func normalizeConfig(cfg Config) Config {
 		}
 		cfg.URLTrayMatchMigrated = true
 	}
-	switch cfg.Theme {
-	case "light", "dark":
+	switch cfg.ThemeMode {
+	case "light", "dark", "system":
 	default:
-		cfg.Theme = "dark"
+		cfg.ThemeMode = "dark"
+	}
+	if cfg.LightTheme != "default-light" {
+		cfg.LightTheme = "default-light"
+	}
+	if cfg.DarkTheme != "default-dark" {
+		cfg.DarkTheme = "default-dark"
 	}
 	switch cfg.DiffHighlightMode {
 	case "word-alt", "word", "character", "none":
@@ -149,6 +157,25 @@ func normalizeConfig(cfg Config) Config {
 	}
 	return cfg
 }
+
+func migrateLegacyTheme(cfg Config, legacyTheme string, hasThemeMode bool) Config {
+	if hasThemeMode || legacyTheme == "" {
+		return cfg
+	}
+	switch legacyTheme {
+	case "light":
+		cfg.ThemeMode = "light"
+	case "dark":
+		cfg.ThemeMode = "dark"
+	case "default-light":
+		cfg.ThemeMode = "light"
+		cfg.LightTheme = "default-light"
+	case "default-dark":
+		cfg.ThemeMode = "dark"
+		cfg.DarkTheme = "default-dark"
+	}
+	return cfg
+}
 func appDataDir() string {
 	if dir, err := os.UserConfigDir(); err == nil {
 		return filepath.Join(dir, "DevUtils")
@@ -174,6 +201,14 @@ func NewConfigService() *ConfigService {
 	path := configPath()
 	if b, err := os.ReadFile(path); err == nil {
 		_ = json.Unmarshal(b, &cfg)
+		var raw map[string]json.RawMessage
+		_ = json.Unmarshal(b, &raw)
+		var legacy struct {
+			Theme string `json:"theme"`
+		}
+		_ = json.Unmarshal(b, &legacy)
+		_, hasThemeMode := raw["themeMode"]
+		cfg = migrateLegacyTheme(cfg, legacy.Theme, hasThemeMode)
 	}
 	cfg = normalizeConfig(cfg)
 	s := &ConfigService{path: path, historyPath: historyPath(), historyDir: historyDataDir(), cfg: cfg}

@@ -12,6 +12,7 @@ import { ClearHistoryDialog } from './HistoryPage';
 import { Reveal } from './shared';
 import { toast } from './ui/toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { THEME_MODE_OPTIONS, THEME_OPTIONS, type ThemeMode } from '../theme';
 
 export type ToolDefinition = {
   id: ToolId;
@@ -135,13 +136,11 @@ function Setting({
 export default function SettingsPage({
   settings,
   setSettings,
-  theme,
   clearHistory,
   tools,
 }: {
   settings: Settings;
   setSettings: React.Dispatch<React.SetStateAction<Settings>>;
-  theme: string;
   clearHistory: () => void;
   tools: ToolDefinition[];
 }) {
@@ -187,8 +186,12 @@ export default function SettingsPage({
         trayMatchTools: tools.filter((item) => selected.has(item.id)).map((item) => item.id),
       };
     });
-  const setTheme = (value: 'light' | 'dark') =>
-    setSettings((current) => ({ ...current, theme: value }));
+  const setThemeMode = (value: ThemeMode) =>
+    setSettings((current) => ({ ...current, themeMode: value }));
+  const setLightTheme = (value: string) =>
+    setSettings((current) => ({ ...current, lightTheme: value }));
+  const setDarkTheme = (value: string) =>
+    setSettings((current) => ({ ...current, darkTheme: value }));
   const setLanguage = (code: string) => {
     setSettings((current) => ({ ...current, language: code }));
     i18n.changeLanguage(code);
@@ -196,10 +199,22 @@ export default function SettingsPage({
   const trayTools = new Set(
     settings.trayMatchTools ?? ['json', 'time', 'text', 'base64', 'diff', 'jwt', 'url'],
   );
-  const themeOptions = [
-    { id: 'light', label: t('settings.themeLight') },
-    { id: 'dark', label: t('settings.themeDark') },
-  ];
+  const themeModeOptions = THEME_MODE_OPTIONS.map(({ id, labelKey }) => ({
+    id,
+    label: t(labelKey),
+  }));
+  const lightThemeOptions = THEME_OPTIONS.filter((option) => option.tone === 'light').map(
+    ({ id, labelKey }) => ({
+      id,
+      label: t(labelKey),
+    }),
+  );
+  const darkThemeOptions = THEME_OPTIONS.filter((option) => option.tone === 'dark').map(
+    ({ id, labelKey }) => ({
+      id,
+      label: t(labelKey),
+    }),
+  );
   const clipboardSettings = (
     <SettingsGroup
       className="settings-group--clipboard"
@@ -255,29 +270,83 @@ export default function SettingsPage({
           <p className="mt-1 text-[10px] text-muted-foreground">{t('settings.subtitle')}</p>
         </header>
         <SettingsGroup title={t('settings.appearance')} subtitle={t('settings.appearanceSubtitle')}>
-          <Setting className="setting--appearance">
-            <Select
-              items={themeOptions.map(({ id, label }) => ({ value: id, label }))}
-              value={theme}
-              onValueChange={(v) => setTheme(v as 'light' | 'dark')}
-            >
-              <SelectTrigger
-                className="data-[size=default]:h-10 w-40 flex-none text-[11px]"
-                aria-label={t('settings.theme')}
+          <div className="divide-y divide-border">
+            <Setting label={t('settings.themeMode')} className="setting--appearance">
+              <Select
+                items={themeModeOptions.map(({ id, label }) => ({ value: id, label }))}
+                value={settings.themeMode}
+                onValueChange={(value) => {
+                  if (value) setThemeMode(value as ThemeMode);
+                }}
               >
-                <SelectValue>
-                  {themeOptions.find((option) => option.id === theme)?.label}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {themeOptions.map((o) => (
-                  <SelectItem key={o.id} value={o.id}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Setting>
+                <SelectTrigger
+                  className="data-[size=default]:h-10 w-40 flex-none text-[11px]"
+                  aria-label={t('settings.themeMode')}
+                >
+                  <SelectValue>
+                    {themeModeOptions.find((option) => option.id === settings.themeMode)?.label}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {themeModeOptions.map((option) => (
+                    <SelectItem key={option.id} value={option.id}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Setting>
+            <Setting label={t('settings.lightTheme')}>
+              <Select
+                items={lightThemeOptions.map(({ id, label }) => ({ value: id, label }))}
+                value={settings.lightTheme}
+                onValueChange={(value) => {
+                  if (value) setLightTheme(value);
+                }}
+              >
+                <SelectTrigger
+                  className="data-[size=default]:h-10 w-40 flex-none text-[11px]"
+                  aria-label={t('settings.lightTheme')}
+                >
+                  <SelectValue>
+                    {lightThemeOptions.find((option) => option.id === settings.lightTheme)?.label}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {lightThemeOptions.map((option) => (
+                    <SelectItem key={option.id} value={option.id}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Setting>
+            <Setting label={t('settings.darkTheme')}>
+              <Select
+                items={darkThemeOptions.map(({ id, label }) => ({ value: id, label }))}
+                value={settings.darkTheme}
+                onValueChange={(value) => {
+                  if (value) setDarkTheme(value);
+                }}
+              >
+                <SelectTrigger
+                  className="data-[size=default]:h-10 w-40 flex-none text-[11px]"
+                  aria-label={t('settings.darkTheme')}
+                >
+                  <SelectValue>
+                    {darkThemeOptions.find((option) => option.id === settings.darkTheme)?.label}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {darkThemeOptions.map((option) => (
+                    <SelectItem key={option.id} value={option.id}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Setting>
+          </div>
         </SettingsGroup>
         <SettingsGroup title={t('settings.editor')} subtitle={t('settings.editorSubtitle')}>
           <Setting className="setting--choice">

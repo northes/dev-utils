@@ -75,6 +75,7 @@ import { Log as LogFrontend } from '../bindings/changeme/logservice';
 import { SetAutoCheckEnabled } from '../bindings/changeme/updateservice';
 import type { Config as Settings } from '../bindings/changeme/models';
 import { useLocation, useNavigate, useNavigationType } from 'react-router';
+import { resolveTheme } from './theme';
 
 type Page = 'settings' | 'history' | ToolId;
 type SidebarMode = 'full' | 'icon' | 'hidden';
@@ -113,7 +114,9 @@ const defaultSettings: Settings = {
   autoCheckUpdates: true,
   language: 'zh-CN',
   sidebarMode: 'full',
-  theme: 'dark',
+  themeMode: 'dark',
+  lightTheme: 'default-light',
+  darkTheme: 'default-dark',
   diffHighlightMode: 'character',
   diffClipboardTargetMode: 'alternate',
   codeEditorFontSize: 12,
@@ -852,12 +855,21 @@ function AppShell() {
     target?: 'before' | 'after';
   }>(null);
   const [settings, setSettings] = useState<Settings>(defaultSettings);
+  const [systemDark, setSystemDark] = useState(
+    () =>
+      typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches,
+  );
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
   const nextDiffTarget = useRef<'before' | 'after'>('before');
   const settingsReady = useRef(false);
   const lastFocusedRef = useRef<Element | null>(null);
-  const theme = settings.theme === 'light' ? 'light' : 'dark';
+  const theme = resolveTheme(
+    settings.themeMode,
+    settings.lightTheme,
+    settings.darkTheme,
+    systemDark,
+  );
   const currentHistoryIndex = historyIndex();
   const [maxHistoryIndex, setMaxHistoryIndex] = useState(currentHistoryIndex);
   const canGoBack = currentHistoryIndex > 0;
@@ -882,11 +894,19 @@ function AppShell() {
   }, [location.key, location.pathname, navigationType, routerNavigate]);
   useEffect(() => {
     const root = document.documentElement;
-    root.classList.toggle('dark', theme === 'dark');
+    const dark = theme.endsWith('-dark');
+    root.classList.toggle('dark', dark);
     root.dataset.theme = theme;
-    root.style.colorScheme = theme;
+    root.style.colorScheme = dark ? 'dark' : 'light';
     root.style.setProperty('--code-editor-font-size', `${settings.codeEditorFontSize || 12}px`);
   }, [theme, settings.codeEditorFontSize]);
+  useEffect(() => {
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const onChange = (event: MediaQueryListEvent) => setSystemDark(event.matches);
+    setSystemDark(media.matches);
+    media.addEventListener('change', onChange);
+    return () => media.removeEventListener('change', onChange);
+  }, []);
   useEffect(() => {
     if (settings.language && i18n.language !== settings.language)
       i18n.changeLanguage(settings.language);
@@ -1395,7 +1415,6 @@ function AppShell() {
                   <SettingsPage
                     settings={settings}
                     setSettings={setSettings}
-                    theme={theme}
                     tools={tools}
                     clearHistory={clearHistory}
                   />
