@@ -3,13 +3,26 @@
 ## 主题定制约束
 
 - 用户提供主题变量时，必须按原值接入，不得自行调色、改写 OKLCH 数值或凭印象补充颜色。
-- 新主题必须分别提供亮色与暗色命名，并完整接通设置页、前端主题选择、根节点 `data-theme`/class 切换及 Go 配置校验与持久化。
-- 主题颜色应映射到项目现有语义 token；除非用户明确要求，主题不得覆盖项目既有的 `--radius`、`--field-radius`、Popover/Select 圆角、滚动条或其他布局样式。
-- 修改主题后必须检查主题选择器的实际级联效果，确认 Popover 圆角及现有全局设计 token 没有被意外改变。
-- 多个自定义主题必须同时保留：新增主题时不得重命名、复用或覆盖既有主题的 id、CSS 选择器、颜色变量或设置项；每个主题使用独立的 `<theme>-light` / `<theme>-dark` id。
-- 主题 CSS 出现同一选择器的多段定义时，后定义会覆盖前定义；新增前先检查重复选择器，并将每个主题的最终变量收敛为唯一一组，避免跨主题颜色串用。
-- 设置页主题名称必须全部通过 i18n locale key 提供，禁止硬编码主题名。每个亮/暗选项的 `textValue` 与显示标签都应为“浅色 - 主题名”或“深色 - 主题名”，以保证选中态与搜索文本一致。
-- 新增主题后，至少验证：设置列表中亮暗分组正确、每个主题名正确显示、选中态显示完整的亮暗前缀、前端类型检查和 `git diff --check` 通过。
+- 新主题必须同时提供一组亮色和暗色 ID，并完整接通设置页、前端主题注册表、根节点 `data-theme`/`.dark` 切换、Go 配置校验和持久化。
+- 主题颜色必须映射到项目现有语义 token；除非用户明确要求，主题不得覆盖既有的 `--radius`、`--field-radius`、Popover/Select 圆角、滚动条或其他布局样式。
+- 修改主题后必须检查实际级联效果，确认编辑器、Popover、Select、Dialog、Toast、滚动条和现有全局设计 token 没有被意外改变。
+- 多个主题必须同时保留：新增主题时不得重命名、复用或覆盖既有主题的 ID、CSS 选择器、颜色变量、locale key 或设置项。
+- 主题 CSS 中每个主题选择器只能有一组最终变量定义；新增前先检查重复选择器，避免后定义覆盖前定义或发生跨主题颜色串用。
+
+### 主题命名与接线规范
+
+- 主题族使用稳定的英文小写 kebab-case 名称，例如 `default`、`vscode`、`one-dark`；主题 ID 固定为 `<theme>-light` 和 `<theme>-dark`，后缀只能是 `-light` 或 `-dark`。
+- 当前默认主题 ID 是 `default-light` 和 `default-dark`，不得改名；主题 ID 是持久化配置值，不是用户可见文案。
+- 明暗模式与主题配色必须分离：`ThemeMode` 只允许 `light`、`dark`、`system`；`LightTheme` 只能保存 `*-light`，`DarkTheme` 只能保存 `*-dark`。
+- 前端主题注册表统一维护在 `frontend/src/theme.ts`，每个主题至少声明 `id`、`tone` 和 `labelKey`；设置页根据 `tone` 过滤选项，不得手写主题 ID 列表。
+- 主题 CSS 统一写在 `frontend/src/styles/globals.css`，选择器格式为 `:root[data-theme='<theme>-light']` 和 `:root[data-theme='<theme>-dark']`；每个主题必须独立定义完整语义变量。
+- 每套主题至少覆盖项目消费的语义变量：`--background`、`--foreground`、`--card`、`--popover`、`--popover-foreground`、`--primary`、`--primary-foreground`、`--secondary`、`--secondary-foreground`、`--muted`、`--muted-foreground`、`--accent`、`--accent-foreground`、`--destructive`、`--border`、`--input`、`--ring`、`--success`、`--warning` 及使用到的图表变量。
+- 主题不得直接修改组件颜色；组件和 CodeMirror 必须继续消费语义 token。新增主题只应增加 token 映射，不应在工具组件中增加主题分支。
+- Go `configservice.go` 必须同步增加新主题 ID 的白名单和后缀校验；非法主题回退到对应明暗侧的默认主题。旧配置迁移必须保留，不能让已有用户配置失效。
+- 修改 Go `Config` 结构后必须运行 `wails3 generate bindings -clean=true -ts -i`，不得手改 `frontend/bindings/`。
+- 设置页所有主题名称必须来自 locale key，禁止硬编码主题名。显示模式选项为“浅色”“深色”“跟随系统”；浅色主题和深色主题选择器的显示值只显示主题名，例如“默认”，由外层字段标签区分明暗。
+- 添加新主题时，必须同步更新 `frontend/src/theme.ts`、`frontend/src/styles/globals.css`、`configservice.go`、`configservice_test.go`、`frontend/src/locales/zh-CN.json` 和 `frontend/src/locales/en-US.json`。
+- 新主题验证至少覆盖：亮色 ID 只出现在浅色列表、暗色 ID 只出现在深色列表、模式解析正确、CSS 选择器唯一、选中值正确、系统模式切换正确、`npx tsc --no-emit`、`npm run build`、`go test ./...` 和 `git diff --check`。
 
 Wails v3(beta)桌面托盘应用:Go 后端 + React 19 前端。本地优先的开发者工具启动器。UI 即产品;Go 层只是薄壳。
 

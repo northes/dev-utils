@@ -1,9 +1,23 @@
 export type ThemeMode = 'light' | 'dark' | 'system';
-export type ThemeId = 'default-light' | 'default-dark';
+export type ThemeId =
+  | 'default-light'
+  | 'default-dark'
+  | 'modern-minimal-light'
+  | 'modern-minimal-dark';
 
 export const THEME_OPTIONS = [
   { id: 'default-light', tone: 'light', labelKey: 'settings.themeDefault' },
   { id: 'default-dark', tone: 'dark', labelKey: 'settings.themeDefault' },
+  {
+    id: 'modern-minimal-light',
+    tone: 'light',
+    labelKey: 'settings.themeModernMinimal',
+  },
+  {
+    id: 'modern-minimal-dark',
+    tone: 'dark',
+    labelKey: 'settings.themeModernMinimal',
+  },
 ] as const satisfies ReadonlyArray<{ id: ThemeId; tone: 'light' | 'dark'; labelKey: string }>;
 
 export const THEME_MODE_OPTIONS = [
@@ -13,8 +27,9 @@ export const THEME_MODE_OPTIONS = [
 ] as const satisfies ReadonlyArray<{ id: ThemeMode; labelKey: string }>;
 
 export function normalizeThemeId(theme: string, tone: 'light' | 'dark'): ThemeId {
-  if (tone === 'light' && theme === 'default-light') return theme;
-  if (tone === 'dark' && theme === 'default-dark') return theme;
+  if (THEME_OPTIONS.some((option) => option.id === theme && option.tone === tone)) {
+    return theme as ThemeId;
+  }
   return tone === 'light' ? 'default-light' : 'default-dark';
 }
 

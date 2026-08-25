@@ -405,6 +405,7 @@
     "lightTheme": "Light theme",
     "darkTheme": "Dark theme",
     "themeDefault": "Default",
+    "themeModernMinimal": "Modern Minimal",
     "language": "Language",
     "languageSubtitle": "Choose the interface language.",
     "languages": {

@@ -104,10 +104,10 @@ func normalizeConfig(cfg Config) Config {
 	default:
 		cfg.ThemeMode = "dark"
 	}
-	if cfg.LightTheme != "default-light" {
+	if cfg.LightTheme != "default-light" && cfg.LightTheme != "modern-minimal-light" {
 		cfg.LightTheme = "default-light"
 	}
-	if cfg.DarkTheme != "default-dark" {
+	if cfg.DarkTheme != "default-dark" && cfg.DarkTheme != "modern-minimal-dark" {
 		cfg.DarkTheme = "default-dark"
 	}
 	switch cfg.DiffHighlightMode {

@@ -136,11 +136,13 @@ function Setting({
 export default function SettingsPage({
   settings,
   setSettings,
+  setThemeMode: setThemeModeWithTransition,
   clearHistory,
   tools,
 }: {
   settings: Settings;
   setSettings: React.Dispatch<React.SetStateAction<Settings>>;
+  setThemeMode: (update: React.SetStateAction<Settings>) => void;
   clearHistory: () => void;
   tools: ToolDefinition[];
 }) {
@@ -187,7 +189,7 @@ export default function SettingsPage({
       };
     });
   const setThemeMode = (value: ThemeMode) =>
-    setSettings((current) => ({ ...current, themeMode: value }));
+    setThemeModeWithTransition((current) => ({ ...current, themeMode: value }));
   const setLightTheme = (value: string) =>
     setSettings((current) => ({ ...current, lightTheme: value }));
   const setDarkTheme = (value: string) =>

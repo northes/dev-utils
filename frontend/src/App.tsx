@@ -1434,7 +1434,8 @@ function AppShell() {
                 <Suspense fallback={null}>
                   <SettingsPage
                     settings={settings}
-                    setSettings={setSettingsWithThemeTransition}
+                    setSettings={setSettings}
+                    setThemeMode={setSettingsWithThemeTransition}
                     tools={tools}
                     clearHistory={clearHistory}
                   />
