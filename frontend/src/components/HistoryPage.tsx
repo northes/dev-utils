@@ -125,7 +125,7 @@ export function ClearHistoryDialog({
   );
 }
 
-const pageSize = 10;
+const pageSize = 50;
 const historyTools: Array<{ id: ToolId; nameKey: string }> = (
   ['json', 'time', 'text', 'base64', 'diff', 'jwt', 'url'] as const
 ).map((id) => ({ id, nameKey: `tools.${id}.name` }));
@@ -188,20 +188,6 @@ export default function HistoryPage({
     };
   }, [tool, range, page, reload]);
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
-  const pageNumbers: Array<number | 'ellipsis'> =
-    totalPages <= 7
-      ? Array.from({ length: totalPages }, (_, i) => i + 1)
-      : (() => {
-          const pages: Array<number | 'ellipsis'> = [];
-          pages.push(1);
-          if (page > 3) pages.push('ellipsis');
-          const start = Math.max(2, page - 1),
-            end = Math.min(totalPages - 1, page + 1);
-          for (let i = start; i <= end; i++) pages.push(i);
-          if (page < totalPages - 2) pages.push('ellipsis');
-          pages.push(totalPages);
-          return pages;
-        })();
   const clearAll = () => {
     clear();
     setPage(1);
@@ -398,9 +384,6 @@ export default function HistoryPage({
               data={loading ? [] : items}
               emptyState={emptyState}
               onRowClick={(item) => void openHistory(item)}
-              className="flex min-h-0 flex-1 flex-col"
-              containerClassName="min-h-0 flex-1"
-              tableClassName="min-w-[560px]"
             />
             {total > 0 && (
               <div className="history-pagination flex items-center justify-between gap-3 border-t border-border p-2">
@@ -420,22 +403,6 @@ export default function HistoryPage({
                   >
                     {t('history.prev')}
                   </Button>
-                  {pageNumbers.map((p, i) =>
-                    p === 'ellipsis' ? (
-                      <span key={`e-${i}`} className="px-1 text-muted-foreground">
-                        …
-                      </span>
-                    ) : (
-                      <Button
-                        variant="ghost"
-                        key={p}
-                        onClick={() => setPage(p)}
-                        className={`h-auto rounded-lg px-2 py-1 text-[11px] ${p === page ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'}`}
-                      >
-                        {p}
-                      </Button>
-                    ),
-                  )}
                   <Button
                     variant="ghost"
                     disabled={page === totalPages}
