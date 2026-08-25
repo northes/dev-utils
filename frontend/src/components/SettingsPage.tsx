@@ -262,7 +262,7 @@ export default function SettingsPage({
               onValueChange={(v) => setTheme(v as 'light' | 'dark')}
             >
               <SelectTrigger
-                className="h-8 w-40 flex-none text-[11px]"
+                className="data-[size=default]:h-10 w-40 flex-none text-[11px]"
                 aria-label={t('settings.theme')}
               >
                 <SelectValue>
@@ -281,7 +281,7 @@ export default function SettingsPage({
         </SettingsGroup>
         <SettingsGroup title={t('settings.editor')} subtitle={t('settings.editorSubtitle')}>
           <Setting className="setting--choice">
-            <div className="inline-flex rounded-lg border border-border bg-card p-[3px]">
+            <div className="inline-flex h-10 rounded-lg border border-border bg-card p-[3px]">
               {[12, 14, 16, 18].map((size) => (
                 <Button
                   key={size}
@@ -302,7 +302,7 @@ export default function SettingsPage({
         </SettingsGroup>
         <SettingsGroup title={t('settings.language')} subtitle={t('settings.languageSubtitle')}>
           <Setting className="setting--choice">
-            <div className="inline-flex rounded-lg border border-border bg-card p-[3px]">
+            <div className="inline-flex h-10 rounded-lg border border-border bg-card p-[3px]">
               {SUPPORTED_LANGUAGES.map((l) => (
                 <Button
                   key={l.code}

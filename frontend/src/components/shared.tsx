@@ -490,7 +490,7 @@ export function ToolActionBar({ label, actions }: { label: string; actions: Tool
               variant={buttonVariant[action.variant]}
               disabled={action.disabled}
               onClick={action.onPress}
-              className="h-[30px] flex-none rounded-r-none px-[11px] text-[11px] focus-visible:z-1 [&_svg]:size-3.5"
+               className="h-[30px] flex-none rounded-r-none px-2.5 text-[11px] focus-visible:z-1 [&_svg]:size-3.5"
             >
               {action.label}
             </Button>
@@ -500,7 +500,7 @@ export function ToolActionBar({ label, actions }: { label: string; actions: Tool
                   <Button
                     variant={buttonVariant[action.variant]}
                     size="icon-sm"
-                    className="relative flex-none rounded-l-none text-[11px] before:pointer-events-none before:absolute before:top-[6px] before:bottom-[6px] before:left-0 before:w-px before:bg-[color-mix(in_srgb,var(--primary-foreground)_28%,transparent)] focus-visible:z-1 [&_svg]:size-3.5"
+                    className={`relative h-[30px] w-[30px] min-w-[30px] flex-none rounded-l-none p-0 text-[11px] before:pointer-events-none before:absolute before:top-[6px] before:bottom-[6px] before:left-0 before:w-px before:bg-[color-mix(in_srgb,var(--primary-foreground)_28%,transparent)] focus-visible:z-1 [&_svg]:size-3.5 ${action.disabled ? 'opacity-50' : ''}`}
                     aria-label={action.menuLabel}
                   />
                 }
