@@ -1350,7 +1350,7 @@ function AppShell() {
             <div
               className={`tool-slot h-full min-h-0 overflow-hidden${page === 'settings' ? ' h-auto min-h-full overflow-visible' : ' is-hidden absolute inset-0 invisible pointer-events-none'}`}
             >
-              {visited.has('settings') && (
+              {page === 'settings' && (
                 <Suspense fallback={null}>
                   <SettingsPage
                     settings={settings}
