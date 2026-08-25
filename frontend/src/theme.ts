@@ -1,9 +1,6 @@
 export type ThemeMode = 'light' | 'dark' | 'system';
 export type ThemeId =
-  | 'default-light'
-  | 'default-dark'
-  | 'modern-minimal-light'
-  | 'modern-minimal-dark';
+  'default-light' | 'default-dark' | 'modern-minimal-light' | 'modern-minimal-dark';
 
 export const THEME_OPTIONS = [
   { id: 'default-light', tone: 'light', labelKey: 'settings.themeDefault' },
