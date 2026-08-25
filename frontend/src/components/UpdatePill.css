@@ -1,0 +1,36 @@
+.update-pill__text {
+  color: transparent !important;
+  background-image: linear-gradient(
+    105deg,
+    var(--foreground) 0%,
+    var(--foreground) 38%,
+    color-mix(in srgb, var(--foreground) 38%, var(--card)) 50%,
+    var(--foreground) 62%,
+    var(--foreground) 100%
+  );
+  background-position: 100% 0;
+  background-size: 250% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  animation: update-pill-shimmer 2.8s ease-in-out infinite;
+}
+
+@keyframes update-pill-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+
+  to {
+    background-position: 0% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .update-pill__text {
+    color: var(--foreground) !important;
+    background: none;
+    -webkit-background-clip: initial;
+    background-clip: initial;
+    animation: none;
+  }
+}

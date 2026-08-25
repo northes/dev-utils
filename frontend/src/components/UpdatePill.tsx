@@ -6,6 +6,7 @@ import { Spinner } from './ui/spinner';
 import { useTranslation } from 'react-i18next';
 import { InstallUpdate, RestartApp } from '../../bindings/changeme/updateservice';
 import { toast } from './ui/toast';
+import './UpdatePill.css';
 
 type PillState = 'checking' | 'available' | 'downloading' | 'applying' | 'restarting';
 const payload = (event: any) => event?.data ?? event;
@@ -116,11 +117,11 @@ export default function UpdatePill() {
   if (working)
     return (
       <div
-        className="relative top-px z-[3] flex h-6 max-w-[min(340px,calc(100vw-220px))] flex-none items-center self-center gap-1.5 ml-auto rounded-full border border-border bg-card px-2 py-0 text-foreground [--wails-draggable:no-drag]"
+        className="relative top-px z-[3] flex h-6 max-w-[min(340px,calc(100vw-220px))] flex-none items-center self-center gap-1.5 ml-auto rounded-full border border-border bg-card py-0 px-1.5 text-foreground [--wails-draggable:no-drag]"
         role="status"
       >
         <Spinner className="size-3.5 flex-none self-center text-primary motion-reduce:animate-none" />
-        <span className="block min-w-0 self-center overflow-hidden text-ellipsis whitespace-nowrap text-[10px] leading-[14px] text-foreground">
+        <span className="update-pill__text block min-w-0 self-center overflow-hidden text-ellipsis whitespace-nowrap text-[10px] leading-[14px] text-foreground">
           {label}
           {state === 'downloading' && percent > 0 ? ` ${percent}%` : ''}
         </span>
@@ -128,7 +129,7 @@ export default function UpdatePill() {
     );
   return (
     <div
-      className="relative top-px z-[3] flex h-6 max-w-[min(340px,calc(100vw-220px))] flex-none items-center self-center gap-1.5 ml-auto overflow-hidden rounded-full border border-border bg-card py-0 pl-2 pr-1 text-foreground [--wails-draggable:no-drag] cursor-pointer hover:border-muted-foreground hover:bg-muted"
+      className="relative top-px z-[3] flex h-6 max-w-[min(340px,calc(100vw-220px))] flex-none items-center self-center gap-1.5 ml-auto overflow-hidden rounded-full border border-border bg-card py-0 px-0.5 text-foreground [--wails-draggable:no-drag] cursor-pointer hover:border-muted-foreground hover:bg-muted"
       role="status"
     >
       <Button
@@ -138,7 +139,7 @@ export default function UpdatePill() {
         aria-label={label}
       >
         <ArrowCircleUp data-icon="inline-start" size={14} weight="duotone" />
-        <span className="block min-w-0 self-center overflow-hidden text-ellipsis whitespace-nowrap text-[10px] leading-[14px] text-foreground">
+        <span className="update-pill__text block min-w-0 self-center overflow-hidden text-ellipsis whitespace-nowrap text-[10px] leading-[14px] text-foreground">
           {label}
         </span>
       </Button>
@@ -150,7 +151,7 @@ export default function UpdatePill() {
         title={t('updatePill.dismiss')}
         onClick={dismiss}
       >
-        <X size={11} weight="duotone" />
+        <X size={11} weight="regular" />
       </Button>
     </div>
   );
