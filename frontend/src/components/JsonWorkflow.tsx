@@ -515,6 +515,7 @@ export function WorkflowPanel({
     const list = listRef.current;
     if (!list) return;
     list.scrollTop = list.scrollHeight;
+    view.dispatch({ selection: { anchor: view.state.doc.length } });
     view.focus();
     onFocusHandled();
   };
