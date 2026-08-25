@@ -742,7 +742,10 @@ function historyIndex() {
 }
 function detectBase64(s: string): 'text' | 'image' | null {
   const data = /^data:[^,]+;base64,([A-Za-z0-9+/_=-]+)$/i.exec(s);
-  const raw = (data?.[1] ?? s).replace(/\s/g, '');
+  const raw = data?.[1] ?? s;
+  const isDataUrl = Boolean(data);
+  const isObviousBase64 = raw.length >= 16 && /[=+/_-]/.test(raw);
+  if (!isDataUrl && !isObviousBase64) return null;
   if (raw.length > 16 * 1024 * 1024 || raw.includes('.') || !/^[A-Za-z0-9+/_-]+={0,2}$/.test(raw))
     return null;
   const decoded = decodeBase64(raw);
