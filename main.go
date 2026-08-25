@@ -78,6 +78,8 @@ func matchGitHubUpdateAsset(req updater.CheckRequest, assets []githubprovider.Re
 }
 
 func main() {
+	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
+	log.Printf("[startup] DevUtils starting on %s/%s", runtime.GOOS, runtime.GOARCH)
 	saved := loadWindowState()
 	width, height := 720, 520
 	x, y := 0, 0
@@ -87,6 +89,7 @@ func main() {
 	}
 
 	cfgService := NewConfigService()
+	logService := NewLogService()
 	updateService := NewUpdateService(currentVersion)
 	dockService := dock.New()
 	isQuitting := false
@@ -98,6 +101,7 @@ func main() {
 		},
 		Services: []application.Service{
 			application.NewService(cfgService),
+			application.NewService(logService),
 			application.NewService(updateService),
 			application.NewService(dockService),
 		},
@@ -154,7 +158,22 @@ func main() {
 			},
 		},
 	})
+	log.Printf("[startup] window created; WebKit back-forward gestures enabled")
 	window.Show()
+	log.Printf("[startup] window shown; installing local swipe monitor")
+	installMouseNavigationMonitor()
+	installMouseNavigationSwipeMonitor(func(direction, phase int) {
+		log.Printf("[mouse] local swipe direction=%d phase=%d", direction, phase)
+		if phase != 8 {
+			return
+		}
+		if direction == 2 {
+			app.Event.Emit("mouse:navigate", "back")
+		} else if direction == 1 {
+			app.Event.Emit("mouse:navigate", "forward")
+		}
+	})
+	log.Printf("[startup] local swipe monitor installed")
 	updateService.setBeforeRestart(func() {
 		// 更新重启走真实退出，避免 WindowClosing 钩子把它当成隐藏到托盘。
 		isQuitting = true

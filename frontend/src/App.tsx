@@ -70,6 +70,7 @@ import {
   GetHistoryContent,
   Save as SaveConfig,
 } from '../bindings/changeme/configservice';
+import { Log as LogFrontend } from '../bindings/changeme/logservice';
 import { SetAutoCheckEnabled } from '../bindings/changeme/updateservice';
 import type { Config as Settings } from '../bindings/changeme/models';
 import { useLocation, useNavigate, useNavigationType } from 'react-router';
@@ -96,6 +97,13 @@ type PaletteItem = {
 type TranslatablePaletteItem = PaletteItem & { label: string; group: string; subgroup: string };
 type IndexedItem = TranslatablePaletteItem & { text: string; pinyin: string; initials: string };
 type Romanize = (text: string) => string;
+
+function logFrontend(message: string) {
+  void LogFrontend(message).catch((error) => {
+    console.error('[frontend] logservice failed', error);
+  });
+}
+
 const defaultSettings: Settings = {
   trayMatchEnabled: true,
   trayMatchTools: ['json', 'time', 'text', 'base64', 'diff', 'jwt', 'url'],
@@ -859,14 +867,18 @@ function AppShell() {
     document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }));
   };
   const navigatePage = (next: Page) => {
+    logFrontend(`[route] navigatePage from=${page} to=${next}`);
     routerNavigate(routePath(next));
     dismissOverlays();
   };
   const navigate = navigatePage;
   useEffect(() => {
     const next = pageFromPath(location.pathname);
+    logFrontend(
+      `[route] location pathname=${location.pathname} key=${location.key} type=${navigationType} page=${next}`,
+    );
     if (location.pathname !== routePath(next)) routerNavigate(routePath(next), { replace: true });
-  }, [location.pathname, routerNavigate]);
+  }, [location.key, location.pathname, navigationType, routerNavigate]);
   useEffect(() => {
     const root = document.documentElement;
     root.classList.toggle('dark', theme === 'dark');
@@ -903,9 +915,28 @@ function AppShell() {
   }, [currentHistoryIndex, location.key, navigationType]);
   useEffect(() => {
     void Events.On('navigate', (event) => {
+      logFrontend(`[event] navigate data=${String(event.data)}`);
       if (isPage(event.data)) navigatePage(event.data);
     });
   }, []);
+  useEffect(() => {
+    const off = Events.On('mouse:navigate', (event) => {
+      logFrontend(`[event] mouse:navigate data=${String(event.data)}`);
+      if (event.data === 'back') routerNavigate(-1);
+      if (event.data === 'forward') routerNavigate(1);
+    });
+    const onMouse = (event: MouseEvent) => {
+      if (event.button === 3 || event.button === 4)
+        logFrontend(`[dom] mouse button=${event.button} type=${event.type}`);
+    };
+    window.addEventListener('mousedown', onMouse);
+    window.addEventListener('mouseup', onMouse);
+    return () => {
+      off();
+      window.removeEventListener('mousedown', onMouse);
+      window.removeEventListener('mouseup', onMouse);
+    };
+  }, [routerNavigate]);
   useEffect(() => {
     const onSchema = (event: Event) => setJsonSchemaOpen((event as CustomEvent<boolean>).detail);
     window.addEventListener('devutils:json-schema', onSchema);
