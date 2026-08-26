@@ -189,7 +189,7 @@ const tools: ToolDefinition[] = [
     nameKey: 'tools.jwt.name',
     descriptionKey: 'tools.jwt.description',
     icon: Key,
-    keywords: 'jwt token decode header payload 令牌 解码 解析',
+    keywords: 'jwt token decode header payload signature 令牌 解码 解析 签名',
   },
   {
     id: 'url' as const,
@@ -261,7 +261,7 @@ const paletteItems: PaletteItem[] = [
     labelKey: 'commands.openJwt',
     groupKey: 'groups.tools',
     icon: Key,
-    keywords: 'jwt token decode header payload 令牌 解码 解析 打开工具',
+    keywords: 'jwt token decode header payload signature 令牌 解码 解析 签名 打开工具',
     page: 'jwt',
   },
   {
@@ -611,6 +611,15 @@ const paletteItems: PaletteItem[] = [
     keywords: 'copy payload 复制 载荷 数据 负载',
     tool: 'jwt',
     action: 'copyPayload',
+  },
+  {
+    id: 'jwt:copySignature',
+    labelKey: 'jwtTool.copySignature',
+    groupKey: 'tools.jwt.name',
+    icon: Key,
+    keywords: 'copy signature 复制 签名',
+    tool: 'jwt',
+    action: 'copySignature',
   },
   {
     id: 'url:clear',

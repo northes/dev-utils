@@ -19,7 +19,7 @@ import {
 } from './shared';
 import { toast } from './ui/toast';
 
-type Decoded = { header: string; payload: string };
+type Decoded = { header: string; payload: string; signature: string };
 function decodeSegment(segment: string): string | null {
   const decoded = decodeBase64(segment);
   if (decoded === null) return null;
@@ -34,7 +34,9 @@ function decodeJwt(token: string): Decoded | null {
   if (parts.length !== 3) return null;
   const header = decodeSegment(parts[0]),
     payload = decodeSegment(parts[1]);
-  return header !== null && payload !== null ? { header, payload } : null;
+  return header !== null && payload !== null
+    ? { header, payload, signature: parts[2] ?? '' }
+    : null;
 }
 function JwtPane({
   label,
@@ -112,7 +114,7 @@ export default function JwtTool({
       recordTimer.current = window.setTimeout(() => {
         recordTimer.current = null;
         lastRecorded.current = token;
-        const output = `${decoded.header}\n${decoded.payload}`,
+        const output = `${decoded.header}\n${decoded.payload}\n${decoded.signature}`,
           bytes = new TextEncoder().encode(output).length;
         record('jwt', t('jwtTool.decoded'), `${bytes} B`, token, output);
       }, 1500);
@@ -121,7 +123,7 @@ export default function JwtTool({
       if (recordTimer.current !== null) window.clearTimeout(recordTimer.current);
     };
   }, [decoded, input, record, t]);
-  const copy = async (kind: 'header' | 'payload') => {
+  const copy = async (kind: 'header' | 'payload' | 'signature') => {
     if (!decoded) return;
     const value = decoded[kind];
     await navigator.clipboard?.writeText(value).catch(() => {});
@@ -129,7 +131,13 @@ export default function JwtTool({
     toast.add({ title: t('toast.copied', { value: `${bytes} B` }) });
     record(
       'jwt',
-      t(kind === 'header' ? 'jwtTool.copyHeader' : 'jwtTool.copyPayload'),
+      t(
+        kind === 'header'
+          ? 'jwtTool.copyHeader'
+          : kind === 'payload'
+            ? 'jwtTool.copyPayload'
+            : 'jwtTool.copySignature',
+      ),
       `${bytes} B`,
       input,
       value,
@@ -143,12 +151,22 @@ export default function JwtTool({
       setInput('');
       return;
     }
-    if (pending.action === 'copyHeader' || pending.action === 'copyPayload') {
+    if (
+      pending.action === 'copyHeader' ||
+      pending.action === 'copyPayload' ||
+      pending.action === 'copySignature'
+    ) {
       if (!decoded) {
         toast.add({ title: t('jwtTool.invalid'), type: 'warning' });
         return;
       }
-      void copy(pending.action === 'copyHeader' ? 'header' : 'payload');
+      void copy(
+        pending.action === 'copyHeader'
+          ? 'header'
+          : pending.action === 'copyPayload'
+            ? 'payload'
+            : 'signature',
+      );
       return;
     }
     skipRecord.current = pending.action === 'restore';
@@ -168,9 +186,10 @@ export default function JwtTool({
                 inputView.current = view;
               }}
             />
-            <div className="grid min-h-0 min-w-0 grid-rows-2 gap-3">
+            <div className="grid min-h-0 min-w-0 grid-rows-3 gap-3">
               <JwtPane label={t('jwtTool.header')} value={decoded?.header ?? ''} readOnly />
               <JwtPane label={t('jwtTool.payload')} value={decoded?.payload ?? ''} readOnly />
+              <JwtPane label={t('jwtTool.signature')} value={decoded?.signature ?? ''} readOnly />
             </div>
           </div>
         </ToolLayoutContent>
@@ -193,6 +212,14 @@ export default function JwtTool({
                 variant: 'secondary',
                 disabled: !decoded,
                 onPress: () => void copy('header'),
+              },
+              {
+                key: 'copySignature',
+                label: t('jwtTool.copySignature'),
+                icon: Copy,
+                variant: 'secondary',
+                disabled: !decoded,
+                onPress: () => void copy('signature'),
               },
               {
                 key: 'copyPayload',

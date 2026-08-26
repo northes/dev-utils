@@ -66,7 +66,7 @@
     },
     "jwt": {
       "name": "JWT 解析",
-      "description": "解码 JWT 的 Header 与 Payload"
+      "description": "解码 JWT 的头部、载荷与签名"
     },
     "url": {
       "name": "URL 分析",
@@ -359,20 +359,22 @@
   },
   "jwtTool": {
     "title": "JWT 解析",
-    "subtitle": "解码 JWT 的 Header 与 Payload",
+    "subtitle": "解码 JWT 的头部、载荷与签名",
     "actions": "JWT 操作",
     "input": "JWT",
-    "header": "Header",
-    "payload": "Payload",
+    "header": "头部",
+    "payload": "载荷",
+    "signature": "签名",
     "clear": "清空",
-    "copyHeader": "复制 Header",
-    "copyPayload": "复制 Payload",
+    "copyHeader": "复制头部",
+    "copyPayload": "复制载荷",
+    "copySignature": "复制签名",
     "valid": "有效 JWT",
     "invalid": "无效 JWT",
     "detected": "解析结果",
     "decoded": "解析",
     "characters": "字符",
-    "emptyHint": "粘贴完整的 JWT，自动解析 Header 与 Payload"
+    "emptyHint": "粘贴完整的 JWT，自动解析头部、载荷与签名"
   },
   "urlTool": {
     "title": "URL 分析",

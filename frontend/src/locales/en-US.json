@@ -66,7 +66,7 @@
     },
     "jwt": {
       "name": "JWT Decoder",
-      "description": "Decode JWT header and payload"
+      "description": "Decode JWT header, payload, and signature"
     },
     "url": {
       "name": "URL Analyzer",
@@ -359,20 +359,22 @@
   },
   "jwtTool": {
     "title": "JWT Decoder",
-    "subtitle": "Decode JWT header and payload",
+    "subtitle": "Decode JWT header, payload, and signature",
     "actions": "JWT actions",
     "input": "JWT",
     "header": "Header",
     "payload": "Payload",
+    "signature": "Signature",
     "clear": "Clear",
     "copyHeader": "Copy header",
     "copyPayload": "Copy payload",
+    "copySignature": "Copy signature",
     "valid": "Valid JWT",
     "invalid": "Invalid JWT",
     "detected": "Decoded",
     "decoded": "Decoded",
     "characters": "characters",
-    "emptyHint": "Paste a full JWT to decode header and payload"
+    "emptyHint": "Paste a full JWT to decode header, payload, and signature"
   },
   "urlTool": {
     "title": "URL Analyzer",
