@@ -15,6 +15,124 @@
 .json-cm:focus-within {
   border-color: var(--muted-foreground);
 }
+.json-pane-editor {
+  isolation: isolate;
+}
+.json-pane-editor:has(.json-table-layer.is-visible) .json-cm {
+  visibility: hidden;
+  pointer-events: none;
+}
+.json-table-toggle {
+  width: 28px;
+  min-width: 28px;
+  flex: none;
+  background: color-mix(in oklch, var(--card) 88%, transparent);
+  backdrop-filter: blur(6px);
+}
+.json-table-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  min-height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.json-table-layer.is-visible {
+  visibility: visible;
+  pointer-events: auto;
+  opacity: 1;
+}
+.json-table-preview,
+.json-table-scroll {
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  overflow: auto;
+  padding-inline-end: var(--overlay-scrollbar-hit-size);
+}
+/* Top-level: 38px top clears the toggle button */
+.json-table-layer > .json-table-preview,
+.json-table-layer > .json-table-scroll {
+  padding-block-start: 38px;
+}
+.json-table-layer > .json-table-preview {
+  padding-inline: 10px;
+  padding-block-end: 10px;
+}
+/* Nested sub-tables: expand with content, only the outer preview scrolls */
+.json-table-child .json-table-scroll {
+  height: auto;
+  overflow: visible;
+  padding: 0;
+}
+.json-table-key-value,
+.json-table-data {
+  width: max-content;
+  min-width: 100%;
+  font-size: 11px;
+}
+.json-table-key {
+  width: 1%;
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+.json-table-key-value td,
+.json-table-key-value th,
+.json-table-data td,
+.json-table-data th {
+  height: 30px;
+  padding: 5px 9px;
+}
+.json-table-nested {
+  min-width: 120px;
+  color: var(--muted-foreground);
+}
+.json-table-child {
+  margin: 5px 0 0 18px;
+  border-left: 1px solid var(--border);
+}
+.json-table-container-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+.json-table-null {
+  color: var(--muted-foreground);
+  font-style: italic;
+}
+.json-table-string {
+  color: var(--chart-2);
+}
+.json-table-number {
+  color: var(--chart-1);
+}
+.json-table-boolean {
+  color: var(--chart-4);
+}
+.json-table-row-index {
+  display: inline-block;
+  min-width: 20px;
+  text-align: right;
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1;
+}
+.json-table-data td {
+  white-space: normal;
+  word-break: break-word;
+}
+.json-table-empty,
+.json-table-scalar {
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
 .json-cm .cm-editor {
   height: 100%;
 }

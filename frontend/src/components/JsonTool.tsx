@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,7 +22,13 @@ import { codeFolding, syntaxTree } from '@codemirror/language';
 import { EditorView, keymap } from '@codemirror/view';
 import { acceptCompletion } from '@codemirror/autocomplete';
 import { quietEditorTheme } from './codeMirrorTheme';
-import { Copy, DownloadSimple, Trash, UploadSimple } from '@phosphor-icons/react';
+import {
+  Copy,
+  DownloadSimple,
+  Table as TableIcon,
+  Trash,
+  UploadSimple,
+} from '@phosphor-icons/react';
 import {
   formatJsonPreserve,
   hasComments,
@@ -41,6 +47,7 @@ import {
 } from './shared';
 import { toast } from './ui/toast';
 import { JsonErrorPanel } from './JsonErrorPanel';
+import { JsonTablePreview } from './JsonTablePreview';
 import '../styles/tools/editor.css';
 import '../styles/tools/json.css';
 import {
@@ -271,6 +278,11 @@ function JsonEditorPane({
   placeholder,
   cmClassName,
   formatOnPaste,
+  tableMode = false,
+  tableDisabled = false,
+  onToggleTable,
+  tablePreview,
+  tableHint,
 }: {
   label: string;
   value: string;
@@ -282,7 +294,13 @@ function JsonEditorPane({
   placeholder?: string;
   cmClassName?: string;
   formatOnPaste?: (next: string) => string;
+  tableMode?: boolean;
+  tableDisabled?: boolean;
+  onToggleTable?: () => void;
+  tablePreview?: ReactNode;
+  tableHint?: string;
 }) {
+  const { t } = useTranslation();
   const formatOnPasteRef = useRef(formatOnPaste);
   formatOnPasteRef.current = formatOnPaste;
   const onChangeRef = useRef(onChange);
@@ -312,7 +330,25 @@ function JsonEditorPane({
       <span className="json-pane-label flex-none font-mono text-[10px] font-medium leading-none tracking-[.04em] text-muted-foreground uppercase">
         {label}
       </span>
-      <div className="json-pane-editor flex min-h-0 min-w-0 flex-1">
+      <div className="json-pane-editor relative flex min-h-0 min-w-0 flex-1">
+        {onToggleTable && (
+          <Button
+            type="button"
+            variant={tableMode ? 'secondary' : 'ghost'}
+            size="icon-sm"
+            className="json-table-toggle absolute top-2 right-2 z-20"
+            disabled={tableDisabled}
+            aria-label={t('jsonTool.tablePreview')}
+            title={
+              tableDisabled
+                ? tableHint
+                : t(tableMode ? 'jsonTool.tablePreviewOn' : 'jsonTool.tablePreview')
+            }
+            onClick={onToggleTable}
+          >
+            <TableIcon />
+          </Button>
+        )}
         <CodeMirror
           className={`json-cm${cmClassName ? ' ' + cmClassName : ''}`}
           height="100%"
@@ -327,6 +363,15 @@ function JsonEditorPane({
           placeholder={placeholder}
           extensions={[json5(), foldExt, pasteExt]}
         />
+        {tablePreview && (
+          <div
+            className={`json-table-layer${tableMode ? ' is-visible' : ''}`}
+            aria-hidden={!tableMode}
+            {...(!tableMode ? { inert: true } : {})}
+          >
+            {tablePreview}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -360,6 +405,8 @@ export default function JsonTool({
   const [pathError, setPathError] = useState('');
   const [workflowRules, setWorkflowRules] = useState<WorkflowItem[]>([]);
   const [workflowFocusId, setWorkflowFocusId] = useState<string | null>(null);
+  const [inputTableMode, setInputTableMode] = useState(false);
+  const [resultTableMode, setResultTableMode] = useState(false);
   const [commentDialog, setCommentDialog] = useState<null | {
     mode: 'format' | 'minify';
     pane: 'input' | 'result';
@@ -377,6 +424,31 @@ export default function JsonTool({
       return null;
     }
   }, [input]);
+  const inputPreview = useMemo(() => {
+    try {
+      return { valid: true, value: parseJsonLoose(input) };
+    } catch {
+      return { valid: false, value: null };
+    }
+  }, [input]);
+  const resultPreview = useMemo(() => {
+    try {
+      return { valid: true, value: parseJsonLoose(result) };
+    } catch {
+      return { valid: false, value: null };
+    }
+  }, [result]);
+  // Auto-exit table mode when content becomes empty or invalid
+  useEffect(() => {
+    if (inputTableMode && (!input.trim() || !inputPreview.valid)) {
+      setInputTableMode(false);
+    }
+  }, [input, inputPreview.valid, inputTableMode]);
+  useEffect(() => {
+    if (resultTableMode && (!result.trim() || !resultPreview.valid)) {
+      setResultTableMode(false);
+    }
+  }, [result, resultPreview.valid, resultTableMode]);
   const jsonValueRef = useRef<unknown>(jsonValue);
   jsonValueRef.current = jsonValue;
   const pathExt = useMemo(
@@ -842,6 +914,11 @@ export default function JsonTool({
                 placeholder={t('jsonTool.placeholder')}
                 cmClassName="json-input-cm"
                 formatOnPaste={autoFormatOnFill ? tryAutoFormat : undefined}
+                tableMode={inputTableMode}
+                tableDisabled={!input.trim() || !inputPreview.valid}
+                tableHint={t('jsonTool.tablePreviewInvalid')}
+                onToggleTable={() => setInputTableMode((current) => !current)}
+                tablePreview={<JsonTablePreview value={inputPreview.value} t={t} />}
               />
               <div
                 className={`json-schema-right grid min-h-0 min-w-0 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-3 ${workflowMode ? '@max-[959px]/json-page:contents' : '@max-[959px]/json-page:grid'} @min-[960px]/json-page:contents${schema || workflowMode ? '' : ' hidden'}`}
@@ -879,7 +956,7 @@ export default function JsonTool({
                       <span className="json-pane-label flex-none font-mono text-[10px] font-medium leading-none tracking-[.04em] text-muted-foreground uppercase">
                         {t('jsonTool.result')}
                       </span>
-                      <div className="json-pane-editor flex min-h-0 min-w-0 flex-1">
+                      <div className="json-pane-editor relative flex min-h-0 min-w-0 flex-1">
                         {pathError ? (
                           <JsonErrorPanel
                             title={t('jsonTool.workflow.errorTitle')}
@@ -898,6 +975,37 @@ export default function JsonTool({
                             }}
                             extensions={[json5(), foldExt]}
                           />
+                        )}
+                        {!pathError && (
+                          <div
+                            className={`json-table-layer${resultTableMode ? ' is-visible' : ''}`}
+                            aria-hidden={!resultTableMode}
+                            {...(!resultTableMode ? { inert: true } : {})}
+                          >
+                            <JsonTablePreview value={resultPreview.value} t={t} />
+                          </div>
+                        )}
+                        {!pathError && (
+                          <Button
+                            type="button"
+                            variant={resultTableMode ? 'secondary' : 'ghost'}
+                            size="icon-sm"
+                            className="json-table-toggle absolute top-2 right-2 z-20"
+                            disabled={!result.trim() || !resultPreview.valid}
+                            aria-label={t('jsonTool.tablePreview')}
+                            title={
+                              !result.trim() || !resultPreview.valid
+                                ? t('jsonTool.tablePreviewInvalid')
+                                : t(
+                                    resultTableMode
+                                      ? 'jsonTool.tablePreviewOn'
+                                      : 'jsonTool.tablePreview',
+                                  )
+                            }
+                            onClick={() => setResultTableMode((current) => !current)}
+                          >
+                            <TableIcon />
+                          </Button>
                         )}
                       </div>
                     </div>
