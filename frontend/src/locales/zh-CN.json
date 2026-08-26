@@ -219,6 +219,12 @@
     "placeholder": "时间戳或日期",
     "refresh": "插入当前时间戳",
     "quickFill": "快捷填入",
+    "pickDateTime": "选择日期时间",
+    "dateTimePicker": {
+      "time": "时间",
+      "cancel": "取消",
+      "apply": "填入"
+    },
     "presets": {
       "now": "当前时间",
       "sevenDaysAgo": "7 天前",
@@ -232,7 +238,6 @@
     "timezonePlaceholder": "搜索时区",
     "timezoneNoResults": "没有匹配的时区",
     "useSystemTimezone": "使用本机时区",
-    "hint": "支持 Unix、ISO 8601、中英文日期及常见年月日格式。无年份时使用当前年份。",
     "local": "本地时间",
     "dateTime": "日期时间",
     "dateOnly": "日期",

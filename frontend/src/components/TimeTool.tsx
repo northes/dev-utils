@@ -1,5 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { format } from 'date-fns';
+import { enUS, zhCN } from 'date-fns/locale';
 import {
   DndContext,
   closestCenter,
@@ -16,8 +18,18 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Clock, Copy, DotsSixVertical, Eye, EyeClosed, GpsFix, Globe } from '@phosphor-icons/react';
+import {
+  CalendarBlank,
+  Clock,
+  Copy,
+  DotsSixVertical,
+  Eye,
+  EyeClosed,
+  GpsFix,
+  Globe,
+} from '@phosphor-icons/react';
 import { Button } from './ui/button';
+import { Calendar } from './ui/calendar';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import {
@@ -30,6 +42,7 @@ import {
   ComboboxTrigger,
   ComboboxValue,
 } from './ui/combobox';
+import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import {
   Reveal,
   ToolLayoutContent,
@@ -270,12 +283,16 @@ export default function TimeTool({
   pending: PendingAction | null;
   clearPending: () => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { value: input, setValue: setInput, undo, redo } = useHistory('');
   const [timeZone, setTimeZone] = useState(getSystemTimeZone);
   const zones = useMemo(() => getTimeZoneOptions(), []);
   const consumed = useRef<PendingAction | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const dateTimePickerInputId = useId();
+  const [dateTimePickerOpen, setDateTimePickerOpen] = useState(false);
+  const [dateTimePickerDate, setDateTimePickerDate] = useState<Date>();
+  const [dateTimePickerTime, setDateTimePickerTime] = useState('00:00:00');
   const [editing, setEditing] = useState(false);
   const [draftOrder, setDraftOrder] = useState<TimeResultId[]>(() => normalizeOrder(resultOrder));
   const [draftHidden, setDraftHidden] = useState<Set<string>>(() => new Set(hiddenResults));
@@ -318,6 +335,28 @@ export default function TimeTool({
     const timestamp = Math.floor(date.getTime() / 1000).toString();
     setInput(timestamp, { isolate: true });
     record('time', t(`timeTool.presets.${preset}`), timestamp, timestamp);
+  };
+  const handleDateTimePickerOpenChange = (open: boolean) => {
+    if (open) {
+      const seed = parsed ?? new Date();
+      const part = zonedParts(seed, timeZone);
+      setDateTimePickerDate(new Date(Number(part.year), Number(part.month) - 1, Number(part.day)));
+      setDateTimePickerTime(`${part.hour}:${part.minute}:${part.second}`);
+    }
+    setDateTimePickerOpen(open);
+  };
+  const applyDateTimePicker = () => {
+    if (!dateTimePickerDate || !dateTimePickerTime) return;
+    const date = parseTimeInput(
+      `${format(dateTimePickerDate, 'yyyy-MM-dd')}T${dateTimePickerTime}`,
+      new Date(),
+      timeZone,
+    );
+    if (!date) return;
+    const timestamp = Math.floor(date.getTime() / 1000).toString();
+    setInput(timestamp, { isolate: true });
+    record('time', t('timeTool.pickDateTime'), timestamp, timestamp);
+    setDateTimePickerOpen(false);
   };
   useEffect(() => {
     if (!pending || pending.tool !== 'time' || consumed.current === pending) return;
@@ -394,7 +433,6 @@ export default function TimeTool({
                   placeholder={t('timeTool.placeholder')}
                 />
               </div>
-              <small className="text-[9px] normal-case tracking-normal">{t('timeTool.hint')}</small>
             </Label>
             <div className="flex flex-col gap-2 pt-3.5">
               <span className="font-mono text-[10px] font-medium uppercase tracking-[.04em] text-muted-foreground">
@@ -416,6 +454,66 @@ export default function TimeTool({
                     {t(`timeTool.presets.${preset}`)}
                   </Button>
                 ))}
+                <Popover open={dateTimePickerOpen} onOpenChange={handleDateTimePickerOpenChange}>
+                  <PopoverTrigger
+                    render={
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="min-w-0"
+                        aria-label={t('timeTool.pickDateTime')}
+                      />
+                    }
+                  >
+                    <CalendarBlank data-icon="inline-start" size={14} weight="duotone" />
+                    {t('timeTool.pickDateTime')}
+                  </PopoverTrigger>
+                  <PopoverContent
+                    align="start"
+                    className="w-auto max-w-[calc(100vw-36px)] gap-0 overflow-hidden p-0"
+                  >
+                    <Calendar
+                      mode="single"
+                      selected={dateTimePickerDate}
+                      defaultMonth={dateTimePickerDate}
+                      onSelect={setDateTimePickerDate}
+                      captionLayout="dropdown"
+                      locale={i18n.language === 'zh-CN' ? zhCN : enUS}
+                    />
+                    <div className="border-t border-border p-3">
+                      <Label
+                        htmlFor={dateTimePickerInputId}
+                        className="mb-2 text-[10px] font-medium uppercase tracking-[.04em] text-muted-foreground"
+                      >
+                        {t('timeTool.dateTimePicker.time')}
+                      </Label>
+                      <Input
+                        id={dateTimePickerInputId}
+                        type="time"
+                        step="1"
+                        value={dateTimePickerTime}
+                        onChange={(event) => setDateTimePickerTime(event.target.value)}
+                        className="appearance-none bg-background [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:appearance-none"
+                      />
+                    </div>
+                    <div className="flex justify-end gap-1.5 border-t border-border p-2.5">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setDateTimePickerOpen(false)}
+                      >
+                        {t('timeTool.dateTimePicker.cancel')}
+                      </Button>
+                      <Button
+                        size="sm"
+                        disabled={!dateTimePickerDate || !dateTimePickerTime}
+                        onClick={applyDateTimePicker}
+                      >
+                        {t('timeTool.dateTimePicker.apply')}
+                      </Button>
+                    </div>
+                  </PopoverContent>
+                </Popover>
               </div>
             </div>
             <div className="flex items-end gap-2">

@@ -219,6 +219,12 @@
     "placeholder": "Timestamp or date",
     "refresh": "Insert current timestamp",
     "quickFill": "Quick fill",
+    "pickDateTime": "Date & time",
+    "dateTimePicker": {
+      "time": "Time",
+      "cancel": "Cancel",
+      "apply": "Use time"
+    },
     "presets": {
       "now": "Current time",
       "sevenDaysAgo": "7 days ago",
@@ -232,7 +238,6 @@
     "timezonePlaceholder": "Search timezone",
     "timezoneNoResults": "No timezones found",
     "useSystemTimezone": "Use system time zone",
-    "hint": "Supports Unix seconds, milliseconds, ISO 8601 and common date strings.",
     "local": "Local time",
     "dateTime": "Date and time",
     "dateOnly": "Date",
