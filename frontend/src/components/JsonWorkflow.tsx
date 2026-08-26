@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import CodeMirror from '@uiw/react-codemirror';
 import { json5 } from 'codemirror-json5';
@@ -23,11 +23,14 @@ import { CSS } from '@dnd-kit/utilities';
 import { Button } from './ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Switch } from './ui/switch';
-import { DotsSixVertical, Trash } from '@phosphor-icons/react';
+import { DotsSixVertical, Table as TableIcon, Trash } from '@phosphor-icons/react';
 import type { Extension } from '@codemirror/state';
 import { pathCompletions, valueCompletions } from './JsonPathCompletion';
 import { JsonErrorPanel } from './JsonErrorPanel';
+import { JsonTablePreview } from './JsonTablePreview';
 import { isObject } from './JsonWorkflowEngine';
+import { parseJsonLoose } from './shared';
+import { toast } from './ui/toast';
 import '../styles/tools/editor.css';
 import '../styles/tools/json.css';
 import type {
@@ -473,6 +476,20 @@ export function WorkflowPanel({
   const focusItemIdRef = useRef(focusItemId);
   focusItemIdRef.current = focusItemId;
   const hasTemplate = rules.some((item) => item.type === 'template');
+  const [outputTableMode, setOutputTableMode] = useState(false);
+  const outputPreview = useMemo(() => {
+    try {
+      return { valid: true, value: parseJsonLoose(output) };
+    } catch {
+      return { valid: false, value: null };
+    }
+  }, [output]);
+  // Auto-exit table mode when output becomes empty, invalid, or errors
+  useEffect(() => {
+    if (outputTableMode && (error || !output.trim() || !outputPreview.valid)) {
+      setOutputTableMode(false);
+    }
+  }, [output, outputPreview.valid, outputTableMode, error]);
   const labels = {
     extract: t('jsonTool.workflow.types.extract'),
     sort: t('jsonTool.workflow.types.sort'),
@@ -575,7 +592,24 @@ export function WorkflowPanel({
             {t('jsonTool.workflow.output')}
           </span>
         </div>
-        <div className="json-workflow-output-field flex min-h-0 flex-1">
+        <div className="json-workflow-output-field json-pane-editor relative flex min-h-0 min-w-0 flex-1">
+          <Button
+            type="button"
+            variant={outputTableMode ? 'secondary' : 'ghost'}
+            size="icon-sm"
+            className="json-table-toggle absolute top-2 right-2 z-20"
+            aria-label={t('jsonTool.tablePreview')}
+            title={t(outputTableMode ? 'jsonTool.tablePreviewOn' : 'jsonTool.tablePreview')}
+            onClick={() => {
+              if (error || !output.trim() || !outputPreview.valid) {
+                toast.add({ title: t('jsonTool.tablePreviewNotJson'), type: 'warning' });
+                return;
+              }
+              setOutputTableMode((current) => !current);
+            }}
+          >
+            <TableIcon />
+          </Button>
           {error ? (
             <JsonErrorPanel
               title={t('jsonTool.workflow.errorTitle')}
@@ -595,16 +629,25 @@ export function WorkflowPanel({
             />
           ) : (
             <CodeMirror
-              className="json-cm json-workflow-cm flex min-h-0 flex-1"
+              className="json-cm json-workflow-cm"
               height="100%"
               value={output}
               editable={false}
               theme={theme}
-              extensions={[json5(), foldExt, EditorView.lineWrapping]}
+              extensions={[json5(), foldExt]}
               onCreateEditor={(view) =>
                 view.contentDOM.setAttribute('aria-label', t('jsonTool.workflow.output'))
               }
             />
+          )}
+          {!error && (
+            <div
+              className={`json-table-layer${outputTableMode ? ' is-visible' : ''}`}
+              aria-hidden={!outputTableMode}
+              {...(!outputTableMode ? { inert: true } : {})}
+            >
+              <JsonTablePreview value={outputPreview.value} t={t} />
+            </div>
           )}
         </div>
       </section>
