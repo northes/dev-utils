@@ -16,16 +16,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import {
-  ArrowsClockwise,
-  Clock,
-  Copy,
-  DotsSixVertical,
-  Eye,
-  EyeClosed,
-  GpsFix,
-  Globe,
-} from '@phosphor-icons/react';
+import { Clock, Copy, DotsSixVertical, Eye, EyeClosed, GpsFix, Globe } from '@phosphor-icons/react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -55,6 +46,8 @@ import {
   getSystemTimeZone,
   getTimeZoneOptions,
   parseTimeInput,
+  resolveTimePreset,
+  type TimePreset,
 } from '../utils/time';
 import { toast } from './ui/toast';
 
@@ -73,6 +66,15 @@ const resultIds = [
   'unixNanoseconds',
 ] as const;
 type TimeResultId = (typeof resultIds)[number];
+const timePresets: TimePreset[] = [
+  'now',
+  'sevenDaysAgo',
+  'weekMonday',
+  'monthStart',
+  'monthEnd',
+  'yearStart',
+  'yearEnd',
+];
 function normalizeOrder(order: string[]) {
   const valid = new Set<string>(resultIds),
     seen = new Set<string>(),
@@ -310,14 +312,19 @@ export default function TimeTool({
   const order = normalizeOrder(resultOrder),
     hidden = new Set(hiddenResults),
     shown = order.filter((id) => !hidden.has(id));
+  const applyTimePreset = (preset: TimePreset) => {
+    const date = resolveTimePreset(preset, new Date(), timeZone);
+    if (!date) return;
+    const timestamp = Math.floor(date.getTime() / 1000).toString();
+    setInput(timestamp, { isolate: true });
+    record('time', t(`timeTool.presets.${preset}`), timestamp, timestamp);
+  };
   useEffect(() => {
     if (!pending || pending.tool !== 'time' || consumed.current === pending) return;
     consumed.current = pending;
     clearPending();
     if (pending.action === 'refresh') {
-      const now = Math.floor(Date.now() / 1000).toString();
-      setInput(now, { isolate: true });
-      record('time', t('timeTool.refresh'), now, now);
+      applyTimePreset('now');
       return;
     }
     if (pending.action === 'timezone') {
@@ -373,37 +380,44 @@ export default function TimeTool({
       <ToolLayout>
         <ToolLayoutHeader title={t('timeTool.title')} />
         <ToolLayoutContent>
-          <div className="grid h-full min-h-0 grid-rows-[auto_auto_auto_minmax(0,1fr)]">
+          <div className="grid h-full min-h-0 grid-rows-[auto_auto_auto_auto_minmax(0,1fr)]">
             <Label className="flex flex-col items-stretch gap-2 font-mono text-[10px] font-medium uppercase tracking-[.04em] text-muted-foreground">
               <span>{t('timeTool.input')}</span>
-              <div className="flex items-center gap-2">
-                <div className="flex h-[46px] min-w-0 flex-1 items-center gap-2.5 rounded-lg border border-border bg-card px-3.5 focus-within:border-muted-foreground">
-                  <Clock size={18} weight="duotone" />
-                  <Input
-                    ref={inputRef}
-                    className="min-w-0 flex-1 select-text border-0 bg-transparent px-0 py-0 text-[13px] shadow-none focus-visible:ring-0 dark:bg-transparent"
-                    value={input}
-                    onKeyDown={(event) => undoRedoKey(event, undo, redo)}
-                    onChange={(event) => setInput(event.target.value)}
-                    placeholder={t('timeTool.placeholder')}
-                  />
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon-lg"
-                  className="flex-none rounded-lg"
-                  aria-label={t('timeTool.refresh')}
-                  onClick={() => {
-                    const now = Math.floor(Date.now() / 1000).toString();
-                    setInput(now, { isolate: true });
-                    record('time', t('timeTool.refresh'), now, now);
-                  }}
-                >
-                  <ArrowsClockwise size={17} weight="duotone" />
-                </Button>
+              <div className="flex h-[46px] min-w-0 items-center gap-2.5 rounded-lg border border-border bg-card px-3.5 focus-within:border-muted-foreground">
+                <Clock size={18} weight="duotone" />
+                <Input
+                  ref={inputRef}
+                  className="min-w-0 flex-1 select-text border-0 bg-transparent px-0 py-0 text-[13px] shadow-none focus-visible:ring-0 dark:bg-transparent"
+                  value={input}
+                  onKeyDown={(event) => undoRedoKey(event, undo, redo)}
+                  onChange={(event) => setInput(event.target.value)}
+                  placeholder={t('timeTool.placeholder')}
+                />
               </div>
               <small className="text-[9px] normal-case tracking-normal">{t('timeTool.hint')}</small>
             </Label>
+            <div className="flex flex-col gap-2 pt-3.5">
+              <span className="font-mono text-[10px] font-medium uppercase tracking-[.04em] text-muted-foreground">
+                {t('timeTool.quickFill')}
+              </span>
+              <div
+                className="grid grid-cols-[repeat(auto-fit,minmax(6.5rem,1fr))] gap-1.5"
+                role="toolbar"
+                aria-label={t('timeTool.quickFill')}
+              >
+                {timePresets.map((preset) => (
+                  <Button
+                    key={preset}
+                    variant="outline"
+                    size="sm"
+                    className="min-w-0"
+                    onClick={() => applyTimePreset(preset)}
+                  >
+                    {t(`timeTool.presets.${preset}`)}
+                  </Button>
+                ))}
+              </div>
+            </div>
             <div className="flex items-end gap-2">
               <TimezoneCombobox
                 value={timeZone}

@@ -218,6 +218,16 @@
     "input": "输入",
     "placeholder": "时间戳或日期",
     "refresh": "插入当前时间戳",
+    "quickFill": "快捷填入",
+    "presets": {
+      "now": "当前时间",
+      "sevenDaysAgo": "7 天前",
+      "weekMonday": "本周一",
+      "monthStart": "本月初",
+      "monthEnd": "本月末",
+      "yearStart": "本年初",
+      "yearEnd": "本年末"
+    },
     "timezone": "解析时区",
     "timezonePlaceholder": "搜索时区",
     "timezoneNoResults": "没有匹配的时区",

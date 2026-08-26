@@ -218,6 +218,16 @@
     "input": "Input",
     "placeholder": "Timestamp or date",
     "refresh": "Insert current timestamp",
+    "quickFill": "Quick fill",
+    "presets": {
+      "now": "Current time",
+      "sevenDaysAgo": "7 days ago",
+      "weekMonday": "This Monday",
+      "monthStart": "Start of month",
+      "monthEnd": "End of month",
+      "yearStart": "Start of year",
+      "yearEnd": "End of year"
+    },
     "timezone": "Parsing timezone",
     "timezonePlaceholder": "Search timezone",
     "timezoneNoResults": "No timezones found",

@@ -170,6 +170,49 @@ const cityNames: Record<string, string> = {
 export function getSystemTimeZone() {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
 }
+export type TimePreset =
+  'now' | 'sevenDaysAgo' | 'weekMonday' | 'monthStart' | 'monthEnd' | 'yearStart' | 'yearEnd';
+function zonedCalendarParts(date: Date, timeZone: string) {
+  try {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).formatToParts(date),
+      get = (type: string) => Number(parts.find((part) => part.type === type)?.value);
+    return { year: get('year'), month: get('month'), day: get('day') };
+  } catch {
+    return null;
+  }
+}
+export function resolveTimePreset(preset: TimePreset, now: Date, timeZone: string) {
+  if (preset === 'now') return now;
+  if (preset === 'sevenDaysAgo') return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const parts = zonedCalendarParts(now, timeZone);
+  if (!parts) return null;
+  const { year, month, day } = parts;
+  if (preset === 'monthStart') return makeDate(year, month, 1, 0, 0, 0, 0, undefined, timeZone);
+  if (preset === 'monthEnd') {
+    const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    return makeDate(year, month, lastDay, 23, 59, 59, 0, undefined, timeZone);
+  }
+  if (preset === 'yearStart') return makeDate(year, 1, 1, 0, 0, 0, 0, undefined, timeZone);
+  if (preset === 'yearEnd') return makeDate(year, 12, 31, 23, 59, 59, 0, undefined, timeZone);
+  const monday = new Date(Date.UTC(year, month - 1, day));
+  monday.setUTCDate(monday.getUTCDate() - ((monday.getUTCDay() + 6) % 7));
+  return makeDate(
+    monday.getUTCFullYear(),
+    monday.getUTCMonth() + 1,
+    monday.getUTCDate(),
+    0,
+    0,
+    0,
+    0,
+    undefined,
+    timeZone,
+  );
+}
 function timeZoneOffsetLabel(timeZone: string, date = new Date()) {
   try {
     const part =
