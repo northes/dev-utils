@@ -33,7 +33,7 @@ user-invocable: false
 ## 验证矩阵
 
 - 只改 Markdown 或 skill：运行 `git diff --check`，并检查路径、命令、文件名和现有架构描述一致。
-- 改 React 组件、locale、样式或工具：运行前端类型检查、生产构建、必要时格式检查；工具任务同时按 `tool-development` 和 `layout-guidance` 的清单静态检查。
+- 改 React 组件、locale、样式或工具：运行前端类型检查、生产构建、必要时格式检查；工具任务同时按 `tool-development` 和 `layout-guidance` 的清单静态检查。涉及 `ScrollableContent` 或自绘滚动条时，确认真实滚动层使用 `--overlay-scrollbar-hit-size` 预留命中区，且未重新引入硬编码尺寸。
 - 改主题：使用 `theme-validation`，覆盖主题注册、明暗过滤、CSS token 级联、Go 配置规范化、类型检查、构建和 Go 测试。
 - 改 Go 服务、配置、窗口、托盘或事件：运行 Go 测试和前端类型检查/构建；若导出类型改变，先重新生成 bindings，再检查生成文件和调用方。
 - 改 `build/config.yml` 的资源元数据：先运行 `wails3 task common:update:build-assets`，检查生成资源，再执行对应的构建验证。
