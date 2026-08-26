@@ -1,5 +1,15 @@
 .cm-editor,
-.cm-scroller {
+.cm-editor .cm-scroller,
+.cm-editor .cm-content {
+  font-size: var(--code-editor-font-size) !important;
+  line-height: 1.4 !important;
+  tab-size: 4 !important;
+}
+.cm-editor {
+  text-transform: none;
+}
+.cm-editor,
+.cm-editor .cm-scroller {
   background: var(--card) !important;
 }
 .cm-gutters {

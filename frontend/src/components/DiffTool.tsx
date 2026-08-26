@@ -30,13 +30,11 @@ const diffTheme = EditorView.theme({
   '&': {
     height: '100%!important',
     overflow: 'visible!important',
-    font: 'var(--code-editor-font-size)/1.55 var(--font-mono)',
     backgroundColor: 'var(--card)',
   },
   '.cm-scroller': {
     height: '100%!important',
     overflowY: 'visible!important',
-    fontFamily: 'var(--font-mono)',
   },
   '.cm-content': { padding: '9px 0 20px' },
   '.cm-line': { padding: '0 12px 0 8px' },
@@ -44,7 +42,6 @@ const diffTheme = EditorView.theme({
     backgroundColor: 'var(--muted)',
     border: 0,
     color: 'var(--muted-foreground)',
-    font: 'calc(var(--code-editor-font-size) - 1px)/1.55 var(--font-mono)',
   },
   '.cm-gutterElement': { padding: '0 8px 0 10px', minWidth: '38px', textAlign: 'right' },
   '.cm-changeGutter': { width: '3px', paddingLeft: '1px', background: 'transparent' },

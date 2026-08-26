@@ -28,6 +28,8 @@ import type { Extension } from '@codemirror/state';
 import { pathCompletions, valueCompletions } from './JsonPathCompletion';
 import { JsonErrorPanel } from './JsonErrorPanel';
 import { isObject } from './JsonWorkflowEngine';
+import '../styles/tools/editor.css';
+import '../styles/tools/json.css';
 import type {
   WorkflowContexts,
   WorkflowDirection,

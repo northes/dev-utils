@@ -65,7 +65,7 @@ type historyStored struct {
 }
 
 func defaultConfig() Config {
-	return Config{TrayMatchEnabled: true, TrayMatchTools: []string{"json", "time", "text", "base64", "diff", "jwt", "url"}, AutoOverwrite: true, AutoCheckUpdates: true, Language: "zh-CN", SidebarMode: "full", ThemeMode: "dark", LightTheme: "default-light", DarkTheme: "default-dark", DiffHighlightMode: "character", DiffClipboardTargetMode: "alternate", CodeEditorFontSize: 12, TimeResultOrder: []string{"local", "dateTime", "dateOnly", "timeOnly", "zonedIso8601", "rfc3339", "utc", "compact", "underscore", "unixSeconds", "unixMilliseconds", "unixNanoseconds"}, JsonAutoFormatOnFill: true, JsonAutoFormatOnFillMigrated: true}
+	return Config{TrayMatchEnabled: true, TrayMatchTools: []string{"json", "time", "text", "base64", "diff", "jwt", "url"}, AutoOverwrite: true, AutoCheckUpdates: true, Language: "zh-CN", SidebarMode: "full", ThemeMode: "dark", LightTheme: "default-light", DarkTheme: "default-dark", DiffHighlightMode: "character", DiffClipboardTargetMode: "alternate", CodeEditorFontSize: 16, TimeResultOrder: []string{"local", "dateTime", "dateOnly", "timeOnly", "zonedIso8601", "rfc3339", "utc", "compact", "underscore", "unixSeconds", "unixMilliseconds", "unixNanoseconds"}, JsonAutoFormatOnFill: true, JsonAutoFormatOnFillMigrated: true}
 }
 func normalizeConfig(cfg Config) Config {
 	trayTools := []string{"json", "time", "text", "base64", "diff", "jwt", "url"}
@@ -121,7 +121,7 @@ func normalizeConfig(cfg Config) Config {
 		cfg.DiffClipboardTargetMode = "alternate"
 	}
 	if cfg.CodeEditorFontSize < 10 || cfg.CodeEditorFontSize > 24 {
-		cfg.CodeEditorFontSize = 12
+		cfg.CodeEditorFontSize = 16
 	}
 	timeResults := []string{"local", "dateTime", "dateOnly", "timeOnly", "zonedIso8601", "rfc3339", "utc", "compact", "underscore", "unixSeconds", "unixMilliseconds", "unixNanoseconds"}
 	validTimeResult := make(map[string]bool, len(timeResults))

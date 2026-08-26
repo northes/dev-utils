@@ -9,14 +9,6 @@
   -webkit-user-select: text;
   user-select: text;
 }
-.cm-editor {
-  font-size: var(--code-editor-font-size);
-  text-transform: none;
-}
-.cm-scroller {
-  font-family: var(--font-mono);
-  font-size: inherit;
-}
 html,
 body,
 #root {

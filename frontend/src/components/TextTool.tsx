@@ -19,6 +19,7 @@ import {
   useFocusOnActivate,
 } from './shared';
 import { toast } from './ui/toast';
+import '../styles/tools/editor.css';
 
 const countDetails = (characters: string[]) =>
   Array.from(
@@ -163,7 +164,7 @@ export default function TextTool({
           <div className="flex min-h-0 min-w-0 flex-col gap-2 font-mono text-[10px] font-medium uppercase tracking-[.04em] text-muted-foreground">
             <span>{t('textTool.input')}</span>
             <CodeMirror
-              className="min-h-0 flex-1 overflow-hidden rounded-lg border border-border bg-card focus-within:border-muted-foreground [&_.cm-editor]:h-full [&_.cm-editor]:[font:var(--code-editor-font-size)/1.6_var(--font-mono)] [&_.cm-editor.cm-focused]:outline-none [&_.cm-scroller]:overflow-auto"
+              className="min-h-0 flex-1 overflow-hidden rounded-lg border border-border bg-card focus-within:border-muted-foreground [&_.cm-editor]:h-full [&_.cm-editor.cm-focused]:outline-none [&_.cm-scroller]:overflow-auto"
               height="100%"
               value={value}
               onChange={setValue}

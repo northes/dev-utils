@@ -46,7 +46,6 @@
 }
 .diff-merge-host .cm-line {
   padding: 0 12px 0 14px;
-  font: var(--code-editor-font-size)/1.72 var(--font-mono);
   letter-spacing: 0;
 }
 .diff-merge-host .cm-gutters {
@@ -125,7 +124,6 @@
   .diff-merge-host .cm-line {
     padding-left: 9px;
     padding-right: 8px;
-    font-size: 10.5px;
   }
   .diff-merge-host .cm-gutterElement {
     padding-inline: 5px;
@@ -161,7 +159,6 @@
   border-bottom: 1px solid var(--border);
   background: var(--muted);
   color: var(--muted-foreground);
-  font: calc(var(--code-editor-font-size) - 2px)/1 var(--font-mono);
   cursor: pointer;
   user-select: none;
 }

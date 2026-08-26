@@ -356,7 +356,7 @@ export default function SettingsPage({
                   <Button
                     key={size}
                     variant="ghost"
-                    className={`min-w-[76px] rounded-lg px-3 py-1.5 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground ${(settings.codeEditorFontSize || 12) === size ? 'bg-muted text-foreground' : ''}`}
+                    className={`min-w-[76px] rounded-lg px-3 py-1.5 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground ${(settings.codeEditorFontSize || 16) === size ? 'bg-muted text-foreground' : ''}`}
                     onClick={() =>
                       setSettings((current) => ({
                         ...current,

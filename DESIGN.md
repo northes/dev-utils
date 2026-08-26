@@ -42,7 +42,7 @@ typography:
     letterSpacing: "0.04em"
   code:
     fontFamily: "SF Mono, JetBrains Mono, Menlo, Monaco, monospace"
-    fontSize: "12px"
+    fontSize: "16px"
     fontWeight: 400
     lineHeight: 1.6
 rounded:
@@ -128,7 +128,7 @@ DevUtils 采用 Operate 模式：它是一台长期使用的本地调试仪器�
 - **Title：** 19px、600，用于工具页标题和主要页面标题（`ToolHeader` / `.page-title`）；可带 10px 辅助说明。
 - **Body：** 12px、常规字重，用于导航、设置项与常规信息。
 - **Label：** 10px、500、轻微字距，用于编辑区标签、分组和元信息；必要时使用大写。
-- **Code：** 默认 12px、1.6 行高，用于 CodeMirror、时间值和结构化数据；用户可在 12/14/16/18px 间调整编辑器字号。
+- **Code：** 默认 16px、1.6 行高，用于 CodeMirror、时间值和结构化数据；用户可在 12/14/16/18px 间调整编辑器字号。
 
 **The Technical Voice Rule.** 等宽字体只表达代码、值、计量和短标签，不替代界面正文。
 

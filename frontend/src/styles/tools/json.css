@@ -17,12 +17,13 @@
 }
 .json-cm .cm-editor {
   height: 100%;
-  font: var(--code-editor-font-size)/1.6 var(--font-mono);
 }
 .json-cm .cm-editor.cm-focused {
   outline: none;
 }
 .json-workflow-path-cm {
+  height: calc(var(--code-editor-font-size) * 1.4 + 10px) !important;
+  min-height: 0;
   overflow: visible;
   border-color: var(--input);
   border-radius: var(--radius);
@@ -32,19 +33,22 @@
   border-color: var(--ring);
 }
 .json-workflow-path-cm .cm-editor {
-  height: 30px;
-  overflow: hidden;
+  height: 100% !important;
   border-radius: inherit;
-  font: var(--code-editor-font-size)/1.4 var(--font-mono);
 }
 .json-workflow-path-cm .cm-scroller {
+  height: 100% !important;
+  min-height: 0;
+  overflow-x: auto !important;
+  overflow-y: auto !important;
   border-radius: inherit;
 }
 .json-workflow-path-cm .cm-editor.cm-focused {
   outline: none;
 }
 .json-workflow-path-cm .cm-content {
-  padding: 6px 9px;
+  min-height: 0;
+  padding: 5px 9px;
 }
 .json-workflow-path-cm .cm-line {
   padding: 0;
@@ -59,7 +63,6 @@
   border-radius: var(--radius);
   box-shadow: var(--shadow-md);
   color: var(--popover-foreground);
-  font: 12px/1.35 var(--font-mono);
   overflow: hidden;
 }
 .json-cm .cm-tooltip-autocomplete ul,
@@ -97,7 +100,7 @@
 .json-path-autocomplete.cm-tooltip-autocomplete .cm-completionDetail {
   margin-left: auto;
   color: var(--muted-foreground);
-  font-size: 10px;
+  font-size: calc(var(--code-editor-font-size) - 2px);
   opacity: 0.8;
 }
 .json-cm .cm-tooltip-autocomplete .cm-completionIcon,
@@ -108,12 +111,11 @@
   margin: 0;
   border: 0;
   color: var(--primary);
-  font-size: 10px;
+  font-size: calc(var(--code-editor-font-size) - 2px);
   opacity: 0.85;
 }
 .json-cm .cm-tooltip-autocomplete .cm-completionIcon::after,
 .json-path-autocomplete.cm-tooltip-autocomplete .cm-completionIcon::after {
-  font-family: var(--font-mono);
   font-weight: 600;
 }
 .json-cm .cm-tooltip-autocomplete .cm-completionIcon.cm-completionIcon-property::after,

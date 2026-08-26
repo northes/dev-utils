@@ -121,7 +121,7 @@ const defaultSettings: Settings = {
   darkTheme: 'default-dark',
   diffHighlightMode: 'character',
   diffClipboardTargetMode: 'alternate',
-  codeEditorFontSize: 12,
+  codeEditorFontSize: 16,
   timeResultOrder: [
     'local',
     'dateTime',
@@ -927,7 +927,7 @@ function AppShell() {
     root.classList.toggle('dark', dark);
     root.dataset.theme = theme;
     root.style.colorScheme = dark ? 'dark' : 'light';
-    root.style.setProperty('--code-editor-font-size', `${settings.codeEditorFontSize || 12}px`);
+    root.style.setProperty('--code-editor-font-size', `${settings.codeEditorFontSize || 16}px`);
   }, [theme, settings.codeEditorFontSize]);
   useEffect(() => {
     const media = window.matchMedia('(prefers-color-scheme: dark)');

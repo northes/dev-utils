@@ -19,6 +19,7 @@ import {
   type ToolId,
 } from './shared';
 import { toast } from './ui/toast';
+import '../styles/tools/editor.css';
 
 type Decoded = { header: string; payload: string; signature: string };
 const jsonSyntax = json();
@@ -52,13 +53,6 @@ const jwtSegmentHighlight = StateField.define<DecorationSet>({
   provide: (field) => EditorView.decorations.from(field),
 });
 const jwtEditorTheme = EditorView.theme({
-  '&': { fontSize: 'var(--code-editor-font-size)' },
-  '.cm-scroller': {
-    fontFamily: 'var(--font-mono)',
-    fontSize: 'var(--code-editor-font-size)',
-    lineHeight: '1.6',
-  },
-  '.cm-content': { fontSize: 'inherit', lineHeight: 'inherit' },
   '.cm-jwt-header': { color: 'var(--destructive)' },
   '.cm-jwt-payload': { color: 'var(--success)' },
   '.cm-jwt-signature': { color: 'var(--warning)' },
