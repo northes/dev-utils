@@ -33,7 +33,15 @@ import { type ColumnDef } from '@tanstack/react-table';
 import { enUS, zhCN } from 'date-fns/locale';
 import type { HistoryItem as StoredHistoryItem } from '../../bindings/changeme/models';
 import { QueryHistory } from '../../bindings/changeme/configservice';
-import { Reveal, type ToolId } from './shared';
+import {
+  Reveal,
+  ToolLayout,
+  ToolLayoutContent,
+  ToolLayoutFooter,
+  ToolLayoutHeader,
+  ToolLayoutToolbar,
+  type ToolId,
+} from './shared';
 
 export type HistoryItem = Omit<StoredHistoryItem, 'tool'> & { tool: ToolId };
 export function normalizeHistoryDetail(detail: string) {
@@ -302,126 +310,129 @@ export default function HistoryPage({
   );
   return (
     <Reveal index={0} fill>
-      <section className="flex h-full min-h-0 flex-col overflow-hidden px-7 pb-[26px] pt-5 max-[700px]:px-[18px] max-[700px]:pb-4 max-[700px]:pt-3.5">
-        <header className="mb-4 flex-none">
-          <div>
-            <h1 className="text-[19px] font-semibold leading-tight">{t('history.title')}</h1>
-            <p className="mt-1 text-[10px] text-muted-foreground">{t('history.subtitle')}</p>
-          </div>
-        </header>
-        <div className="mb-3 flex flex-wrap items-end gap-4 border-b border-border px-0.5 pb-3 max-[700px]:flex-col max-[700px]:items-stretch">
-          <div className="flex min-w-0 flex-col gap-1 text-[10px] font-medium text-muted-foreground max-[700px]:w-full">
-            <span id="history-tool-filter-label">{t('history.filterTool')}</span>
-            <Select
-              items={toolOptions}
-              value={tool}
-              onValueChange={(v) => {
-                setTool(v === 'all' ? 'all' : (v as ToolId));
-                setPage(1);
-              }}
-            >
-              <SelectTrigger
-                className="w-[220px] max-w-full max-[700px]:w-full"
-                aria-labelledby="history-tool-filter-label"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent alignItemWithTrigger={false}>
-                <SelectItem value="all">{t('history.allTools')}</SelectItem>
-                {historyTools.map((h) => (
-                  <SelectItem key={h.id} value={h.id}>
-                    {t(h.nameKey)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex min-w-0 flex-col gap-1 text-[10px] font-medium text-muted-foreground max-[700px]:w-full">
-            <span>{t('history.filterRange')}</span>
-            <div className="flex min-w-0 w-[408px] max-w-full gap-1 max-[700px]:w-full">
-              {rangePicker}
-              {range && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="flex-none"
-                  onClick={() => changeRange(undefined)}
-                  aria-label={t('history.clearRange')}
+      <ToolLayout>
+        <ToolLayoutHeader title={t('history.title')} desc={t('history.subtitle')} />
+        <ToolLayoutToolbar
+          left={
+            <div className="flex min-w-0 flex-wrap items-end gap-4 max-[700px]:w-full">
+              <div className="flex min-w-0 flex-col gap-1 text-[10px] font-medium text-muted-foreground max-[700px]:w-full">
+                <span id="history-tool-filter-label">{t('history.filterTool')}</span>
+                <Select
+                  items={toolOptions}
+                  value={tool}
+                  onValueChange={(v) => {
+                    setTool(v === 'all' ? 'all' : (v as ToolId));
+                    setPage(1);
+                  }}
                 >
-                  <X size={13} weight="duotone" />
-                </Button>
-              )}
+                  <SelectTrigger
+                    className="w-[220px] max-w-full max-[700px]:w-full"
+                    aria-labelledby="history-tool-filter-label"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent alignItemWithTrigger={false}>
+                    <SelectItem value="all">{t('history.allTools')}</SelectItem>
+                    {historyTools.map((h) => (
+                      <SelectItem key={h.id} value={h.id}>
+                        {t(h.nameKey)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex min-w-0 flex-col gap-1 text-[10px] font-medium text-muted-foreground max-[700px]:w-full">
+                <span>{t('history.filterRange')}</span>
+                <div className="flex min-w-0 w-[408px] max-w-full gap-1 max-[700px]:w-full">
+                  {rangePicker}
+                  {range && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="flex-none"
+                      onClick={() => changeRange(undefined)}
+                      aria-label={t('history.clearRange')}
+                    >
+                      <X size={13} weight="duotone" />
+                    </Button>
+                  )}
+                </div>
+              </div>
             </div>
-          </div>
-          {total > 0 && (
+          }
+          right={
+            total > 0 ? (
+              <Button
+                variant="ghost"
+                className="h-[32px] min-h-0 flex-none text-[11px] max-[700px]:self-end"
+                onClick={() => setConfirmClear(true)}
+              >
+                <Trash data-icon="inline-start" weight="duotone" />
+                {t('history.clear')}
+              </Button>
+            ) : null
+          }
+        />
+        <ToolLayoutContent className="flex flex-col gap-3">
+          {error ? (
             <Button
               variant="ghost"
-              className="ml-auto h-[32px] min-h-0 flex-none text-[11px] max-[700px]:ml-0 max-[700px]:self-end"
-              onClick={() => setConfirmClear(true)}
+              className="flex h-auto min-h-0 flex-1 flex-col items-center justify-center gap-2 text-muted-foreground [&_svg]:size-7"
+              onClick={() => {
+                setError(false);
+                setReload((r) => r + 1);
+              }}
             >
-              <Trash data-icon="inline-start" weight="duotone" />
-              {t('history.clear')}
+              <Hash data-icon="inline-start" size={28} weight="duotone" />
+              <span className="text-sm font-medium text-foreground">{t('history.loadFailed')}</span>
+              <span className="text-xs text-muted-foreground">{t('history.loadFailedHint')}</span>
             </Button>
-          )}
-        </div>
-        {error ? (
-          <Button
-            variant="ghost"
-            className="flex h-auto min-h-0 flex-1 flex-col items-center justify-center gap-2 text-muted-foreground [&_svg]:size-7"
-            onClick={() => {
-              setError(false);
-              setReload((r) => r + 1);
-            }}
-          >
-            <Hash data-icon="inline-start" size={28} weight="duotone" />
-            <span className="text-sm font-medium text-foreground">{t('history.loadFailed')}</span>
-            <span className="text-xs text-muted-foreground">{t('history.loadFailedHint')}</span>
-          </Button>
-        ) : (
-          <div className="flex min-h-0 flex-1 flex-col gap-3">
+          ) : (
             <DataTable
               columns={columns}
               data={loading ? [] : items}
               emptyState={emptyState}
               onRowClick={(item) => void openHistory(item)}
             />
-            {total > 0 && (
-              <div className="history-pagination flex items-center justify-between gap-3 border-t border-border p-2">
-                <span className="whitespace-nowrap text-[10px] text-muted-foreground">
-                  {t('history.summary', {
-                    start: (page - 1) * pageSize + 1,
-                    end: Math.min(page * pageSize, total),
-                    total,
-                  })}
-                </span>
-                <div className="flex items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    disabled={page === 1}
-                    onClick={() => setPage((p) => Math.max(1, p - 1))}
-                    className="h-auto rounded-lg px-2 py-1 text-[11px] text-muted-foreground hover:bg-accent disabled:opacity-50"
-                  >
-                    {t('history.prev')}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    disabled={page === totalPages}
-                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                    className="h-auto rounded-lg px-2 py-1 text-[11px] text-muted-foreground hover:bg-accent disabled:opacity-50"
-                  >
-                    {t('history.next')}
-                  </Button>
-                </div>
+          )}
+        </ToolLayoutContent>
+        <ToolLayoutFooter>
+          {total > 0 && (
+            <div className="history-pagination flex items-center justify-between gap-3 border-t border-border p-2">
+              <span className="whitespace-nowrap text-[10px] text-muted-foreground">
+                {t('history.summary', {
+                  start: (page - 1) * pageSize + 1,
+                  end: Math.min(page * pageSize, total),
+                  total,
+                })}
+              </span>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  disabled={page === 1}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  className="h-auto rounded-lg px-2 py-1 text-[11px] text-muted-foreground hover:bg-accent disabled:opacity-50"
+                >
+                  {t('history.prev')}
+                </Button>
+                <Button
+                  variant="ghost"
+                  disabled={page === totalPages}
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  className="h-auto rounded-lg px-2 py-1 text-[11px] text-muted-foreground hover:bg-accent disabled:opacity-50"
+                >
+                  {t('history.next')}
+                </Button>
               </div>
-            )}
-          </div>
-        )}
-        <ClearHistoryDialog
-          open={confirmClear}
-          onClose={() => setConfirmClear(false)}
-          onConfirm={clearAll}
-        />
-      </section>
+            </div>
+          )}
+        </ToolLayoutFooter>
+      </ToolLayout>
+      <ClearHistoryDialog
+        open={confirmClear}
+        onClose={() => setConfirmClear(false)}
+        onConfirm={clearAll}
+      />
     </Reveal>
   );
 }

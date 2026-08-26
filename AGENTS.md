@@ -52,9 +52,20 @@ Wails v3(beta)桌面托盘应用:Go 后端 + React 19 前端。本地优先的�
 - `build/config.yml` 保存构建资源元数据(info 字段仍是「My Company」占位符)。修改后需运行 `wails3 task common:update:build-assets`,它会重新生成/覆盖资源。
 - `frontend/bindings/` 由 wails Vite 插件生成并已提交 — 永不手改。
 
+## 实现质量与设计取舍
+
+- 不以实现成本最低为默认目标。优先选择符合平台和项目架构、职责边界清晰、行为可推理、长期维护成本低的实现；在多个方案都满足需求时，选择更规范、优雅且易扩展的方案。
+- 设计应保持适度。不要为了假设中的未来需求引入抽象层、配置项、兼容分支、通用参数或依赖；抽象必须解决已经存在的重复、耦合或清晰的变化点，而不是单纯追求“可复用”。
+- 优先组合和明确的领域边界，而不是通过不断增加组件参数、布尔开关或特殊分支来承载多种职责。React 组件在适合时应使用组合式 API、复合组件、Context 或 children 组织结构和行为，避免把本应由调用方组合的内容压缩成复杂的 prop 接口；只有状态确实需要由父组件统一控制时才传递对应参数。
+- 组件和模块应保持单一职责，公共抽象只保留稳定且语义明确的 API。不要为了消除少量重复而提前抽象，也不要把业务差异隐藏在字符串、魔法值或难以追踪的回调约定中。
+- 状态应由真正拥有它的边界管理。优先让状态靠近使用处，跨组件共享时再提升到最小必要的共同父级或明确的 Context；避免全局状态、隐式依赖和双向同步。
+- 先定义数据流、错误处理、生命周期和可访问性，再实现视觉或局部优化。修复问题时应改正责任边界和抽象，不用临时补丁掩盖症状；任何保留的兼容逻辑都必须有明确的持久化数据、已发布行为或外部消费者作为依据。
+- 新增实现应沿用现有项目约定和语义模型。不要仅为局部需求创建平行的组件、样式、类型、事件或持久化机制；若现有抽象无法表达正确行为，应先评估是否需要简洁、完整地调整该抽象。
+- 代码应便于验证和演进：公共行为补充针对边界的测试或可重复验证步骤，异步流程明确取消与错误传播，副作用集中在生命周期边界，避免吞错、隐式重试和不可观察的状态变更。
+
 ## 前端约定
 
-- UI 分层:根布局与状态(`App.tsx`:页面路由、侧栏、命令面板、持久化)与工具组件分离。**每个工具封装为独立组件文件** `frontend/src/components/`(如 `JsonTool.tsx`、`TimeTool.tsx`、`TextTool.tsx`),在 `App.tsx` 引入;共享 UI 原语与类型(`Reveal`/`ToolHeader`/`samples`/`ToolId`/`PendingAction`/`Icon`)集中在 `frontend/src/components/shared.tsx`。
+- UI 分层:根布局与状态(`App.tsx`:页面路由、侧栏、命令面板、持久化)与工具组件分离。**每个工具封装为独立组件文件** `frontend/src/components/`(如 `JsonTool.tsx`、`TimeTool.tsx`、`TextTool.tsx`),在 `App.tsx` 引入;共享 UI 原语与类型(`Reveal`/`ToolHeader`/`samples`/`ToolId`/`PendingAction`/`Icon`)集中在 `frontend/src/components/shared.tsx`。工具组件的组合关系优先通过 children、复合组件或 Context 表达，不要把布局、插槽和行为差异堆叠为一组难以维护的 props。
 - 前端代码使用 Prettier 格式化；编辑时保持现有格式，避免产生无关的格式化变更。
 - 样式入口在 `frontend/src/index.css`(Tailwind v4 + shadcn/ui),主题变量定义在 `frontend/src/styles/globals.css`(shadcn `:root`/`.dark` oklch 变量 + 功能必需的 `--success`/`--warning` 语义色)。body 为 `user-select:none`。
 - UI 组件统一用 shadcn/ui(`frontend/src/components/ui/`,复制进项目的源码,非黑盒 npm 包):安装、检索、查看文档和更新组件必须使用 shadcn skill 及 `npx shadcn@latest` CLI，禁止使用 Context7 查询，也不要手工从 GitHub/raw URL 抓取组件源码。新增前先检查已安装组件并使用 `npx shadcn@latest search`，安装使用 `npx shadcn@latest add`；更新已有组件先使用 `--dry-run` 和 `--diff`，未经用户明确同意不得使用 `--overwrite`。安装或更新后必须阅读涉及文件，检查依赖、导入路径、组件组合和项目约束。

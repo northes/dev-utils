@@ -134,7 +134,7 @@ DevUtils 采用 Operate 模式：它是一台长期使用的本地调试仪器�
 
 ## Layout
 
-应用壳为两行网格：38px 原生拖拽标题栏加剩余工作区。工作区由 188px 侧栏与可收缩内容区组成，图标侧栏宽 52px；页面使用 20px 顶部、28px 水平和 26px 底部的紧凑内边距。工具页统一为 header / `minmax(0, 1fr)` content / footer 三行，编辑器吃满可用高度并自行滚动，工具页常驻挂载以保留编辑器测量、滚动与撤销状态。应用壳和工具页均以 Wails WebView 的桌面工作台为前提，不依赖浏览器页面滚动。
+应用壳为两行网格：38px 原生拖拽标题栏加剩余工作区。工作区由 188px 侧栏与可收缩内容区组成，图标侧栏宽 52px；页面使用 20px 顶部、28px 水平和 26px 底部的紧凑内边距。工具页和长页面统一使用 Header / Toolbar（可选）/ `minmax(0, 1fr)` Content / Footer（可选）骨架；固定 Content 不提供滚动，编辑器、表格等内部区域自行滚动，设置页使用可滚动 Content。工具页常驻挂载以保留编辑器测量、滚动与撤销状态。应用壳和页面均以 Wails WebView 的桌面工作台为前提，不依赖 workspace 页面滚动。
 
 布局以 4、6、8、12、16、20、24px 的实际间距阶梯组织。双栏编辑器通常使用 12–14px 间距；底部动作栏右对齐、6px 间距、30px 控件高度。700px 以下，页面内边距收缩为 14px/18px/16px，多栏编辑区转为单列或上下等分，动作栏允许从右侧自然换行。
 
@@ -179,7 +179,7 @@ DevUtils 采用 Operate 模式：它是一台长期使用的本地调试仪器�
 ### Editors and Tool Layout
 
 - CodeMirror 使用主题 surface、border、foreground 与状态 token；代码字体为系统等宽栈。
-- `ToolLayout` 是所有工具的唯一 header/content/footer 骨架，底部 `ToolActionBar` 必须按动作作用域对齐。
+- `ToolLayout` 是所有工具和设置页的共享 Header/Toolbar/Content/Footer 骨架；布局通过显式组合组件声明区域，固定 Content 不滚动，`ScrollableContent` 只用于长页面，底部 `ToolActionBar` 必须按动作作用域对齐。
 - 状态色必须同时配合文字、图标或结构变化，不能只依赖颜色。
 
 ### Overlays

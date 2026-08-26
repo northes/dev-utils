@@ -1302,7 +1302,7 @@ function AppShell() {
         >
           <Sidebar page={page} onNavigate={navigate} onOpenPalette={openPalette} />
           <main
-            className={`workspace relative min-h-0 w-full overflow-x-hidden overflow-y-auto bg-background${tools.some((tool) => tool.id === page) || page === 'history' ? ' overflow-y-hidden' : ''}`}
+            className={`workspace relative min-h-0 w-full overflow-x-hidden overflow-y-auto bg-background${tools.some((tool) => tool.id === page) || page === 'history' || page === 'settings' ? ' overflow-y-hidden' : ''}`}
             ref={workspaceRef}
           >
             {' '}
@@ -1428,7 +1428,7 @@ function AppShell() {
               )}
             </div>
             <div
-              className={`tool-slot h-full min-h-0 overflow-hidden${page === 'settings' ? ' h-auto min-h-full overflow-visible' : ' is-hidden absolute inset-0 invisible pointer-events-none'}`}
+              className={`tool-slot h-full min-h-0 overflow-hidden${page === 'settings' ? '' : ' is-hidden absolute inset-0 invisible pointer-events-none'}`}
             >
               {page === 'settings' && (
                 <Suspense fallback={null}>

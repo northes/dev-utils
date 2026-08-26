@@ -1,9 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Button } from './ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
-import { Switch } from './ui/switch';
-import { Label } from './ui/label';
 import { BracketsCurly, CaretDown, Check } from '@phosphor-icons/react';
 
 export type ToolId = 'json' | 'time' | 'text' | 'base64' | 'diff' | 'jwt' | 'url';
@@ -298,131 +296,81 @@ export function Reveal({
   );
 }
 
-export type ToolAction =
-  | {
-      key: string;
-      label: string;
-      icon?: Icon;
-      active?: boolean;
-      type?: 'toggle';
-      checked?: boolean;
-      onPress: () => void;
-    }
-  | {
-      key: string;
-      label: string;
-      type: 'select';
-      value: string;
-      options: Array<{ key: string; label: string }>;
-      onSelect: (value: string) => void;
-    };
-
-export function ToolHeader({
-  title,
-  desc,
-  actions = [],
-}: {
-  title: string;
-  desc?: string;
-  actions?: ToolAction[];
-}) {
+export function ToolLayoutHeader({ title, desc }: { title: string; desc?: string }) {
   return (
-    <header className="mt-[5px] mb-3.5 flex items-start justify-between gap-3 text-muted-foreground">
-      <div className="min-w-0">
-        <h1 className="m-0 text-[19px] leading-tight font-semibold tracking-[-.01em] text-foreground">
-          {title}
-        </h1>
-        {desc ? (
-          <p className="mt-1 mb-0 text-[10px] font-normal text-muted-foreground">{desc}</p>
-        ) : null}
-      </div>
-      {actions.length > 0 && (
-        <div className="flex flex-none items-center gap-2">
-          {actions.map((a) =>
-            a.type === 'select' ? (
-              <div
-                key={a.key}
-                className="tool-header-select-field flex h-8 flex-none items-center gap-2"
-              >
-                <span id={`tool-action-label-${a.key}`}>{a.label}</span>
-                <Select
-                  value={a.value}
-                  items={a.options.map((option) => ({ value: option.key, label: option.label }))}
-                  onValueChange={(v) => {
-                    if (v !== null) a.onSelect(v);
-                  }}
-                >
-                  <SelectTrigger
-                    className="tool-header-select h-8 w-32 flex-none"
-                    aria-labelledby={`tool-action-label-${a.key}`}
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {a.options.map((option) => (
-                      <SelectItem key={option.key} value={option.key}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            ) : a.type === 'toggle' ? (
-              <Label
-                key={a.key}
-                className="flex h-8 flex-none items-center gap-2 border border-transparent bg-transparent py-0 pr-1.5 pl-3 text-[11px] text-muted-foreground"
-              >
-                <span>{a.label}</span>
-                <Switch checked={!!a.checked} onCheckedChange={a.onPress} size="sm" />
-              </Label>
-            ) : (
-              <Button
-                key={a.key}
-                variant={a.active ? 'default' : 'outline'}
-                className="h-8 flex-none rounded-lg px-3 text-[11px] [&_svg]:size-3.5"
-                aria-pressed={a.active}
-                onClick={a.onPress}
-              >
-                {a.icon && <a.icon data-icon="inline-start" size={14} weight="duotone" />}
-                {a.label}
-              </Button>
-            ),
-          )}
-        </div>
-      )}
+    <header className="row-start-1 mt-[5px] mb-3.5 min-w-0 text-muted-foreground">
+      <h1 className="m-0 text-[19px] leading-tight font-semibold tracking-[-.01em] text-foreground">
+        {title}
+      </h1>
+      {desc ? (
+        <p className="mt-1 mb-0 text-[10px] font-normal text-muted-foreground">{desc}</p>
+      ) : null}
     </header>
   );
 }
-export function ToolLayout({
-  title,
-  desc,
-  actions,
-  footer,
+
+export function ToolLayoutToolbar({ left, right }: { left?: ReactNode; right?: ReactNode }) {
+  if (!left && !right) return null;
+  return (
+    <div className="tool-layout-toolbar row-start-2 mb-3 flex min-w-0 flex-wrap items-end gap-4 border-b border-border px-0.5 pb-3 max-[700px]:flex-col max-[700px]:items-stretch">
+      {left ? <div className="flex min-w-0 flex-wrap items-end gap-4">{left}</div> : null}
+      {right ? (
+        <div className="ml-auto flex min-w-0 flex-wrap items-end gap-2 max-[700px]:ml-0">
+          {right}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+export function ToolLayoutContent({
   children,
   className = '',
-  contentClassName = '',
-  contentMode = 'scroll',
 }: {
-  title: string;
-  desc?: string;
-  actions?: ToolAction[];
-  footer?: React.ReactNode;
-  children: React.ReactNode;
+  children: ReactNode;
   className?: string;
-  contentClassName?: string;
-  contentMode?: 'scroll' | 'fixed';
+}) {
+  return (
+    <div
+      className={`tool-layout-content row-start-3 h-full min-h-0 min-w-0 overflow-hidden ${className}`}
+    >
+      {children}
+    </div>
+  );
+}
+
+export function ToolLayoutScrollableContent({
+  children,
+  className = '',
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div
+      className={`tool-layout-content row-start-3 h-full min-h-0 min-w-0 overflow-x-hidden overflow-y-auto ${className}`}
+    >
+      {children}
+    </div>
+  );
+}
+
+export function ToolLayoutFooter({ children }: { children?: ReactNode }) {
+  return <footer className="row-start-4 min-h-0 min-w-0">{children}</footer>;
+}
+
+export function ToolLayout({
+  children,
+  className = '',
+}: {
+  children: ReactNode;
+  className?: string;
 }) {
   return (
     <section
-      className={`grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden px-7 pt-5 pb-[26px] max-[700px]:px-[18px] max-[700px]:pt-3.5 max-[700px]:pb-4 ${className}`}
+      className={`grid h-full min-h-0 grid-rows-[auto_auto_minmax(0,1fr)_auto] overflow-hidden px-7 pt-5 pb-[26px] max-[700px]:px-[18px] max-[700px]:pt-3.5 max-[700px]:pb-4 ${className}`}
     >
-      <ToolHeader title={title} desc={desc} actions={actions} />
-      <div
-        className={`tool-layout-content h-full min-h-0 min-w-0 ${contentMode === 'fixed' ? 'overflow-hidden' : 'overflow-auto'} ${contentClassName}`}
-      >
-        {children}
-      </div>
-      <footer className="min-h-0 min-w-0">{footer}</footer>
+      {children}
     </section>
   );
 }

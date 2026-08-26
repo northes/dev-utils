@@ -8,6 +8,9 @@ import { quietEditorTheme } from './codeMirrorTheme';
 import {
   Reveal,
   ToolActionBar,
+  ToolLayoutContent,
+  ToolLayoutFooter,
+  ToolLayoutHeader,
   ToolLayout,
   decodeBase64,
   useFocusOnActivate,
@@ -153,12 +156,25 @@ export default function JwtTool({
   }, [pending, decoded]);
   return (
     <Reveal index={0} fill active={active}>
-      <ToolLayout
-        title={t('jwtTool.title')}
-        desc={t('jwtTool.subtitle')}
-        contentClassName="grid grid-rows-[minmax(0,1fr)_auto] gap-3"
-        contentMode="fixed"
-        footer={
+      <ToolLayout>
+        <ToolLayoutHeader title={t('jwtTool.title')} desc={t('jwtTool.subtitle')} />
+        <ToolLayoutContent className="grid grid-rows-[minmax(0,1fr)_auto] gap-3">
+          <div className="grid min-h-0 min-w-0 grid-cols-2 gap-3">
+            <JwtPane
+              label={t('jwtTool.input')}
+              value={input}
+              onChange={setInput}
+              onCreate={(view) => {
+                inputView.current = view;
+              }}
+            />
+            <div className="grid min-h-0 min-w-0 grid-rows-2 gap-3">
+              <JwtPane label={t('jwtTool.header')} value={decoded?.header ?? ''} readOnly />
+              <JwtPane label={t('jwtTool.payload')} value={decoded?.payload ?? ''} readOnly />
+            </div>
+          </div>
+        </ToolLayoutContent>
+        <ToolLayoutFooter>
           <ToolActionBar
             label={t('jwtTool.actions')}
             actions={[
@@ -188,22 +204,7 @@ export default function JwtTool({
               },
             ]}
           />
-        }
-      >
-        <div className="grid min-h-0 min-w-0 grid-cols-2 gap-3">
-          <JwtPane
-            label={t('jwtTool.input')}
-            value={input}
-            onChange={setInput}
-            onCreate={(view) => {
-              inputView.current = view;
-            }}
-          />
-          <div className="grid min-h-0 min-w-0 grid-rows-2 gap-3">
-            <JwtPane label={t('jwtTool.header')} value={decoded?.header ?? ''} readOnly />
-            <JwtPane label={t('jwtTool.payload')} value={decoded?.payload ?? ''} readOnly />
-          </div>
-        </div>
+        </ToolLayoutFooter>
       </ToolLayout>
     </Reveal>
   );

@@ -41,6 +41,8 @@ import {
 } from './ui/combobox';
 import {
   Reveal,
+  ToolLayoutContent,
+  ToolLayoutHeader,
   ToolLayout,
   undoRedoKey,
   useFocusOnActivate,
@@ -368,135 +370,138 @@ export default function TimeTool({
   };
   return (
     <Reveal index={0} fill active={active}>
-      <ToolLayout title={t('timeTool.title')} desc={t('timeTool.subtitle')} contentMode="fixed">
-        <div className="grid h-full min-h-0 grid-rows-[auto_auto_auto_minmax(0,1fr)]">
-          <Label className="flex flex-col items-stretch gap-2 font-mono text-[10px] font-medium uppercase tracking-[.04em] text-muted-foreground">
-            <span>{t('timeTool.input')}</span>
-            <div className="flex items-center gap-2">
-              <div className="flex h-[46px] min-w-0 flex-1 items-center gap-2.5 rounded-lg border border-border bg-card px-3.5 focus-within:border-muted-foreground">
-                <Clock size={18} weight="duotone" />
-                <Input
-                  ref={inputRef}
-                  className="min-w-0 flex-1 select-text border-0 bg-transparent px-0 py-0 text-[13px] shadow-none focus-visible:ring-0 dark:bg-transparent"
-                  value={input}
-                  onKeyDown={(event) => undoRedoKey(event, undo, redo)}
-                  onChange={(event) => setInput(event.target.value)}
-                  placeholder={t('timeTool.placeholder')}
-                />
+      <ToolLayout>
+        <ToolLayoutHeader title={t('timeTool.title')} desc={t('timeTool.subtitle')} />
+        <ToolLayoutContent>
+          <div className="grid h-full min-h-0 grid-rows-[auto_auto_auto_minmax(0,1fr)]">
+            <Label className="flex flex-col items-stretch gap-2 font-mono text-[10px] font-medium uppercase tracking-[.04em] text-muted-foreground">
+              <span>{t('timeTool.input')}</span>
+              <div className="flex items-center gap-2">
+                <div className="flex h-[46px] min-w-0 flex-1 items-center gap-2.5 rounded-lg border border-border bg-card px-3.5 focus-within:border-muted-foreground">
+                  <Clock size={18} weight="duotone" />
+                  <Input
+                    ref={inputRef}
+                    className="min-w-0 flex-1 select-text border-0 bg-transparent px-0 py-0 text-[13px] shadow-none focus-visible:ring-0 dark:bg-transparent"
+                    value={input}
+                    onKeyDown={(event) => undoRedoKey(event, undo, redo)}
+                    onChange={(event) => setInput(event.target.value)}
+                    placeholder={t('timeTool.placeholder')}
+                  />
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon-lg"
+                  className="flex-none rounded-lg"
+                  aria-label={t('timeTool.refresh')}
+                  onClick={() => {
+                    const now = Math.floor(Date.now() / 1000).toString();
+                    setInput(now, { isolate: true });
+                    record('time', t('timeTool.refresh'), now, now);
+                  }}
+                >
+                  <ArrowsClockwise size={17} weight="duotone" />
+                </Button>
               </div>
+              <small className="text-[9px] normal-case tracking-normal">{t('timeTool.hint')}</small>
+            </Label>
+            <div className="flex items-end gap-2">
+              <TimezoneCombobox
+                value={timeZone}
+                onChange={setTimeZone}
+                zones={zones}
+                label={t('timeTool.timezone')}
+                placeholder={t('timeTool.timezonePlaceholder')}
+                emptyLabel={t('timeTool.timezoneNoResults')}
+              />
               <Button
                 variant="ghost"
                 size="icon-lg"
                 className="flex-none rounded-lg"
-                aria-label={t('timeTool.refresh')}
-                onClick={() => {
-                  const now = Math.floor(Date.now() / 1000).toString();
-                  setInput(now, { isolate: true });
-                  record('time', t('timeTool.refresh'), now, now);
-                }}
+                aria-label={t('timeTool.useSystemTimezone')}
+                onClick={() => setTimeZone(getSystemTimeZone())}
               >
-                <ArrowsClockwise size={17} weight="duotone" />
+                <GpsFix size={17} weight="duotone" />
               </Button>
             </div>
-            <small className="text-[9px] normal-case tracking-normal">{t('timeTool.hint')}</small>
-          </Label>
-          <div className="flex items-end gap-2">
-            <TimezoneCombobox
-              value={timeZone}
-              onChange={setTimeZone}
-              zones={zones}
-              label={t('timeTool.timezone')}
-              placeholder={t('timeTool.timezonePlaceholder')}
-              emptyLabel={t('timeTool.timezoneNoResults')}
-            />
-            <Button
-              variant="ghost"
-              size="icon-lg"
-              className="flex-none rounded-lg"
-              aria-label={t('timeTool.useSystemTimezone')}
-              onClick={() => setTimeZone(getSystemTimeZone())}
-            >
-              <GpsFix size={17} weight="duotone" />
-            </Button>
-          </div>
-          <div className="mt-3.5 flex min-h-[39px] items-center justify-between gap-3 border-b border-border px-1 py-1.5">
-            <span className="text-[10px] text-muted-foreground">
-              {editing ? t('timeTool.editHint') : ''}
-            </span>
-            <Button
-              variant={editing ? 'default' : 'ghost'}
-              onClick={editing ? finishEditing : startEditing}
-              className="h-[26px] px-2.5 text-[11px]"
-            >
-              {t(editing ? 'timeTool.done' : 'timeTool.edit')}
-            </Button>
-          </div>
-          <div className="min-h-0 overflow-x-hidden overflow-y-auto">
-            {editing ? (
-              <DndContext
-                sensors={sensors}
-                collisionDetection={closestCenter}
-                onDragStart={({ active }) => {
-                  dragTargetIndexRef.current = draftOrderRef.current.indexOf(
-                    String(active.id) as TimeResultId,
-                  );
-                }}
-                onDragEnd={({ active }) => {
-                  const from = draftOrderRef.current.indexOf(String(active.id) as TimeResultId);
-                  moveResult(from, dragTargetIndexRef.current);
-                  dragTargetIndexRef.current = -1;
-                }}
-                onDragCancel={() => {
-                  dragTargetIndexRef.current = -1;
-                }}
+            <div className="mt-3.5 flex min-h-[39px] items-center justify-between gap-3 border-b border-border px-1 py-1.5">
+              <span className="text-[10px] text-muted-foreground">
+                {editing ? t('timeTool.editHint') : ''}
+              </span>
+              <Button
+                variant={editing ? 'default' : 'ghost'}
+                onClick={editing ? finishEditing : startEditing}
+                className="h-[26px] px-2.5 text-[11px]"
               >
-                <SortableContext items={draftOrder} strategy={verticalListSortingStrategy}>
-                  <div>
-                    {draftOrder.map((id) => (
-                      <TimeResultRow
-                        key={id}
-                        id={id}
-                        label={t(`timeTool.${id}`)}
-                        value={values[id]}
-                        hidden={draftHidden.has(id)}
-                        editing
-                        onCopy={() => copyResult(id)}
-                        onToggle={() => toggleResult(id)}
-                        onSortIndexChange={(index) => {
-                          dragTargetIndexRef.current = index;
-                        }}
-                      />
-                    ))}
-                  </div>
-                </SortableContext>
-              </DndContext>
-            ) : parsed ? (
-              <DndContext sensors={sensors}>
-                <SortableContext items={shown} strategy={verticalListSortingStrategy}>
-                  <div>
-                    {shown.map((id) => (
-                      <TimeResultRow
-                        key={id}
-                        id={id}
-                        label={t(`timeTool.${id}`)}
-                        value={values[id]}
-                        hidden={false}
-                        editing={false}
-                        onCopy={() => copyResult(id)}
-                      />
-                    ))}
-                  </div>
-                </SortableContext>
-              </DndContext>
-            ) : (
-              <div className="flex min-h-[140px] flex-col items-center justify-center gap-2 text-center text-muted-foreground">
-                <Clock size={24} weight="duotone" />
-                <strong className="text-sm font-semibold">{t('timeTool.emptyTitle')}</strong>
-                <span className="text-[11px]">{t('timeTool.emptyHint')}</span>
-              </div>
-            )}
+                {t(editing ? 'timeTool.done' : 'timeTool.edit')}
+              </Button>
+            </div>
+            <div className="min-h-0 overflow-x-hidden overflow-y-auto">
+              {editing ? (
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragStart={({ active }) => {
+                    dragTargetIndexRef.current = draftOrderRef.current.indexOf(
+                      String(active.id) as TimeResultId,
+                    );
+                  }}
+                  onDragEnd={({ active }) => {
+                    const from = draftOrderRef.current.indexOf(String(active.id) as TimeResultId);
+                    moveResult(from, dragTargetIndexRef.current);
+                    dragTargetIndexRef.current = -1;
+                  }}
+                  onDragCancel={() => {
+                    dragTargetIndexRef.current = -1;
+                  }}
+                >
+                  <SortableContext items={draftOrder} strategy={verticalListSortingStrategy}>
+                    <div>
+                      {draftOrder.map((id) => (
+                        <TimeResultRow
+                          key={id}
+                          id={id}
+                          label={t(`timeTool.${id}`)}
+                          value={values[id]}
+                          hidden={draftHidden.has(id)}
+                          editing
+                          onCopy={() => copyResult(id)}
+                          onToggle={() => toggleResult(id)}
+                          onSortIndexChange={(index) => {
+                            dragTargetIndexRef.current = index;
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </SortableContext>
+                </DndContext>
+              ) : parsed ? (
+                <DndContext sensors={sensors}>
+                  <SortableContext items={shown} strategy={verticalListSortingStrategy}>
+                    <div>
+                      {shown.map((id) => (
+                        <TimeResultRow
+                          key={id}
+                          id={id}
+                          label={t(`timeTool.${id}`)}
+                          value={values[id]}
+                          hidden={false}
+                          editing={false}
+                          onCopy={() => copyResult(id)}
+                        />
+                      ))}
+                    </div>
+                  </SortableContext>
+                </DndContext>
+              ) : (
+                <div className="flex min-h-[140px] flex-col items-center justify-center gap-2 text-center text-muted-foreground">
+                  <Clock size={24} weight="duotone" />
+                  <strong className="text-sm font-semibold">{t('timeTool.emptyTitle')}</strong>
+                  <span className="text-[11px]">{t('timeTool.emptyHint')}</span>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+        </ToolLayoutContent>
       </ToolLayout>
     </Reveal>
   );

@@ -10,6 +10,8 @@ import {
   AlertDialogTitle,
 } from './ui/alert-dialog';
 import { Button } from './ui/button';
+import { Label } from './ui/label';
+import { Switch } from './ui/switch';
 import { useTranslation } from 'react-i18next';
 import { Clipboard } from '@wailsio/runtime';
 import CodeMirror from '@uiw/react-codemirror';
@@ -27,6 +29,10 @@ import {
   Reveal,
   samples,
   ToolActionBar,
+  ToolLayoutContent,
+  ToolLayoutFooter,
+  ToolLayoutHeader,
+  ToolLayoutToolbar,
   ToolLayout,
   useFocusOnActivate,
   type PendingAction,
@@ -811,28 +817,130 @@ export default function JsonTool({
   }, [schema, workflowMode]);
   return (
     <Reveal index={0} fill active={active}>
-      <ToolLayout
-        title={t('jsonTool.title')}
-        desc={t('jsonTool.subtitle')}
-        actions={[
-          {
-            key: 'schema',
-            label: t('jsonTool.schema'),
-            type: 'toggle',
-            checked: schema,
-            onPress: toggleSchema,
-          },
-          {
-            key: 'workflow',
-            label: t('jsonTool.workflow.title'),
-            type: 'toggle',
-            checked: workflowMode,
-            onPress: toggleWorkflow,
-          },
-        ]}
-        className="json-page [container-name:json-page] [container-type:inline-size]"
-        contentMode="fixed"
-        footer={
+      <ToolLayout className="json-page [container-name:json-page] [container-type:inline-size]">
+        <ToolLayoutHeader title={t('jsonTool.title')} desc={t('jsonTool.subtitle')} />
+        <ToolLayoutToolbar
+          left={
+            <>
+              <Label className="flex h-8 flex-none items-center gap-2 border border-transparent bg-transparent py-0 pr-1.5 pl-3 text-[11px] text-muted-foreground">
+                <span>{t('jsonTool.schema')}</span>
+                <Switch checked={schema} onCheckedChange={toggleSchema} size="sm" />
+              </Label>
+              <Label className="flex h-8 flex-none items-center gap-2 border border-transparent bg-transparent py-0 pr-1.5 pl-3 text-[11px] text-muted-foreground">
+                <span>{t('jsonTool.workflow.title')}</span>
+                <Switch checked={workflowMode} onCheckedChange={toggleWorkflow} size="sm" />
+              </Label>
+            </>
+          }
+        />
+        <ToolLayoutContent>
+          <div className="json-content h-full min-h-0 overflow-hidden">
+            <div
+              className={`json-schema-layout grid h-full min-h-0 min-w-0 ${jsonGridClass}${workflowMode ? ' workflow-layout' : ''}`}
+            >
+              <JsonEditorPane
+                label={t('jsonTool.input')}
+                value={input}
+                onChange={changeInput}
+                foldExt={foldExt}
+                onCreate={(v) => views.current.set('input', v)}
+                theme={cmTheme}
+                placeholder={t('jsonTool.placeholder')}
+                cmClassName="json-input-cm"
+                formatOnPaste={autoFormatOnFill ? tryAutoFormat : undefined}
+              />
+              <div
+                className={`json-schema-right grid min-h-0 min-w-0 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-3 ${workflowMode ? '@max-[959px]/json-page:contents' : '@max-[959px]/json-page:grid'} @min-[960px]/json-page:contents${schema || workflowMode ? '' : ' hidden'}`}
+              >
+                {schema && (
+                  <>
+                    <div className="json-path flex min-w-0 flex-col gap-2 min-h-0">
+                      <span className="flex-none font-mono text-[10px] font-medium leading-none tracking-[.04em] text-muted-foreground uppercase">
+                        {t('jsonTool.schema')}
+                      </span>
+                      <div className="json-path-field flex min-h-0 min-w-0 flex-1">
+                        <CodeMirror
+                          className="json-cm json-path-cm"
+                          height="100%"
+                          value={path}
+                          onChange={setPath}
+                          theme={cmTheme}
+                          indentWithTab={false}
+                          onCreateEditor={(v) => {
+                            v.contentDOM.setAttribute('aria-label', t('jsonTool.schema'));
+                            views.current.set('path', v);
+                          }}
+                          basicSetup={{
+                            lineNumbers: false,
+                            foldGutter: false,
+                            autocompletion: false,
+                            closeBrackets: false,
+                          }}
+                          extensions={pathExt}
+                          placeholder={t('jsonTool.schemaPathPlaceholder')}
+                        />
+                      </div>
+                    </div>
+                    <div className="json-pane flex min-h-0 min-w-0 flex-1 flex-col gap-2">
+                      <span className="json-pane-label flex-none font-mono text-[10px] font-medium leading-none tracking-[.04em] text-muted-foreground uppercase">
+                        {t('jsonTool.result')}
+                      </span>
+                      <div className="json-pane-editor flex min-h-0 min-w-0 flex-1">
+                        {pathError ? (
+                          <JsonErrorPanel
+                            title={t('jsonTool.workflow.errorTitle')}
+                            description={pathError}
+                          />
+                        ) : (
+                          <CodeMirror
+                            className="json-cm"
+                            height="100%"
+                            value={result}
+                            editable={false}
+                            theme={cmTheme}
+                            onCreateEditor={(v) => {
+                              v.contentDOM.setAttribute('aria-label', t('jsonTool.result'));
+                              views.current.set('result', v);
+                            }}
+                            extensions={[json5(), foldExt]}
+                          />
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
+                {workflowMode && (
+                  <div className="json-workflow-slot min-h-0 min-w-0 @max-[959px]/json-page:contents @min-[960px]/json-page:contents">
+                    <WorkflowPanel
+                      contexts={workflow.contexts}
+                      rules={workflowRules}
+                      output={workflow.output}
+                      error={workflow.error}
+                      theme={cmTheme}
+                      foldExt={foldExt}
+                      focusItemId={workflowFocusId}
+                      onFocusHandled={() => setWorkflowFocusId(null)}
+                      onChange={setWorkflowRules}
+                      onRemove={removeWorkflowItem}
+                      onMove={moveWorkflowItem}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className={`detected hidden${input && !jsonValue ? ' invalid' : ''}`}>
+              <span>{t('jsonTool.detected')}</span>
+              {input ? (
+                <strong className={jsonValue ? undefined : 'empty'}>
+                  {jsonValue ? `${t('jsonTool.valid')} · ${summary(input)}` : t('jsonTool.invalid')}
+                </strong>
+              ) : (
+                <strong className="empty">{t('jsonTool.placeholder')}</strong>
+              )}
+            </div>
+          </div>
+        </ToolLayoutContent>
+        <ToolLayoutFooter>
           <div
             className={`json-footer-actions grid items-start gap-3 ${footerGridClass}${workflowMode ? ' workflow-layout' : ''}`}
           >
@@ -847,113 +955,7 @@ export default function JsonTool({
               <div className="json-workflow-footer-actions min-w-0">{workflowActions}</div>
             )}
           </div>
-        }
-      >
-        <div className="json-content h-full min-h-0 overflow-hidden">
-          <div
-            className={`json-schema-layout grid h-full min-h-0 min-w-0 ${jsonGridClass}${workflowMode ? ' workflow-layout' : ''}`}
-          >
-            <JsonEditorPane
-              label={t('jsonTool.input')}
-              value={input}
-              onChange={changeInput}
-              foldExt={foldExt}
-              onCreate={(v) => views.current.set('input', v)}
-              theme={cmTheme}
-              placeholder={t('jsonTool.placeholder')}
-              cmClassName="json-input-cm"
-              formatOnPaste={autoFormatOnFill ? tryAutoFormat : undefined}
-            />
-            <div
-              className={`json-schema-right grid min-h-0 min-w-0 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-3 ${workflowMode ? '@max-[959px]/json-page:contents' : '@max-[959px]/json-page:grid'} @min-[960px]/json-page:contents${schema || workflowMode ? '' : ' hidden'}`}
-            >
-              {schema && (
-                <>
-                  <div className="json-path flex min-w-0 flex-col gap-2 min-h-0">
-                    <span className="flex-none font-mono text-[10px] font-medium leading-none tracking-[.04em] text-muted-foreground uppercase">
-                      {t('jsonTool.schema')}
-                    </span>
-                    <div className="json-path-field flex min-h-0 min-w-0 flex-1">
-                      <CodeMirror
-                        className="json-cm json-path-cm"
-                        height="100%"
-                        value={path}
-                        onChange={setPath}
-                        theme={cmTheme}
-                        indentWithTab={false}
-                        onCreateEditor={(v) => {
-                          v.contentDOM.setAttribute('aria-label', t('jsonTool.schema'));
-                          views.current.set('path', v);
-                        }}
-                        basicSetup={{
-                          lineNumbers: false,
-                          foldGutter: false,
-                          autocompletion: false,
-                          closeBrackets: false,
-                        }}
-                        extensions={pathExt}
-                        placeholder={t('jsonTool.schemaPathPlaceholder')}
-                      />
-                    </div>
-                  </div>
-                  <div className="json-pane flex min-h-0 min-w-0 flex-1 flex-col gap-2">
-                    <span className="json-pane-label flex-none font-mono text-[10px] font-medium leading-none tracking-[.04em] text-muted-foreground uppercase">
-                      {t('jsonTool.result')}
-                    </span>
-                    <div className="json-pane-editor flex min-h-0 min-w-0 flex-1">
-                      {pathError ? (
-                        <JsonErrorPanel
-                          title={t('jsonTool.workflow.errorTitle')}
-                          description={pathError}
-                        />
-                      ) : (
-                        <CodeMirror
-                          className="json-cm"
-                          height="100%"
-                          value={result}
-                          editable={false}
-                          theme={cmTheme}
-                          onCreateEditor={(v) => {
-                            v.contentDOM.setAttribute('aria-label', t('jsonTool.result'));
-                            views.current.set('result', v);
-                          }}
-                          extensions={[json5(), foldExt]}
-                        />
-                      )}
-                    </div>
-                  </div>
-                </>
-              )}
-              {workflowMode && (
-                <div className="json-workflow-slot min-h-0 min-w-0 @max-[959px]/json-page:contents @min-[960px]/json-page:contents">
-                  <WorkflowPanel
-                    contexts={workflow.contexts}
-                    rules={workflowRules}
-                    output={workflow.output}
-                    error={workflow.error}
-                    theme={cmTheme}
-                    foldExt={foldExt}
-                    focusItemId={workflowFocusId}
-                    onFocusHandled={() => setWorkflowFocusId(null)}
-                    onChange={setWorkflowRules}
-                    onRemove={removeWorkflowItem}
-                    onMove={moveWorkflowItem}
-                  />
-                </div>
-              )}
-            </div>
-          </div>
-          <div className={`detected hidden${input && !jsonValue ? ' invalid' : ''}`}>
-            <span>{t('jsonTool.detected')}</span>
-            {input ? (
-              <strong className={jsonValue ? undefined : 'empty'}>
-                {jsonValue ? `${t('jsonTool.valid')} · ${summary(input)}` : t('jsonTool.invalid')}
-              </strong>
-            ) : (
-              <strong className="empty">{t('jsonTool.placeholder')}</strong>
-            )}
-          </div>
-        </div>
+        </ToolLayoutFooter>
       </ToolLayout>
       <AlertDialog
         open={commentDialog !== null}

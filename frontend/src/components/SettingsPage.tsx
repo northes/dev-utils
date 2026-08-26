@@ -9,7 +9,7 @@ import type { Config as Settings } from '../../bindings/changeme/models';
 import { CheckForUpdates, GetCurrentVersion } from '../../bindings/changeme/updateservice';
 import type { Icon, ToolId } from './shared';
 import { ClearHistoryDialog } from './HistoryPage';
-import { Reveal } from './shared';
+import { Reveal, ToolLayout, ToolLayoutHeader, ToolLayoutScrollableContent } from './shared';
 import { toast } from './ui/toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { THEME_MODE_OPTIONS, THEME_OPTIONS, type ThemeMode } from '../theme';
@@ -263,183 +263,183 @@ export default function SettingsPage({
     </SettingsGroup>
   );
   return (
-    <Reveal index={0}>
-      <section className="settings-page min-h-full px-7 pb-[26px] pt-5 max-[700px]:px-[18px] max-[700px]:pb-4 max-[700px]:pt-3.5">
-        <header className="mb-3.5 mt-1.5">
-          <h1 className="text-[19px] font-semibold leading-tight tracking-[-0.01em]">
-            {t('settings.title')}
-          </h1>
-          <p className="mt-1 text-[10px] text-muted-foreground">{t('settings.subtitle')}</p>
-        </header>
-        <SettingsGroup title={t('settings.appearance')} subtitle={t('settings.appearanceSubtitle')}>
-          <div className="divide-y divide-border">
-            <Setting label={t('settings.themeMode')} className="setting--appearance">
-              <Select
-                items={themeModeOptions.map(({ id, label }) => ({ value: id, label }))}
-                value={settings.themeMode}
-                onValueChange={(value) => {
-                  if (value) setThemeMode(value as ThemeMode);
-                }}
-              >
-                <SelectTrigger
-                  className="data-[size=default]:h-10 w-40 flex-none text-[11px]"
-                  aria-label={t('settings.themeMode')}
+    <Reveal index={0} fill>
+      <ToolLayout className="settings-page">
+        <ToolLayoutHeader title={t('settings.title')} desc={t('settings.subtitle')} />
+        <ToolLayoutScrollableContent>
+          <SettingsGroup
+            title={t('settings.appearance')}
+            subtitle={t('settings.appearanceSubtitle')}
+          >
+            <div className="divide-y divide-border">
+              <Setting label={t('settings.themeMode')} className="setting--appearance">
+                <Select
+                  items={themeModeOptions.map(({ id, label }) => ({ value: id, label }))}
+                  value={settings.themeMode}
+                  onValueChange={(value) => {
+                    if (value) setThemeMode(value as ThemeMode);
+                  }}
                 >
-                  <SelectValue>
-                    {themeModeOptions.find((option) => option.id === settings.themeMode)?.label}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {themeModeOptions.map((option) => (
-                    <SelectItem key={option.id} value={option.id}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Setting>
-            <Setting label={t('settings.lightTheme')}>
-              <Select
-                items={lightThemeOptions.map(({ id, label }) => ({ value: id, label }))}
-                value={settings.lightTheme}
-                onValueChange={(value) => {
-                  if (value) setLightTheme(value);
-                }}
-              >
-                <SelectTrigger
-                  className="data-[size=default]:h-10 w-40 flex-none text-[11px]"
-                  aria-label={t('settings.lightTheme')}
+                  <SelectTrigger
+                    className="data-[size=default]:h-10 w-40 flex-none text-[11px]"
+                    aria-label={t('settings.themeMode')}
+                  >
+                    <SelectValue>
+                      {themeModeOptions.find((option) => option.id === settings.themeMode)?.label}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {themeModeOptions.map((option) => (
+                      <SelectItem key={option.id} value={option.id}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Setting>
+              <Setting label={t('settings.lightTheme')}>
+                <Select
+                  items={lightThemeOptions.map(({ id, label }) => ({ value: id, label }))}
+                  value={settings.lightTheme}
+                  onValueChange={(value) => {
+                    if (value) setLightTheme(value);
+                  }}
                 >
-                  <SelectValue>
-                    {lightThemeOptions.find((option) => option.id === settings.lightTheme)?.label}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {lightThemeOptions.map((option) => (
-                    <SelectItem key={option.id} value={option.id}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Setting>
-            <Setting label={t('settings.darkTheme')}>
-              <Select
-                items={darkThemeOptions.map(({ id, label }) => ({ value: id, label }))}
-                value={settings.darkTheme}
-                onValueChange={(value) => {
-                  if (value) setDarkTheme(value);
-                }}
-              >
-                <SelectTrigger
-                  className="data-[size=default]:h-10 w-40 flex-none text-[11px]"
-                  aria-label={t('settings.darkTheme')}
+                  <SelectTrigger
+                    className="data-[size=default]:h-10 w-40 flex-none text-[11px]"
+                    aria-label={t('settings.lightTheme')}
+                  >
+                    <SelectValue>
+                      {lightThemeOptions.find((option) => option.id === settings.lightTheme)?.label}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {lightThemeOptions.map((option) => (
+                      <SelectItem key={option.id} value={option.id}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Setting>
+              <Setting label={t('settings.darkTheme')}>
+                <Select
+                  items={darkThemeOptions.map(({ id, label }) => ({ value: id, label }))}
+                  value={settings.darkTheme}
+                  onValueChange={(value) => {
+                    if (value) setDarkTheme(value);
+                  }}
                 >
-                  <SelectValue>
-                    {darkThemeOptions.find((option) => option.id === settings.darkTheme)?.label}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {darkThemeOptions.map((option) => (
-                    <SelectItem key={option.id} value={option.id}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Setting>
-          </div>
-        </SettingsGroup>
-        <SettingsGroup title={t('settings.editor')} subtitle={t('settings.editorSubtitle')}>
-          <Setting className="setting--choice">
-            <div className="inline-flex h-10 rounded-lg border border-border bg-card p-[3px]">
-              {[12, 14, 16, 18].map((size) => (
-                <Button
-                  key={size}
-                  variant="ghost"
-                  className={`min-w-[76px] rounded-lg px-3 py-1.5 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground ${(settings.codeEditorFontSize || 12) === size ? 'bg-muted text-foreground' : ''}`}
-                  onClick={() =>
-                    setSettings((current) => ({
-                      ...current,
-                      codeEditorFontSize: size,
-                    }))
-                  }
-                >
-                  {size}px
-                </Button>
-              ))}
+                  <SelectTrigger
+                    className="data-[size=default]:h-10 w-40 flex-none text-[11px]"
+                    aria-label={t('settings.darkTheme')}
+                  >
+                    <SelectValue>
+                      {darkThemeOptions.find((option) => option.id === settings.darkTheme)?.label}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {darkThemeOptions.map((option) => (
+                      <SelectItem key={option.id} value={option.id}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Setting>
             </div>
-          </Setting>
-        </SettingsGroup>
-        <SettingsGroup title={t('settings.language')} subtitle={t('settings.languageSubtitle')}>
-          <Setting className="setting--choice">
-            <div className="inline-flex h-10 rounded-lg border border-border bg-card p-[3px]">
-              {SUPPORTED_LANGUAGES.map((l) => (
-                <Button
-                  key={l.code}
-                  variant="ghost"
-                  className={`min-w-[76px] rounded-lg px-3 py-1.5 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground ${settings.language === l.code ? 'bg-muted text-foreground' : ''}`}
-                  onClick={() => setLanguage(l.code)}
-                >
-                  {t(l.labelKey)}
-                </Button>
-              ))}
-            </div>
-          </Setting>
-        </SettingsGroup>
-        {clipboardSettings}
-        <SettingsGroup title={t('settings.updates')} subtitle={t('settings.updatesSubtitle')}>
-          <div className="divide-y divide-border">
-            <Setting
-              label={t('settings.autoCheckUpdates')}
-              description={t('settings.autoCheckUpdatesDesc')}
-            >
-              <SettingSwitch
-                selected={settings.autoCheckUpdates}
-                onChange={(v) => update('autoCheckUpdates', v)}
-              />
+          </SettingsGroup>
+          <SettingsGroup title={t('settings.editor')} subtitle={t('settings.editorSubtitle')}>
+            <Setting className="setting--choice">
+              <div className="inline-flex h-10 rounded-lg border border-border bg-card p-[3px]">
+                {[12, 14, 16, 18].map((size) => (
+                  <Button
+                    key={size}
+                    variant="ghost"
+                    className={`min-w-[76px] rounded-lg px-3 py-1.5 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground ${(settings.codeEditorFontSize || 12) === size ? 'bg-muted text-foreground' : ''}`}
+                    onClick={() =>
+                      setSettings((current) => ({
+                        ...current,
+                        codeEditorFontSize: size,
+                      }))
+                    }
+                  >
+                    {size}px
+                  </Button>
+                ))}
+              </div>
             </Setting>
-            <Setting
-              label={t('settings.currentVersion')}
-              description={version ? `v${version}` : undefined}
-            >
+          </SettingsGroup>
+          <SettingsGroup title={t('settings.language')} subtitle={t('settings.languageSubtitle')}>
+            <Setting className="setting--choice">
+              <div className="inline-flex h-10 rounded-lg border border-border bg-card p-[3px]">
+                {SUPPORTED_LANGUAGES.map((l) => (
+                  <Button
+                    key={l.code}
+                    variant="ghost"
+                    className={`min-w-[76px] rounded-lg px-3 py-1.5 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground ${settings.language === l.code ? 'bg-muted text-foreground' : ''}`}
+                    onClick={() => setLanguage(l.code)}
+                  >
+                    {t(l.labelKey)}
+                  </Button>
+                ))}
+              </div>
+            </Setting>
+          </SettingsGroup>
+          {clipboardSettings}
+          <SettingsGroup title={t('settings.updates')} subtitle={t('settings.updatesSubtitle')}>
+            <div className="divide-y divide-border">
+              <Setting
+                label={t('settings.autoCheckUpdates')}
+                description={t('settings.autoCheckUpdatesDesc')}
+              >
+                <SettingSwitch
+                  selected={settings.autoCheckUpdates}
+                  onChange={(v) => update('autoCheckUpdates', v)}
+                />
+              </Setting>
+              <Setting
+                label={t('settings.currentVersion')}
+                description={version ? `v${version}` : undefined}
+              >
+                <Button
+                  variant="outline"
+                  className="text-[11px]"
+                  disabled={checking}
+                  onClick={() => void checkUpdates()}
+                >
+                  <ArrowsClockwise data-icon="inline-start" weight="duotone" />
+                  {t(checking ? 'settings.checkingUpdates' : 'settings.checkUpdates')}
+                </Button>
+              </Setting>
+            </div>
+          </SettingsGroup>
+          <SettingsGroup title={t('settings.privacy')} subtitle={t('settings.privacySubtitle')}>
+            <Setting label={t('settings.history')} description={t('settings.historyDesc')}>
+              <Button
+                variant="destructive"
+                className="text-[11px]"
+                onClick={() => setConfirmClear(true)}
+              >
+                <Trash data-icon="inline-start" weight="duotone" />
+                {t('settings.clearHistory')}
+              </Button>
+            </Setting>
+          </SettingsGroup>
+          <SettingsGroup title={t('settings.about')} subtitle={t('settings.aboutSubtitle')}>
+            <Setting label={t('settings.projectLink')} description={t('settings.projectUrl')}>
               <Button
                 variant="outline"
                 className="text-[11px]"
-                disabled={checking}
-                onClick={() => void checkUpdates()}
+                onClick={() => void Browser.OpenURL(t('settings.projectUrl'))}
               >
-                <ArrowsClockwise data-icon="inline-start" weight="duotone" />
-                {t(checking ? 'settings.checkingUpdates' : 'settings.checkUpdates')}
+                <ArrowSquareOut data-icon="inline-start" weight="duotone" />
+                {t('settings.openProject')}
               </Button>
             </Setting>
-          </div>
-        </SettingsGroup>
-        <SettingsGroup title={t('settings.privacy')} subtitle={t('settings.privacySubtitle')}>
-          <Setting label={t('settings.history')} description={t('settings.historyDesc')}>
-            <Button
-              variant="destructive"
-              className="text-[11px]"
-              onClick={() => setConfirmClear(true)}
-            >
-              <Trash data-icon="inline-start" weight="duotone" />
-              {t('settings.clearHistory')}
-            </Button>
-          </Setting>
-        </SettingsGroup>
-        <SettingsGroup title={t('settings.about')} subtitle={t('settings.aboutSubtitle')}>
-          <Setting label={t('settings.projectLink')} description={t('settings.projectUrl')}>
-            <Button
-              variant="outline"
-              className="text-[11px]"
-              onClick={() => void Browser.OpenURL(t('settings.projectUrl'))}
-            >
-              <ArrowSquareOut data-icon="inline-start" weight="duotone" />
-              {t('settings.openProject')}
-            </Button>
-          </Setting>
-        </SettingsGroup>
-      </section>
+          </SettingsGroup>
+        </ToolLayoutScrollableContent>
+      </ToolLayout>
       <ClearHistoryDialog
         open={confirmClear}
         onClose={() => setConfirmClear(false)}

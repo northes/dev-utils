@@ -8,7 +8,19 @@ import { json } from '@codemirror/lang-json';
 import { quietEditorTheme } from './codeMirrorTheme';
 import { ArrowsLeftRight, Trash } from '@phosphor-icons/react';
 import { useTranslation } from 'react-i18next';
-import { Reveal, ToolActionBar, ToolLayout, type PendingAction } from './shared';
+import { Label } from './ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { Switch } from './ui/switch';
+import {
+  Reveal,
+  ToolActionBar,
+  ToolLayout,
+  ToolLayoutContent,
+  ToolLayoutFooter,
+  ToolLayoutHeader,
+  ToolLayoutToolbar,
+  type PendingAction,
+} from './shared';
 import '../styles/tools/editor.css';
 import '../styles/tools/diff.css';
 
@@ -534,42 +546,98 @@ export default function DiffTool({
   };
   return (
     <Reveal index={0} fill active={active}>
-      <ToolLayout
-        title={t('diffTool.title')}
-        actions={[
-          {
-            key: 'target',
-            label: t('diffTool.clipboardTarget'),
-            type: 'select',
-            value: targetMode,
-            options: (['alternate', 'before', 'after'] as const).map((key) => ({
-              key,
-              label: t(`diffTool.targets.${key}`),
-            })),
-            onSelect: (value) =>
-              onClipboardTargetModeChange(
-                value === 'before' || value === 'after' ? value : 'alternate',
-              ),
-          },
-          {
-            key: 'highlight',
-            label: t('diffTool.highlightMode'),
-            type: 'select',
-            value: mode,
-            options: highlightModes.map((key) => ({ key, label: t(`diffTool.modes.${key}`) })),
-            onSelect: (value) => onHighlightModeChange(normalizeHighlightMode(value)),
-          },
-          {
-            key: 'collapse',
-            label: t('diffTool.collapseUnchanged'),
-            type: 'toggle',
-            checked: collapseUnchanged,
-            onPress: () => setCollapseUnchanged((value) => !value),
-          },
-        ]}
-        className="diff-tool-layout [container-type:inline-size]"
-        contentMode="fixed"
-        footer={
+      <ToolLayout className="diff-tool-layout [container-type:inline-size]">
+        <ToolLayoutHeader title={t('diffTool.title')} />
+        <ToolLayoutToolbar
+          left={
+            <>
+              <div className="flex h-8 flex-none items-center gap-2 text-[11px] text-muted-foreground">
+                <span id="diff-clipboard-target-label">{t('diffTool.clipboardTarget')}</span>
+                <Select
+                  value={targetMode}
+                  items={(['alternate', 'before', 'after'] as const).map((key) => ({
+                    value: key,
+                    label: t(`diffTool.targets.${key}`),
+                  }))}
+                  onValueChange={(value) => {
+                    if (value === 'before' || value === 'after' || value === 'alternate')
+                      onClipboardTargetModeChange(value);
+                  }}
+                >
+                  <SelectTrigger
+                    className="h-8 w-32 flex-none text-[11px]"
+                    aria-labelledby="diff-clipboard-target-label"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(['alternate', 'before', 'after'] as const).map((key) => (
+                      <SelectItem key={key} value={key}>
+                        {t(`diffTool.targets.${key}`)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex h-8 flex-none items-center gap-2 text-[11px] text-muted-foreground">
+                <span id="diff-highlight-mode-label">{t('diffTool.highlightMode')}</span>
+                <Select
+                  value={mode}
+                  items={highlightModes.map((key) => ({
+                    value: key,
+                    label: t(`diffTool.modes.${key}`),
+                  }))}
+                  onValueChange={(value) => {
+                    if (value !== null) onHighlightModeChange(normalizeHighlightMode(value));
+                  }}
+                >
+                  <SelectTrigger
+                    className="h-8 w-32 flex-none text-[11px]"
+                    aria-labelledby="diff-highlight-mode-label"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {highlightModes.map((key) => (
+                      <SelectItem key={key} value={key}>
+                        {t(`diffTool.modes.${key}`)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Label className="flex h-8 flex-none items-center gap-2 border border-transparent bg-transparent py-0 pr-1.5 pl-3 text-[11px] text-muted-foreground">
+                <span>{t('diffTool.collapseUnchanged')}</span>
+                <Switch
+                  checked={collapseUnchanged}
+                  onCheckedChange={() => setCollapseUnchanged((value) => !value)}
+                  size="sm"
+                />
+              </Label>
+            </>
+          }
+        />
+        <ToolLayoutContent>
+          <div className="diff-tool-content grid h-full min-h-0 min-w-0 grid-rows-[minmax(0,1fr)] overflow-hidden rounded-lg border border-border bg-card shadow-none">
+            <DiffMerge
+              before={before}
+              after={after}
+              theme={theme}
+              mode={mode}
+              languageExtensions={languageExtensions}
+              collapseUnchanged={collapseUnchanged}
+              lastFilled={lastFilled}
+              fillLabel={lastFilled ? t(`diffTool.filled.${lastFilled}`) : ''}
+              aLabel={t('diffTool.before')}
+              bLabel={t('diffTool.after')}
+              active={active}
+              onBeforeChange={setBefore}
+              onAfterChange={setAfter}
+              onCountsChange={setCounts}
+            />
+          </div>
+        </ToolLayoutContent>
+        <ToolLayoutFooter>
           <ToolActionBar
             label={t('diffTool.actions')}
             actions={[
@@ -591,26 +659,7 @@ export default function DiffTool({
               },
             ]}
           />
-        }
-      >
-        <div className="diff-tool-content grid h-full min-h-0 min-w-0 grid-rows-[minmax(0,1fr)] overflow-hidden rounded-lg border border-border bg-card shadow-none">
-          <DiffMerge
-            before={before}
-            after={after}
-            theme={theme}
-            mode={mode}
-            languageExtensions={languageExtensions}
-            collapseUnchanged={collapseUnchanged}
-            lastFilled={lastFilled}
-            fillLabel={lastFilled ? t(`diffTool.filled.${lastFilled}`) : ''}
-            aLabel={t('diffTool.before')}
-            bLabel={t('diffTool.after')}
-            active={active}
-            onBeforeChange={setBefore}
-            onAfterChange={setAfter}
-            onCountsChange={setCounts}
-          />
-        </div>
+        </ToolLayoutFooter>
       </ToolLayout>
     </Reveal>
   );

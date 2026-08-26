@@ -8,6 +8,9 @@ import { quietEditorTheme } from './codeMirrorTheme';
 import {
   Reveal,
   ToolActionBar,
+  ToolLayoutContent,
+  ToolLayoutFooter,
+  ToolLayoutHeader,
   ToolLayout,
   useFocusOnActivate,
   type PendingAction,
@@ -128,11 +131,108 @@ export default function UrlTool({
   }, [pending, parts]);
   return (
     <Reveal index={0} fill active={active}>
-      <ToolLayout
-        title={t('urlTool.title')}
-        desc={t('urlTool.subtitle')}
-        contentMode="fixed"
-        footer={
+      <ToolLayout>
+        <ToolLayoutHeader title={t('urlTool.title')} desc={t('urlTool.subtitle')} />
+        <ToolLayoutContent>
+          <div className="grid h-full min-h-0 grid-cols-2 gap-3">
+            <div className="flex min-h-0 min-w-0 flex-col gap-2 font-mono text-[10px] font-medium uppercase tracking-[.04em] text-muted-foreground">
+              <span>{t('urlTool.input')}</span>
+              <CodeMirror
+                className="min-h-0 flex-1 overflow-hidden rounded-lg border border-border bg-card focus-within:border-muted-foreground [&_.cm-editor]:h-full [&_.cm-editor]:[font:var(--code-editor-font-size)/1.65_var(--font-mono)] [&_.cm-editor.cm-focused]:outline-none [&_.cm-scroller]:overflow-auto"
+                height="100%"
+                value={input}
+                onChange={setInput}
+                onCreateEditor={(view) => {
+                  view.contentDOM.setAttribute('aria-label', t('urlTool.input'));
+                  inputView.current = view;
+                }}
+                theme={quietEditorTheme}
+                extensions={[EditorView.lineWrapping]}
+                basicSetup={{
+                  lineNumbers: false,
+                  foldGutter: false,
+                  highlightActiveLine: false,
+                  highlightActiveLineGutter: false,
+                  autocompletion: false,
+                  closeBrackets: false,
+                }}
+              />
+            </div>
+            <div
+              className={`min-h-0 overflow-auto border-y border-border ${invalid ? 'border-destructive' : ''}`}
+            >
+              {parts ? (
+                <>
+                  <UrlPart
+                    label={t('urlTool.base')}
+                    value={parts.base}
+                    id="base"
+                    onCopy={copyValue}
+                  />
+                  <UrlPart
+                    label={t('urlTool.path')}
+                    value={parts.path}
+                    id="path"
+                    onCopy={copyValue}
+                  />
+                  <UrlPart
+                    label={t('urlTool.hash')}
+                    value={parts.hash}
+                    id="hash"
+                    onCopy={copyValue}
+                  />
+                  <div className="grid grid-cols-[104px_minmax(0,1fr)_30px] items-start gap-3 border-b border-border px-0.5 py-[13px]">
+                    <span className="pt-[7px] font-mono text-[10px] leading-[1.35] font-medium uppercase tracking-[.04em] text-muted-foreground">
+                      {t('urlTool.params')}
+                    </span>
+                    <div className="min-w-0 overflow-hidden rounded-lg border border-border bg-border">
+                      {parts.params.length ? (
+                        parts.params.map(([key, value], index = 0) => (
+                          <div
+                            key={`${key}-${index}`}
+                            className="grid grid-cols-2 gap-px border-b border-border last:border-b-0"
+                          >
+                            <code className="min-w-0 overflow-wrap-anywhere bg-card px-2 py-[7px] font-mono text-xs leading-5 text-foreground">
+                              {key}
+                            </code>
+                            <code className="min-w-0 overflow-wrap-anywhere bg-card px-2 py-[7px] font-mono text-xs leading-5 text-foreground">
+                              {value}
+                            </code>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="bg-card px-2 py-[7px] text-xs normal-case">
+                          {t('urlTool.noParams')}
+                        </div>
+                      )}
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="flex-none"
+                      aria-label={t('urlTool.copy')}
+                      onClick={() =>
+                        void copyValue('params', urlParamsJson(parts.params), t('urlTool.params'))
+                      }
+                    >
+                      <Copy size={14} weight="duotone" />
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <div className="flex h-full min-h-[160px] flex-col items-center justify-center gap-2 px-4 text-center text-muted-foreground">
+                  <strong className="text-xs text-foreground">
+                    {invalid ? t('urlTool.invalid') : t('urlTool.empty')}
+                  </strong>
+                  <span className="max-w-[270px] text-[11px] leading-5">
+                    {invalid ? t('urlTool.invalidHint') : t('urlTool.emptyHint')}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+        </ToolLayoutContent>
+        <ToolLayoutFooter>
           <ToolActionBar
             label={t('urlTool.actions')}
             actions={[
@@ -154,105 +254,7 @@ export default function UrlTool({
               },
             ]}
           />
-        }
-      >
-        <div className="grid h-full min-h-0 grid-cols-2 gap-3">
-          <div className="flex min-h-0 min-w-0 flex-col gap-2 font-mono text-[10px] font-medium uppercase tracking-[.04em] text-muted-foreground">
-            <span>{t('urlTool.input')}</span>
-            <CodeMirror
-              className="min-h-0 flex-1 overflow-hidden rounded-lg border border-border bg-card focus-within:border-muted-foreground [&_.cm-editor]:h-full [&_.cm-editor]:[font:var(--code-editor-font-size)/1.65_var(--font-mono)] [&_.cm-editor.cm-focused]:outline-none [&_.cm-scroller]:overflow-auto"
-              height="100%"
-              value={input}
-              onChange={setInput}
-              onCreateEditor={(view) => {
-                view.contentDOM.setAttribute('aria-label', t('urlTool.input'));
-                inputView.current = view;
-              }}
-              theme={quietEditorTheme}
-              extensions={[EditorView.lineWrapping]}
-              basicSetup={{
-                lineNumbers: false,
-                foldGutter: false,
-                highlightActiveLine: false,
-                highlightActiveLineGutter: false,
-                autocompletion: false,
-                closeBrackets: false,
-              }}
-            />
-          </div>
-          <div
-            className={`min-h-0 overflow-auto border-y border-border ${invalid ? 'border-destructive' : ''}`}
-          >
-            {parts ? (
-              <>
-                <UrlPart
-                  label={t('urlTool.base')}
-                  value={parts.base}
-                  id="base"
-                  onCopy={copyValue}
-                />
-                <UrlPart
-                  label={t('urlTool.path')}
-                  value={parts.path}
-                  id="path"
-                  onCopy={copyValue}
-                />
-                <UrlPart
-                  label={t('urlTool.hash')}
-                  value={parts.hash}
-                  id="hash"
-                  onCopy={copyValue}
-                />
-                <div className="grid grid-cols-[104px_minmax(0,1fr)_30px] items-start gap-3 border-b border-border px-0.5 py-[13px]">
-                  <span className="pt-[7px] font-mono text-[10px] leading-[1.35] font-medium uppercase tracking-[.04em] text-muted-foreground">
-                    {t('urlTool.params')}
-                  </span>
-                  <div className="min-w-0 overflow-hidden rounded-lg border border-border bg-border">
-                    {parts.params.length ? (
-                      parts.params.map(([key, value], index = 0) => (
-                        <div
-                          key={`${key}-${index}`}
-                          className="grid grid-cols-2 gap-px border-b border-border last:border-b-0"
-                        >
-                          <code className="min-w-0 overflow-wrap-anywhere bg-card px-2 py-[7px] font-mono text-xs leading-5 text-foreground">
-                            {key}
-                          </code>
-                          <code className="min-w-0 overflow-wrap-anywhere bg-card px-2 py-[7px] font-mono text-xs leading-5 text-foreground">
-                            {value}
-                          </code>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="bg-card px-2 py-[7px] text-xs normal-case">
-                        {t('urlTool.noParams')}
-                      </div>
-                    )}
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="flex-none"
-                    aria-label={t('urlTool.copy')}
-                    onClick={() =>
-                      void copyValue('params', urlParamsJson(parts.params), t('urlTool.params'))
-                    }
-                  >
-                    <Copy size={14} weight="duotone" />
-                  </Button>
-                </div>
-              </>
-            ) : (
-              <div className="flex h-full min-h-[160px] flex-col items-center justify-center gap-2 px-4 text-center text-muted-foreground">
-                <strong className="text-xs text-foreground">
-                  {invalid ? t('urlTool.invalid') : t('urlTool.empty')}
-                </strong>
-                <span className="max-w-[270px] text-[11px] leading-5">
-                  {invalid ? t('urlTool.invalidHint') : t('urlTool.emptyHint')}
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
+        </ToolLayoutFooter>
       </ToolLayout>
     </Reveal>
   );

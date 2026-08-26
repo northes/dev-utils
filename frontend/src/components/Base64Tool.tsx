@@ -17,6 +17,9 @@ import { SaveBase64File } from '../../bindings/changeme/configservice';
 import {
   Reveal,
   ToolActionBar,
+  ToolLayoutContent,
+  ToolLayoutFooter,
+  ToolLayoutHeader,
   ToolLayout,
   useFocusOnActivate,
   decodeBase64,
@@ -442,12 +445,15 @@ export default function Base64Tool({
     ) : null;
   return (
     <Reveal index={0} fill active={active}>
-      <ToolLayout
-        title={t('base64Tool.title')}
-        desc={t('base64Tool.subtitle')}
-        contentClassName="grid grid-rows-[minmax(0,1fr)_auto] gap-3"
-        contentMode="fixed"
-        footer={
+      <ToolLayout>
+        <ToolLayoutHeader title={t('base64Tool.title')} desc={t('base64Tool.subtitle')} />
+        <ToolLayoutContent className="grid grid-rows-[minmax(0,1fr)_auto] gap-3">
+          <div className="grid h-full min-h-0 grid-cols-2 gap-3.5">
+            {inputPane}
+            {resultPane}
+          </div>
+        </ToolLayoutContent>
+        <ToolLayoutFooter>
           <ToolActionBar
             label={t('base64Tool.actions')}
             actions={[
@@ -469,12 +475,7 @@ export default function Base64Tool({
               },
             ]}
           />
-        }
-      >
-        <div className="grid h-full min-h-0 grid-cols-2 gap-3.5">
-          {inputPane}
-          {resultPane}
-        </div>
+        </ToolLayoutFooter>
       </ToolLayout>
     </Reveal>
   );
