@@ -123,7 +123,7 @@ full build.
 
 Typecheck per file, build per batch, full build at the end vs the baseline.
 
-Reports live in a `.migration/` directory at the project root, ONE FILE PER
+Reports live in a `../../../.migration` directory at the project root, ONE FILE PER
 COMPONENT: `.migration/<component>.md` (e.g. `.migration/accordion.md`).
 Rules:
 - Each run writes (or fully overwrites) the file for each component it

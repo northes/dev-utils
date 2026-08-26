@@ -139,7 +139,7 @@ git push origin v0.1.0
 
 - 提交前请在 `frontend/` 内通过 `npx tsc --noEmit` 类型检查;
 - 保持既有代码风格(紧凑单行风格,详见 `AGENTS.md`);
-- 新增工具请遵循「新增工具接线清单」(`AGENTS.md`),确保命令面板、历史记录、托盘匹配三处接线一致;
+- 新增工具请遵循 `.agents/skills/tool-development/SKILL.md`,确保命令面板、历史记录、托盘匹配三处接线一致;
 - 用户可见文案走 locale 文件,不硬编码。
 
 ## 许可证

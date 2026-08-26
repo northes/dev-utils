@@ -185,7 +185,7 @@ DevUtils 采用 Operate 模式：它是一台长期使用的本地调试仪器�
 ### Overlays
 
 - 命令面板、Popover、Select 和 AlertDialog 使用实体 overlay 表面、边界与结构性阴影；禁止透明玻璃。
-- 浮层保留 Radix（shadcn/ui）的焦点、键盘和语义行为，项目样式只调整视觉消费层。
+- 浮层保留 shadcn/Base UI wrapper 的焦点、键盘和语义行为，项目样式只调整视觉消费层。
 
 ## Do's and Don'ts
 

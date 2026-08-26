@@ -6,7 +6,7 @@ bubbles, scroll containers, dividers, or attachment cards.
 Install: `npx shadcn@latest add message-scroller message bubble attachment marker`
 
 The same component names and props ship for both `base` and `radix`; only
-composition differs (`render` vs `asChild`). See [base-vs-radix.md](./base-vs-radix.md).
+composition differs (`render` vs `asChild`). See [base-vs-radix.md](base-vs-radix.md).
 
 ## Contents
 
@@ -211,7 +211,7 @@ write a `useStickToBottom` hook, a `ResizeObserver`, or manual `scrollTop` math.
 
 For a "thinking…" indicator while the model generates, apply the `shimmer`
 utility to text. Don't author a custom keyframe animation. See
-[styling.md](./styling.md).
+[styling.md](styling.md).
 
 ---
 

@@ -56,7 +56,7 @@ This applies to all group-based components:
 | `Bubble` (stacked) | `BubbleGroup` |
 | `Attachment` (in a row) | `AttachmentGroup` |
 
-Chat components nest in a fixed order (`MessageScrollerProvider` → `MessageScroller` → `MessageScrollerViewport` → `MessageScrollerContent` → `MessageScrollerItem`). See [chat.md](./chat.md).
+Chat components nest in a fixed order (`MessageScrollerProvider` → `MessageScroller` → `MessageScrollerViewport` → `MessageScrollerContent` → `MessageScrollerItem`). See [chat.md](chat.md).
 
 ---
 
