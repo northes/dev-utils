@@ -158,7 +158,7 @@ export default function TextTool({
   return (
     <Reveal index={0} fill active={active}>
       <ToolLayout>
-        <ToolLayoutHeader title={t('textTool.title')} desc={t('textTool.subtitle')} />
+        <ToolLayoutHeader title={t('textTool.title')} />
         <ToolLayoutContent className="grid grid-rows-[minmax(0,1fr)_auto] gap-3">
           <div className="flex min-h-0 min-w-0 flex-col gap-2 font-mono text-[10px] font-medium uppercase tracking-[.04em] text-muted-foreground">
             <span>{t('textTool.input')}</span>

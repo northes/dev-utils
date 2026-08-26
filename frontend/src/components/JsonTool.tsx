@@ -10,6 +10,7 @@ import {
   AlertDialogTitle,
 } from './ui/alert-dialog';
 import { Button } from './ui/button';
+import { Checkbox } from './ui/checkbox';
 import { Label } from './ui/label';
 import { Switch } from './ui/switch';
 import { useTranslation } from 'react-i18next';
@@ -27,7 +28,6 @@ import {
   hasComments,
   parseJsonLoose,
   Reveal,
-  samples,
   ToolActionBar,
   ToolLayoutContent,
   ToolLayoutFooter,
@@ -467,8 +467,6 @@ export default function JsonTool({
     else runTransform(pane, minify, false);
   };
   const changeInput = (value: string) => setInput(value);
-  const applyFill = (value: string) =>
-    setInput(autoFormatRef.current ? tryAutoFormat(value) : value);
   const toggleSchema = () => {
     setSchema((v) => {
       const next = !v;
@@ -592,14 +590,6 @@ export default function JsonTool({
         onPress: () => (pane === 'input' ? changeInput('') : setResult('')),
       },
     ];
-    if (pane === 'input')
-      actions.push({
-        key: 'sample',
-        label: t('jsonTool.loadSample'),
-        variant: 'secondary',
-        disabled: !!value,
-        onPress: () => applyFill(samples.json),
-      });
     actions.push(
       {
         key: 'copy',
@@ -622,13 +612,8 @@ export default function JsonTool({
         key: 'format',
         label: t('jsonTool.format'),
         variant: 'primary',
-        type: 'split',
         disabled: !value,
         onPress: () => requestTransform(pane, false),
-        menuLabel: t('jsonTool.formatOptions'),
-        menuChecked: autoFormatOnFill,
-        menuItemLabel: t('jsonTool.autoFormatOnFill'),
-        onMenuToggle: () => onAutoFormatOnFillChange(!autoFormatOnFill),
       });
     else
       actions.push({
@@ -688,12 +673,12 @@ export default function JsonTool({
     />
   );
   const jsonGridClass = workflowMode
-    ? 'grid-cols-3 grid-rows-[minmax(0,1fr)] gap-3 @max-[959px]/json-page:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_minmax(0,1fr)] @max-[959px]/json-page:grid-rows-1 @min-[960px]/json-page:grid-cols-3 @min-[960px]/json-page:grid-rows-1'
+    ? 'grid-cols-3 grid-rows-[minmax(0,1fr)] gap-3 @max-[959px]/json-page:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)_minmax(0,1fr)] @max-[959px]/json-page:grid-rows-1 @min-[960px]/json-page:grid-cols-3 @min-[960px]/json-page:grid-rows-1'
     : schema
       ? 'grid-cols-2 grid-rows-[minmax(0,1fr)] gap-3 @max-[959px]/json-page:grid-cols-2 @max-[959px]/json-page:grid-rows-1 @min-[960px]/json-page:grid-cols-3 @min-[960px]/json-page:grid-rows-1'
       : 'grid-cols-1 grid-rows-[minmax(0,1fr)] gap-0';
   const footerGridClass = workflowMode
-    ? 'grid-cols-3 @max-[959px]/json-page:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_minmax(0,1fr)] @min-[960px]/json-page:grid-cols-3'
+    ? 'grid-cols-3 @max-[959px]/json-page:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)_minmax(0,1fr)] @min-[960px]/json-page:grid-cols-3'
     : schema
       ? 'grid-cols-[minmax(0,1fr)_minmax(0,1fr)] @max-[959px]/json-page:grid-cols-2 @min-[960px]/json-page:grid-cols-3'
       : 'grid-cols-1';
@@ -818,9 +803,18 @@ export default function JsonTool({
   return (
     <Reveal index={0} fill active={active}>
       <ToolLayout className="json-page [container-name:json-page] [container-type:inline-size]">
-        <ToolLayoutHeader title={t('jsonTool.title')} desc={t('jsonTool.subtitle')} />
+        <ToolLayoutHeader title={t('jsonTool.title')} />
         <ToolLayoutToolbar
           left={
+            <Label className="flex h-8 flex-none items-center gap-2 border border-transparent bg-transparent py-0 pr-1.5 text-[11px] text-muted-foreground">
+              <Checkbox
+                checked={autoFormatOnFill}
+                onCheckedChange={(checked) => onAutoFormatOnFillChange(checked)}
+              />
+              <span>{t('jsonTool.autoFormatOnFill')}</span>
+            </Label>
+          }
+          right={
             <>
               <Label className="flex h-8 flex-none items-center gap-2 border border-transparent bg-transparent py-0 pr-1.5 pl-3 text-[11px] text-muted-foreground">
                 <span>{t('jsonTool.schema')}</span>

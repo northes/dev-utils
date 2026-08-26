@@ -296,15 +296,12 @@ export function Reveal({
   );
 }
 
-export function ToolLayoutHeader({ title, desc }: { title: string; desc?: string }) {
+export function ToolLayoutHeader({ title }: { title: string }) {
   return (
     <header className="row-start-1 mt-[5px] mb-3.5 min-w-0 text-muted-foreground">
       <h1 className="m-0 text-[19px] leading-tight font-semibold tracking-[-.01em] text-foreground">
         {title}
       </h1>
-      {desc ? (
-        <p className="mt-1 mb-0 text-[10px] font-normal text-muted-foreground">{desc}</p>
-      ) : null}
     </header>
   );
 }
@@ -312,7 +309,7 @@ export function ToolLayoutHeader({ title, desc }: { title: string; desc?: string
 export function ToolLayoutToolbar({ left, right }: { left?: ReactNode; right?: ReactNode }) {
   if (!left && !right) return null;
   return (
-    <div className="tool-layout-toolbar row-start-2 mb-3 flex min-w-0 flex-wrap items-end gap-4 border-b border-border px-0.5 pb-3 max-[700px]:flex-col max-[700px]:items-stretch">
+    <div className="tool-layout-toolbar row-start-2 mb-3 flex min-w-0 flex-wrap items-end gap-4 px-0.5 pb-3 max-[700px]:flex-col max-[700px]:items-stretch">
       {left ? <div className="flex min-w-0 flex-wrap items-end gap-4">{left}</div> : null}
       {right ? (
         <div className="ml-auto flex min-w-0 flex-wrap items-end gap-2 max-[700px]:ml-0">

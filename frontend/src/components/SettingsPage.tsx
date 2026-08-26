@@ -265,7 +265,7 @@ export default function SettingsPage({
   return (
     <Reveal index={0} fill>
       <ToolLayout className="settings-page">
-        <ToolLayoutHeader title={t('settings.title')} desc={t('settings.subtitle')} />
+        <ToolLayoutHeader title={t('settings.title')} />
         <ToolLayoutScrollableContent>
           <SettingsGroup
             title={t('settings.appearance')}

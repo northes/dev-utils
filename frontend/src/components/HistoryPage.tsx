@@ -311,7 +311,7 @@ export default function HistoryPage({
   return (
     <Reveal index={0} fill>
       <ToolLayout>
-        <ToolLayoutHeader title={t('history.title')} desc={t('history.subtitle')} />
+        <ToolLayoutHeader title={t('history.title')} />
         <ToolLayoutToolbar
           left={
             <div className="flex min-w-0 flex-wrap items-end gap-4 max-[700px]:w-full">

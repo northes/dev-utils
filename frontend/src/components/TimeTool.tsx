@@ -371,7 +371,7 @@ export default function TimeTool({
   return (
     <Reveal index={0} fill active={active}>
       <ToolLayout>
-        <ToolLayoutHeader title={t('timeTool.title')} desc={t('timeTool.subtitle')} />
+        <ToolLayoutHeader title={t('timeTool.title')} />
         <ToolLayoutContent>
           <div className="grid h-full min-h-0 grid-rows-[auto_auto_auto_minmax(0,1fr)]">
             <Label className="flex flex-col items-stretch gap-2 font-mono text-[10px] font-medium uppercase tracking-[.04em] text-muted-foreground">

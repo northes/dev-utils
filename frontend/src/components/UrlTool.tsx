@@ -132,7 +132,7 @@ export default function UrlTool({
   return (
     <Reveal index={0} fill active={active}>
       <ToolLayout>
-        <ToolLayoutHeader title={t('urlTool.title')} desc={t('urlTool.subtitle')} />
+        <ToolLayoutHeader title={t('urlTool.title')} />
         <ToolLayoutContent>
           <div className="grid h-full min-h-0 grid-cols-2 gap-3">
             <div className="flex min-h-0 min-w-0 flex-col gap-2 font-mono text-[10px] font-medium uppercase tracking-[.04em] text-muted-foreground">

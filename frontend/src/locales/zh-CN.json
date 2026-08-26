@@ -92,7 +92,6 @@
     "resultActions": "JSON 结果操作",
     "placeholder": "粘贴 JSON 或直接输入…",
     "format": "格式化",
-    "formatOptions": "格式化选项",
     "autoFormatOnFill": "填入后自动格式化",
     "minify": "压缩",
     "copy": "复制",
@@ -198,7 +197,6 @@
     "subtitle": "格式化、压缩、校验与路径提取",
     "detected": "JSON 状态",
     "valid": "有效 JSON",
-    "loadSample": "载入示例",
     "errors": {
       "unclosedComment": "注释未闭合",
       "unclosedString": "字符串未闭合",
@@ -319,6 +317,7 @@
   },
   "diffTool": {
     "title": "差异对比",
+    "subtitle": "比较两段文本并定位变化",
     "actions": "差异对比操作",
     "clear": "清空",
     "swap": "交换内容",
