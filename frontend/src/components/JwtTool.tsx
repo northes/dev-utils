@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Copy, Trash } from '@phosphor-icons/react';
 import { useTranslation } from 'react-i18next';
 import CodeMirror from '@uiw/react-codemirror';
-import { EditorView } from '@codemirror/view';
+import { RangeSetBuilder, StateField, type Extension, type Text } from '@codemirror/state';
+import { Decoration, EditorView, type DecorationSet } from '@codemirror/view';
 import { json } from '@codemirror/lang-json';
 import { quietEditorTheme } from './codeMirrorTheme';
 import {
@@ -12,7 +13,7 @@ import {
   ToolLayoutFooter,
   ToolLayoutHeader,
   ToolLayout,
-  decodeBase64,
+  decodeBase64Text,
   useFocusOnActivate,
   type PendingAction,
   type ToolId,
@@ -20,8 +21,50 @@ import {
 import { toast } from './ui/toast';
 
 type Decoded = { header: string; payload: string; signature: string };
+const jsonSyntax = json();
+const jwtSegmentMarks = [
+  Decoration.mark({ class: 'cm-jwt-header' }),
+  Decoration.mark({ class: 'cm-jwt-payload' }),
+  Decoration.mark({ class: 'cm-jwt-signature' }),
+];
+function jwtSegmentDecorations(doc: Text) {
+  const builder = new RangeSetBuilder<Decoration>();
+  const text = doc.toString();
+  let segmentStart = 0;
+  let segment = 0;
+  for (let position = 0; position <= text.length; position++) {
+    if (position < text.length && text[position] !== '.') continue;
+    if (segment < jwtSegmentMarks.length && segmentStart < position)
+      builder.add(segmentStart, position, jwtSegmentMarks[segment]);
+    if (position === text.length) break;
+    segmentStart = position + 1;
+    segment++;
+  }
+  return builder.finish();
+}
+const jwtSegmentHighlight = StateField.define<DecorationSet>({
+  create(state) {
+    return jwtSegmentDecorations(state.doc);
+  },
+  update(decorations, transaction) {
+    return transaction.docChanged ? jwtSegmentDecorations(transaction.state.doc) : decorations;
+  },
+  provide: (field) => EditorView.decorations.from(field),
+});
+const jwtEditorTheme = EditorView.theme({
+  '&': { fontSize: 'var(--code-editor-font-size)' },
+  '.cm-scroller': {
+    fontFamily: 'var(--font-mono)',
+    fontSize: 'var(--code-editor-font-size)',
+    lineHeight: '1.6',
+  },
+  '.cm-content': { fontSize: 'inherit', lineHeight: 'inherit' },
+  '.cm-jwt-header': { color: 'var(--destructive)' },
+  '.cm-jwt-payload': { color: 'var(--success)' },
+  '.cm-jwt-signature': { color: 'var(--warning)' },
+});
 function decodeSegment(segment: string): string | null {
-  const decoded = decodeBase64(segment);
+  const decoded = decodeBase64Text(segment);
   if (decoded === null) return null;
   try {
     return JSON.stringify(JSON.parse(decoded), null, 2);
@@ -43,19 +86,23 @@ function JwtPane({
   value,
   onChange,
   onCreate,
+  extensions,
+  syntax,
   readOnly = false,
 }: {
   label: string;
   value: string;
   onChange?: (value: string) => void;
   onCreate?: (view: EditorView) => void;
+  extensions?: Extension[];
+  syntax?: Extension;
   readOnly?: boolean;
 }) {
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col gap-2 font-mono text-[10px] font-medium uppercase tracking-[.04em] text-muted-foreground">
       <span>{label}</span>
       <CodeMirror
-        className="min-h-0 min-w-0 flex-1 overflow-hidden rounded-lg border border-border bg-card focus-within:border-muted-foreground [&_.cm-editor]:h-full [&_.cm-editor]:[font:var(--code-editor-font-size)/1.6_var(--font-mono)] [&_.cm-editor.cm-focused]:outline-none [&_.cm-scroller]:overflow-auto"
+        className="min-h-0 min-w-0 flex-1 overflow-hidden rounded-lg border border-border bg-card focus-within:border-muted-foreground [&_.cm-editor]:h-full [&_.cm-editor.cm-focused]:outline-none [&_.cm-scroller]:overflow-auto"
         height="100%"
         value={value}
         onChange={onChange}
@@ -66,7 +113,7 @@ function JwtPane({
         theme={quietEditorTheme}
         editable={!readOnly}
         readOnly={readOnly}
-        extensions={[json(), EditorView.lineWrapping]}
+        extensions={[...(syntax ? [syntax] : []), EditorView.lineWrapping, ...(extensions ?? [])]}
         basicSetup={{
           lineNumbers: false,
           foldGutter: false,
@@ -86,7 +133,6 @@ export default function JwtTool({
   clearPending,
 }: {
   active: boolean;
-  theme: string;
   record: (tool: ToolId, action: string, detail: string, input: string, output?: string) => void;
   pending: PendingAction | null;
   clearPending: () => void;
@@ -182,14 +228,32 @@ export default function JwtTool({
               label={t('jwtTool.input')}
               value={input}
               onChange={setInput}
+              extensions={[jwtEditorTheme, jwtSegmentHighlight]}
               onCreate={(view) => {
                 inputView.current = view;
               }}
             />
             <div className="grid min-h-0 min-w-0 grid-rows-3 gap-3">
-              <JwtPane label={t('jwtTool.header')} value={decoded?.header ?? ''} readOnly />
-              <JwtPane label={t('jwtTool.payload')} value={decoded?.payload ?? ''} readOnly />
-              <JwtPane label={t('jwtTool.signature')} value={decoded?.signature ?? ''} readOnly />
+              <JwtPane
+                label={t('jwtTool.header')}
+                value={decoded?.header ?? ''}
+                extensions={[jwtEditorTheme]}
+                syntax={jsonSyntax}
+                readOnly
+              />
+              <JwtPane
+                label={t('jwtTool.payload')}
+                value={decoded?.payload ?? ''}
+                extensions={[jwtEditorTheme]}
+                syntax={jsonSyntax}
+                readOnly
+              />
+              <JwtPane
+                label={t('jwtTool.signature')}
+                value={decoded?.signature ?? ''}
+                extensions={[jwtEditorTheme]}
+                readOnly
+              />
             </div>
           </div>
         </ToolLayoutContent>

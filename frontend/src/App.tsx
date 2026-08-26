@@ -795,7 +795,7 @@ function detectJwt(s: string): boolean {
   const parts = s.trim().split('.');
   if (parts.length !== 3) return false;
   const object = (seg: string) => {
-    const d = decodeBase64(seg);
+    const d = decodeBase64Text(seg);
     if (d === null) return false;
     try {
       const v = JSON.parse(d);
@@ -1413,7 +1413,6 @@ function AppShell() {
                 <Suspense fallback={null}>
                   <JwtTool
                     active={page === 'jwt'}
-                    theme={theme}
                     record={record}
                     pending={pending}
                     clearPending={() => setPending(null)}
