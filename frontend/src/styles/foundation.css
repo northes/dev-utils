@@ -1,5 +1,6 @@
 :root {
   --code-editor-font-size: 12px;
+  --overlay-scrollbar-hit-size: 12px;
   font-synthesis: none;
   -webkit-font-smoothing: antialiased;
 }

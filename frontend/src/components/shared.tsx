@@ -345,7 +345,7 @@ export function ToolLayoutScrollableContent({
 }) {
   return (
     <div
-      className={`tool-layout-content row-start-3 h-full min-h-0 min-w-0 overflow-x-hidden overflow-y-auto ${className}`}
+      className={`tool-layout-content row-start-3 h-full min-h-0 min-w-0 overflow-x-hidden overflow-y-auto [padding-inline-end:var(--overlay-scrollbar-hit-size)] ${className}`}
     >
       {children}
     </div>

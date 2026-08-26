@@ -45,9 +45,14 @@ function idOf(el: Element) {
   return id;
 }
 
-const hit = 12,
-  gap = 3,
+const gap = 3,
   min = 24;
+function scrollbarHitSize() {
+  const value = Number.parseFloat(
+    getComputedStyle(document.documentElement).getPropertyValue('--overlay-scrollbar-hit-size'),
+  );
+  return Number.isFinite(value) && value > 0 ? value : 0;
+}
 function axesFor(el: HTMLElement): Axes {
   if (
     !el.isConnected ||
@@ -114,7 +119,7 @@ function visibleInLayers(el: HTMLElement, layers: Layers) {
   if (owner) return owner === layers.floating;
   return sourceLevel(el) < layers.floatingLevel;
 }
-function layout(el: HTMLElement, layers: Layers): Pane | null {
+function layout(el: HTMLElement, layers: Layers, hit: number): Pane | null {
   const axes = axesFor(el),
     r = el.getBoundingClientRect(),
     s = getComputedStyle(el);
@@ -200,9 +205,10 @@ export default function OverlayScrollbar() {
     window.cancelAnimationFrame(rafRef.current);
     rafRef.current = window.requestAnimationFrame(() => {
       const next: Pane[] = [],
-        layers = currentLayers();
+        layers = currentLayers(),
+        hit = scrollbarHitSize();
       for (const el of entriesRef.current.keys()) {
-        const pane = layout(el, layers);
+        const pane = layout(el, layers, hit);
         if (pane) next.push(pane);
       }
       setPanes(next);
@@ -242,7 +248,8 @@ export default function OverlayScrollbar() {
     const drag = dragRef.current;
     if (!drag || event.pointerId !== drag.pointerId || !(event.buttons & 1)) return;
     const axes = axesFor(drag.el),
-      r = drag.el.getBoundingClientRect();
+      r = drag.el.getBoundingClientRect(),
+      hit = scrollbarHitSize();
     const y = axes.y && drag.el.scrollHeight > drag.el.clientHeight + 1,
       x = axes.x && drag.el.scrollWidth > drag.el.clientWidth + 1;
     if (drag.axis === 'y') {
