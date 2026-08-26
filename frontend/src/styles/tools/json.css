@@ -35,7 +35,7 @@
   height: 30px;
   overflow: hidden;
   border-radius: inherit;
-  font: 12px/1.4 var(--font-mono);
+  font: var(--code-editor-font-size)/1.4 var(--font-mono);
 }
 .json-workflow-path-cm .cm-scroller {
   border-radius: inherit;

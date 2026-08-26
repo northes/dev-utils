@@ -161,7 +161,7 @@
   border-bottom: 1px solid var(--border);
   background: var(--muted);
   color: var(--muted-foreground);
-  font: 10px/1 var(--font-mono);
+  font: calc(var(--code-editor-font-size) - 2px)/1 var(--font-mono);
   cursor: pointer;
   user-select: none;
 }
