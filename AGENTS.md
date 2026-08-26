@@ -7,7 +7,7 @@
 
 ## 语言与国际化
 
-- 始终使用简体中文与用户沟通；代码注释、报告、评审意见和 commit 说明也使用中文，除非用户明确要求其他语言。
+- 始终使用简体中文与用户沟通；代码注释、报告和评审意见使用中文；Git commit subject/body 必须使用英文，并遵循 `.agents/skills/git-commit-guidance/SKILL.md`。
 - 应用默认语言和回退语言为 `zh-CN`。前端用户可见文案必须通过 i18n 资源提供；原生 Go 托盘文案遵循 `.agents/skills/i18n-guidance/SKILL.md`。
 
 ## 强制 Skill 路由
@@ -20,6 +20,7 @@
 - UI 文案、locale 或语言设置：`.agents/skills/i18n-guidance/SKILL.md`
 - shadcn/Base UI 组件安装、更新、组合或样式：`.agents/skills/shadcn/SKILL.md`
 - 实现完成后的命令验证：`.agents/skills/project-validation/SKILL.md`
+- Git 提交、提交拆分、提交信息和提交前检查：`.agents/skills/git-commit-guidance/SKILL.md`
 - 明确进行 Radix 到 Base UI 迁移时使用 `.agents/skills/migrate-radix-to-base/SKILL.md`。
 
 ## 全局不变量
