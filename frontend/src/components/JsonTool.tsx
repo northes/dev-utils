@@ -60,6 +60,7 @@ import {
   newWorkflowItem,
   parseWorkflowConfig,
   serializeWorkflow,
+  WorkflowOutputPane,
   WorkflowPanel,
 } from './JsonWorkflow';
 import type { WorkflowItem } from './JsonWorkflowEngine';
@@ -846,14 +847,14 @@ export default function JsonTool({
   const jsonGridClass = convertMode
     ? 'grid-cols-2 grid-rows-[minmax(0,1fr)] gap-3 @max-[959px]/json-page:grid-cols-1 @max-[959px]/json-page:grid-rows-[minmax(0,1fr)_minmax(0,1fr)] @min-[960px]/json-page:grid-cols-2 @min-[960px]/json-page:grid-rows-[minmax(0,1fr)]'
     : workflowMode
-      ? 'grid-cols-3 grid-rows-[minmax(0,1fr)] gap-3 @max-[959px]/json-page:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)_minmax(0,1fr)] @max-[959px]/json-page:grid-rows-1 @min-[960px]/json-page:grid-cols-3 @min-[960px]/json-page:grid-rows-1'
+      ? 'grid-cols-2 grid-rows-[minmax(0,1fr)] gap-3'
       : schema
         ? 'grid-cols-2 grid-rows-[minmax(0,1fr)] gap-3 @max-[959px]/json-page:grid-cols-2 @max-[959px]/json-page:grid-rows-1 @min-[960px]/json-page:grid-cols-3 @min-[960px]/json-page:grid-rows-1'
         : 'grid-cols-1 grid-rows-[minmax(0,1fr)] gap-0';
   const footerGridClass = convertMode
     ? 'grid-cols-1'
     : workflowMode
-      ? 'grid-cols-3 @max-[959px]/json-page:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)_minmax(0,1fr)] @min-[960px]/json-page:grid-cols-3'
+      ? 'grid-cols-2'
       : schema
         ? 'grid-cols-[minmax(0,1fr)_minmax(0,1fr)] @max-[959px]/json-page:grid-cols-2 @min-[960px]/json-page:grid-cols-3'
         : 'grid-cols-1';
@@ -1054,23 +1055,45 @@ export default function JsonTool({
             <div
               className={`json-schema-layout relative grid h-full min-h-0 min-w-0 ${jsonGridClass}${workflowMode ? ' workflow-layout' : ''}`}
             >
-              <JsonEditorPane
-                label={t('jsonTool.input')}
-                value={input}
-                onChange={changeInput}
-                foldExt={foldExt}
-                onCreate={(v) => views.current.set('input', v)}
-                theme={cmTheme}
-                placeholder={t('jsonTool.placeholder')}
-                cmClassName="json-input-cm"
-                formatOnPaste={autoFormatOnFill ? tryAutoFormat : undefined}
-                tableMode={inputTableMode}
-                active={active}
-                tableDisabled={!input.trim() || !inputPreview.valid}
-                tableHint={t('jsonTool.tablePreviewInvalid')}
-                onToggleTable={() => setInputTableMode((current) => !current)}
-                tablePreview={<JsonTablePreview value={inputPreview.value} t={t} />}
-              />
+              <div
+                className={
+                  workflowMode
+                    ? 'json-workflow-source grid h-full min-h-0 min-w-0 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-3 overflow-hidden'
+                    : 'contents'
+                }
+              >
+                <JsonEditorPane
+                  label={t('jsonTool.input')}
+                  value={input}
+                  onChange={changeInput}
+                  foldExt={foldExt}
+                  onCreate={(v) => views.current.set('input', v)}
+                  theme={cmTheme}
+                  placeholder={t('jsonTool.placeholder')}
+                  cmClassName="json-input-cm"
+                  formatOnPaste={autoFormatOnFill ? tryAutoFormat : undefined}
+                  tableMode={inputTableMode}
+                  active={active}
+                  tableDisabled={!input.trim() || !inputPreview.valid}
+                  tableHint={t('jsonTool.tablePreviewInvalid')}
+                  onToggleTable={() => setInputTableMode((current) => !current)}
+                  tablePreview={<JsonTablePreview value={inputPreview.value} t={t} />}
+                />
+                <div
+                  className={`json-workflow-output-slot min-h-0 min-w-0${
+                    workflowMode ? ' h-full' : modeHostHidden(false)
+                  }`}
+                  aria-hidden={!workflowMode}
+                  {...(!workflowMode ? { inert: true } : {})}
+                >
+                  <WorkflowOutputPane
+                    output={workflow.output}
+                    error={workflow.error}
+                    theme={cmTheme}
+                    foldExt={foldExt}
+                  />
+                </div>
+              </div>
               <div
                 className={`json-convert-pane flex min-h-0 min-w-0 flex-col gap-2${modeHostHidden(convertMode)}`}
                 aria-hidden={!convertMode}
@@ -1127,14 +1150,12 @@ export default function JsonTool({
               </div>
               <div
                 className={
-                  workflowMode
-                    ? 'json-schema-right min-h-0 min-w-0 @max-[959px]/json-page:contents @min-[960px]/json-page:contents'
-                    : schema
-                      ? 'json-schema-right grid min-h-0 min-w-0 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-3 @max-[959px]/json-page:grid @min-[960px]/json-page:contents'
-                      : `json-schema-right min-h-0 min-w-0${modeHostHidden(false)}`
+                  schema
+                    ? 'json-schema-right grid min-h-0 min-w-0 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-3 @max-[959px]/json-page:grid @min-[960px]/json-page:contents'
+                    : `json-schema-right min-h-0 min-w-0${modeHostHidden(false)}`
                 }
-                aria-hidden={!schema && !workflowMode}
-                {...(!schema && !workflowMode ? { inert: true } : {})}
+                aria-hidden={!schema}
+                {...(!schema ? { inert: true } : {})}
               >
                 <div
                   className={schema ? 'contents' : modeHostHidden(false).trim()}
@@ -1168,7 +1189,7 @@ export default function JsonTool({
                       />
                     </div>
                   </div>
-                  <div className="json-pane flex min-h-0 min-w-0 flex-1 flex-col gap-2">
+                  <div className="json-pane flex h-full min-h-0 min-w-0 flex-1 flex-col gap-2">
                     <span className="json-pane-label flex-none font-mono text-[10px] font-medium leading-none tracking-[.04em] text-muted-foreground uppercase">
                       {t('jsonTool.result')}
                     </span>
@@ -1227,29 +1248,24 @@ export default function JsonTool({
                     </div>
                   </div>
                 </div>
-                <div
-                  className={`json-workflow-slot min-h-0 min-w-0${
-                    workflowMode
-                      ? ' @max-[959px]/json-page:contents @min-[960px]/json-page:contents'
-                      : modeHostHidden(false)
-                  }`}
-                  aria-hidden={!workflowMode}
-                  {...(!workflowMode ? { inert: true } : {})}
-                >
-                  <WorkflowPanel
-                    contexts={workflow.contexts}
-                    rules={workflowRules}
-                    output={workflow.output}
-                    error={workflow.error}
-                    theme={cmTheme}
-                    foldExt={foldExt}
-                    focusItemId={workflowFocusId}
-                    onFocusHandled={() => setWorkflowFocusId(null)}
-                    onChange={setWorkflowRules}
-                    onRemove={removeWorkflowItem}
-                    onMove={moveWorkflowItem}
-                  />
-                </div>
+              </div>
+              <div
+                className={`json-workflow-slot min-h-0 min-w-0${
+                  workflowMode ? ' h-full overflow-hidden' : modeHostHidden(false)
+                }`}
+                aria-hidden={!workflowMode}
+                {...(!workflowMode ? { inert: true } : {})}
+              >
+                <WorkflowPanel
+                  contexts={workflow.contexts}
+                  rules={workflowRules}
+                  theme={cmTheme}
+                  focusItemId={workflowFocusId}
+                  onFocusHandled={() => setWorkflowFocusId(null)}
+                  onChange={setWorkflowRules}
+                  onRemove={removeWorkflowItem}
+                  onMove={moveWorkflowItem}
+                />
               </div>
             </div>
             <div className={`detected hidden${input && !jsonValue ? ' invalid' : ''}`}>
@@ -1272,15 +1288,18 @@ export default function JsonTool({
               convertActions
             ) : (
               <>
-                {editorActions('input')}
+                {mode === 'plain' ? (
+                  editorActions('input')
+                ) : workflowMode ? (
+                  <div className="json-workflow-footer-actions min-w-0">{workflowActions}</div>
+                ) : schema ? (
+                  <div className="min-w-0" aria-hidden="true" />
+                ) : null}
                 {schema && editorActions('result')}
                 {workflowMode && (
                   <div className="json-workflow-rules-footer-actions min-w-0">
                     {workflowRuleActions}
                   </div>
-                )}
-                {workflowMode && (
-                  <div className="json-workflow-footer-actions min-w-0">{workflowActions}</div>
                 )}
               </>
             )}

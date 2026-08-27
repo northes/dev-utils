@@ -444,13 +444,102 @@ function WorkflowRuleRow({
   );
 }
 
-export function WorkflowPanel({
-  rules,
-  contexts,
+export function WorkflowOutputPane({
   output,
   error,
   theme,
   foldExt,
+}: {
+  output: string;
+  error: WorkflowError | null;
+  theme: Extension;
+  foldExt: Extension;
+}) {
+  const { t } = useTranslation();
+  const [outputTableMode, setOutputTableMode] = useState(false);
+  const outputPreview = useMemo(() => {
+    try {
+      return { valid: true, value: parseJsonLoose(output) };
+    } catch {
+      return { valid: false, value: null };
+    }
+  }, [output]);
+  useEffect(() => {
+    if (outputTableMode && (error || !output.trim() || !outputPreview.valid)) {
+      setOutputTableMode(false);
+    }
+  }, [output, outputPreview.valid, outputTableMode, error]);
+  return (
+    <section className="json-workflow-output json-pane flex h-full min-h-0 min-w-0 flex-col gap-2">
+      <span className="json-pane-label flex-none font-mono text-[10px] font-medium leading-none tracking-[.04em] text-muted-foreground uppercase">
+        {t('jsonTool.workflow.output')}
+      </span>
+      <div className="json-workflow-output-field json-pane-editor relative flex min-h-0 min-w-0 flex-1">
+        <Button
+          type="button"
+          variant={outputTableMode ? 'secondary' : 'ghost'}
+          size="icon-sm"
+          className="json-table-toggle absolute top-2 right-2 z-20"
+          aria-label={t('jsonTool.tablePreview')}
+          title={t(outputTableMode ? 'jsonTool.tablePreviewOn' : 'jsonTool.tablePreview')}
+          onClick={() => {
+            if (error || !output.trim() || !outputPreview.valid) {
+              toast.add({ title: t('jsonTool.tablePreviewNotJson'), type: 'warning' });
+              return;
+            }
+            setOutputTableMode((current) => !current);
+          }}
+        >
+          <TableIcon />
+        </Button>
+        {error ? (
+          <JsonErrorPanel
+            title={t('jsonTool.workflow.errorTitle')}
+            description={t(`jsonTool.workflow.errors.${error.code}`)}
+            item={
+              error.item !== undefined
+                ? t('jsonTool.workflow.errorItem', {
+                    item: String(error.item + 1).padStart(2, '0'),
+                  })
+                : undefined
+            }
+            path={
+              error.path
+                ? { label: t('jsonTool.workflow.errorPath'), value: error.path }
+                : undefined
+            }
+          />
+        ) : (
+          <CodeMirror
+            className="json-cm json-workflow-cm"
+            height="100%"
+            value={output}
+            editable={false}
+            theme={theme}
+            extensions={[json5(), foldExt]}
+            onCreateEditor={(view) =>
+              view.contentDOM.setAttribute('aria-label', t('jsonTool.workflow.output'))
+            }
+          />
+        )}
+        {!error && (
+          <div
+            className={`json-table-layer${outputTableMode ? ' is-visible' : ''}`}
+            aria-hidden={!outputTableMode}
+            {...(!outputTableMode ? { inert: true } : {})}
+          >
+            <JsonTablePreview value={outputPreview.value} t={t} />
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+export function WorkflowPanel({
+  rules,
+  contexts,
+  theme,
   onChange,
   onRemove,
   onMove,
@@ -459,10 +548,7 @@ export function WorkflowPanel({
 }: {
   rules: WorkflowItem[];
   contexts: WorkflowContexts;
-  output: string;
-  error: WorkflowError | null;
   theme: Extension;
-  foldExt: Extension;
   onChange: (update: WorkflowItem[] | ((rules: WorkflowItem[]) => WorkflowItem[])) => void;
   onRemove: (id: string) => void;
   onMove: (from: number, to: number) => void;
@@ -476,20 +562,6 @@ export function WorkflowPanel({
   const focusItemIdRef = useRef(focusItemId);
   focusItemIdRef.current = focusItemId;
   const hasTemplate = rules.some((item) => item.type === 'template');
-  const [outputTableMode, setOutputTableMode] = useState(false);
-  const outputPreview = useMemo(() => {
-    try {
-      return { valid: true, value: parseJsonLoose(output) };
-    } catch {
-      return { valid: false, value: null };
-    }
-  }, [output]);
-  // Auto-exit table mode when output becomes empty, invalid, or errors
-  useEffect(() => {
-    if (outputTableMode && (error || !output.trim() || !outputPreview.valid)) {
-      setOutputTableMode(false);
-    }
-  }, [output, outputPreview.valid, outputTableMode, error]);
   const labels = {
     extract: t('jsonTool.workflow.types.extract'),
     sort: t('jsonTool.workflow.types.sort'),
@@ -544,114 +616,45 @@ export function WorkflowPanel({
     if (view) focusAddedItem(focusItemId, view);
   }, [focusItemId]);
   return (
-    <div className="json-workflow-panel grid h-full min-h-0 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-3 @max-[959px]/json-page:contents @min-[960px]/json-page:contents">
-      <section className="json-workflow-rules flex min-h-0 min-w-0 flex-col [container-name:workflow-rules] [container-type:inline-size] @min-[960px]/json-page:h-full @min-[960px]/json-page:min-h-0">
-        <div className="json-workflow-section-header flex h-[18px] min-h-[18px] flex-none items-start justify-between gap-2">
-          <span className="font-mono text-[10px] font-medium leading-none tracking-[.04em] text-muted-foreground uppercase">
-            {t('jsonTool.workflow.rules')}
-          </span>
-        </div>
-        <div
-          ref={listRef}
-          className="json-workflow-list min-h-0 overflow-auto [scrollbar-gutter:auto]"
-        >
-          {rules.length === 0 ? (
-            <div className="json-workflow-empty flex min-h-[74px] items-center justify-center text-[11px] text-muted-foreground">
-              {t('jsonTool.workflow.empty')}
-            </div>
-          ) : (
-            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-              <SortableContext
-                items={rules.map((item) => item.id)}
-                strategy={verticalListSortingStrategy}
-              >
-                {rules.map((item, index) => (
-                  <WorkflowRuleRow
-                    key={item.id}
-                    item={item}
-                    index={index}
-                    root={root[index]}
-                    itemRoot={itemRoots[index]}
-                    filterValues={filterValues[index]}
-                    labels={labels}
-                    theme={theme}
-                    onUpdate={update}
-                    onTypeChange={updateType}
-                    onRemove={onRemove}
-                    onFirstEditorCreate={focusAddedItem}
-                  />
-                ))}
-              </SortableContext>
-            </DndContext>
-          )}
-        </div>
-      </section>
-      <section className="json-workflow-output flex min-h-0 min-w-0 flex-col @min-[960px]/json-page:h-full @min-[960px]/json-page:min-h-0">
-        <div className="json-workflow-section-header flex h-[18px] min-h-[18px] flex-none items-start justify-between gap-2">
-          <span className="font-mono text-[10px] font-medium leading-none tracking-[.04em] text-muted-foreground uppercase">
-            {t('jsonTool.workflow.output')}
-          </span>
-        </div>
-        <div className="json-workflow-output-field json-pane-editor relative flex min-h-0 min-w-0 flex-1">
-          <Button
-            type="button"
-            variant={outputTableMode ? 'secondary' : 'ghost'}
-            size="icon-sm"
-            className="json-table-toggle absolute top-2 right-2 z-20"
-            aria-label={t('jsonTool.tablePreview')}
-            title={t(outputTableMode ? 'jsonTool.tablePreviewOn' : 'jsonTool.tablePreview')}
-            onClick={() => {
-              if (error || !output.trim() || !outputPreview.valid) {
-                toast.add({ title: t('jsonTool.tablePreviewNotJson'), type: 'warning' });
-                return;
-              }
-              setOutputTableMode((current) => !current);
-            }}
-          >
-            <TableIcon />
-          </Button>
-          {error ? (
-            <JsonErrorPanel
-              title={t('jsonTool.workflow.errorTitle')}
-              description={t(`jsonTool.workflow.errors.${error.code}`)}
-              item={
-                error.item !== undefined
-                  ? t('jsonTool.workflow.errorItem', {
-                      item: String(error.item + 1).padStart(2, '0'),
-                    })
-                  : undefined
-              }
-              path={
-                error.path
-                  ? { label: t('jsonTool.workflow.errorPath'), value: error.path }
-                  : undefined
-              }
-            />
-          ) : (
-            <CodeMirror
-              className="json-cm json-workflow-cm"
-              height="100%"
-              value={output}
-              editable={false}
-              theme={theme}
-              extensions={[json5(), foldExt]}
-              onCreateEditor={(view) =>
-                view.contentDOM.setAttribute('aria-label', t('jsonTool.workflow.output'))
-              }
-            />
-          )}
-          {!error && (
-            <div
-              className={`json-table-layer${outputTableMode ? ' is-visible' : ''}`}
-              aria-hidden={!outputTableMode}
-              {...(!outputTableMode ? { inert: true } : {})}
+    <section className="json-workflow-rules flex h-full min-h-0 min-w-0 flex-col gap-2 [container-name:workflow-rules] [container-type:inline-size]">
+      <span className="json-pane-label flex-none font-mono text-[10px] font-medium leading-none tracking-[.04em] text-muted-foreground uppercase">
+        {t('jsonTool.workflow.rules')}
+      </span>
+      <div
+        ref={listRef}
+        className="json-workflow-list min-h-0 flex-1 overflow-auto [scrollbar-gutter:auto]"
+      >
+        {rules.length === 0 ? (
+          <div className="json-workflow-empty flex min-h-[74px] items-center justify-center text-[11px] text-muted-foreground">
+            {t('jsonTool.workflow.empty')}
+          </div>
+        ) : (
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+            <SortableContext
+              items={rules.map((item) => item.id)}
+              strategy={verticalListSortingStrategy}
             >
-              <JsonTablePreview value={outputPreview.value} t={t} />
-            </div>
-          )}
-        </div>
-      </section>
-    </div>
+              {rules.map((item, index) => (
+                <WorkflowRuleRow
+                  key={item.id}
+                  item={item}
+                  index={index}
+                  root={root[index]}
+                  itemRoot={itemRoots[index]}
+                  filterValues={filterValues[index]}
+                  labels={labels}
+                  theme={theme}
+                  onUpdate={update}
+                  onTypeChange={updateType}
+                  onRemove={onRemove}
+                  onFirstEditorCreate={focusAddedItem}
+                />
+              ))}
+            </SortableContext>
+          </DndContext>
+        )}
+      </div>
+    </section>
   );
 }
 
