@@ -280,6 +280,7 @@ function JsonEditorPane({
   formatOnPaste,
   tableMode = false,
   tableDisabled = false,
+  active = true,
   onToggleTable,
   tablePreview,
   tableHint,
@@ -296,6 +297,7 @@ function JsonEditorPane({
   formatOnPaste?: (next: string) => string;
   tableMode?: boolean;
   tableDisabled?: boolean;
+  active?: boolean;
   onToggleTable?: () => void;
   tablePreview?: ReactNode;
   tableHint?: string;
@@ -365,9 +367,9 @@ function JsonEditorPane({
         />
         {tablePreview && (
           <div
-            className={`json-table-layer${tableMode ? ' is-visible' : ''}`}
-            aria-hidden={!tableMode}
-            {...(!tableMode ? { inert: true } : {})}
+            className={`json-table-layer${tableMode && active ? ' is-visible' : ''}`}
+            aria-hidden={!tableMode || !active}
+            {...(!tableMode || !active ? { inert: true } : {})}
           >
             {tablePreview}
           </div>
@@ -915,6 +917,7 @@ export default function JsonTool({
                 cmClassName="json-input-cm"
                 formatOnPaste={autoFormatOnFill ? tryAutoFormat : undefined}
                 tableMode={inputTableMode}
+                active={active}
                 tableDisabled={!input.trim() || !inputPreview.valid}
                 tableHint={t('jsonTool.tablePreviewInvalid')}
                 onToggleTable={() => setInputTableMode((current) => !current)}
@@ -978,9 +981,9 @@ export default function JsonTool({
                         )}
                         {!pathError && (
                           <div
-                            className={`json-table-layer${resultTableMode ? ' is-visible' : ''}`}
-                            aria-hidden={!resultTableMode}
-                            {...(!resultTableMode ? { inert: true } : {})}
+                            className={`json-table-layer${resultTableMode && active ? ' is-visible' : ''}`}
+                            aria-hidden={!resultTableMode || !active}
+                            {...(!resultTableMode || !active ? { inert: true } : {})}
                           >
                             <JsonTablePreview value={resultPreview.value} t={t} />
                           </div>
