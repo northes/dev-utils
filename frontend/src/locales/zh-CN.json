@@ -17,7 +17,16 @@
     "forward": "前进"
   },
   "sidebar": {
-    "toggle": "收起或展开侧边栏"
+    "toggle": "收起或展开侧边栏",
+    "manageTitle": "调整侧边栏",
+    "manageHint": "拖拽调整顺序，点击眼睛显示或隐藏工具。",
+    "done": "完成",
+    "dragTool": "拖动{{name}}以调整顺序",
+    "moveToolUp": "将{{name}}上移",
+    "moveToolDown": "将{{name}}下移",
+    "showTool": "显示{{name}}",
+    "hideTool": "隐藏{{name}}",
+    "movedTool": "{{name}} 已移到第 {{position}} 位，共 {{count}} 项"
   },
   "scrollbar": {
     "vertical": "垂直滚动条",
@@ -470,6 +479,8 @@
     "themeModeSystem": "跟随系统",
     "lightTheme": "浅色主题",
     "darkTheme": "深色主题",
+    "adjustSidebar": "调整侧边栏",
+    "adjustSidebarDesc": "进入侧边栏管理模式，拖拽排序并用眼睛图标显示或隐藏工具。",
     "themeDefault": "默认",
     "themeModernMinimal": "Modern Minimal",
     "language": "语言",
@@ -549,6 +560,7 @@
     "clipboardEmptyDesc": "请先复制内容后再执行该命令",
     "copied": "已复制 {{value}}",
     "historyFailed": "历史记录操作失败",
+    "settingsFailed": "设置保存失败",
     "pasteTarget": "请先聚焦要粘贴的输入框"
   },
   "common": {

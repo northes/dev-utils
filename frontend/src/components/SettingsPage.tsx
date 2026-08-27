@@ -1,7 +1,13 @@
 import { cloneElement, isValidElement, useEffect, useState } from 'react';
 import { Button } from './ui/button';
 import { Switch } from './ui/switch';
-import { ArrowSquareOut, ArrowsClockwise, Power, Trash } from '@phosphor-icons/react';
+import {
+  ArrowSquareOut,
+  ArrowsClockwise,
+  Power,
+  SidebarSimple,
+  Trash,
+} from '@phosphor-icons/react';
 import { Application, Browser } from '@wailsio/runtime';
 import { useTranslation } from 'react-i18next';
 import i18n, { SUPPORTED_LANGUAGES } from '../i18n';
@@ -49,12 +55,14 @@ function SettingsGroup({
   children,
   className = '',
   listClassName = '',
+  flushSettingsSave,
 }: {
   title: string;
   subtitle: string;
   children: React.ReactNode;
   className?: string;
   listClassName?: string;
+  flushSettingsSave?: () => Promise<void>;
 }) {
   const isAbout = title === i18n.t('settings.about');
   const heading = (
@@ -87,7 +95,14 @@ function SettingsGroup({
           </div>
           <div className="settings-list min-w-0">
             <Setting label={i18n.t('settings.quit')} description={i18n.t('settings.quitDesc')}>
-              <Button variant="destructive" onClick={() => void Application.Quit()}>
+              <Button
+                variant="destructive"
+                onClick={() => {
+                  void (flushSettingsSave?.() ?? Promise.resolve()).finally(() => {
+                    void Application.Quit();
+                  });
+                }}
+              >
                 <Power data-icon="inline-start" weight="duotone" />
                 {i18n.t('settings.quit')}
               </Button>
@@ -139,12 +154,18 @@ export default function SettingsPage({
   setThemeMode: setThemeModeWithTransition,
   clearHistory,
   tools,
+  sidebarManaging,
+  onToggleSidebarManage,
+  flushSettingsSave,
 }: {
   settings: Settings;
   setSettings: React.Dispatch<React.SetStateAction<Settings>>;
   setThemeMode: (update: React.SetStateAction<Settings>) => void;
   clearHistory: () => void;
   tools: ToolDefinition[];
+  sidebarManaging: boolean;
+  onToggleSidebarManage: () => void;
+  flushSettingsSave: () => Promise<void>;
 }) {
   const { t } = useTranslation();
   const [confirmClear, setConfirmClear] = useState(false);
@@ -347,6 +368,22 @@ export default function SettingsPage({
                   </SelectContent>
                 </Select>
               </Setting>
+              <Setting
+                label={t('settings.adjustSidebar')}
+                description={t('settings.adjustSidebarDesc')}
+              >
+                <Button
+                  id="sidebar-manage-trigger"
+                  variant="outline"
+                  className="text-[11px]"
+                  aria-expanded={sidebarManaging}
+                  aria-controls="app-sidebar"
+                  onClick={onToggleSidebarManage}
+                >
+                  <SidebarSimple data-icon="inline-start" weight="duotone" />
+                  {t(sidebarManaging ? 'sidebar.done' : 'settings.adjustSidebar')}
+                </Button>
+              </Setting>
             </div>
           </SettingsGroup>
           <SettingsGroup title={t('settings.editor')} subtitle={t('settings.editorSubtitle')}>
@@ -426,7 +463,11 @@ export default function SettingsPage({
               </Button>
             </Setting>
           </SettingsGroup>
-          <SettingsGroup title={t('settings.about')} subtitle={t('settings.aboutSubtitle')}>
+          <SettingsGroup
+            title={t('settings.about')}
+            subtitle={t('settings.aboutSubtitle')}
+            flushSettingsSave={flushSettingsSave}
+          >
             <Setting label={t('settings.projectLink')} description={t('settings.projectUrl')}>
               <Button
                 variant="outline"

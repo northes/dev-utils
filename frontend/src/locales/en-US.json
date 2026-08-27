@@ -17,7 +17,16 @@
     "forward": "Forward"
   },
   "sidebar": {
-    "toggle": "Toggle sidebar"
+    "toggle": "Toggle sidebar",
+    "manageTitle": "Customize sidebar",
+    "manageHint": "Drag to reorder. Use the eye icon to show or hide tools.",
+    "done": "Done",
+    "dragTool": "Drag {{name}} to reorder",
+    "moveToolUp": "Move {{name}} up",
+    "moveToolDown": "Move {{name}} down",
+    "showTool": "Show {{name}}",
+    "hideTool": "Hide {{name}}",
+    "movedTool": "{{name}} moved to position {{position}} of {{count}}"
   },
   "scrollbar": {
     "vertical": "Vertical scrollbar",
@@ -470,6 +479,8 @@
     "themeModeSystem": "Follow system",
     "lightTheme": "Light theme",
     "darkTheme": "Dark theme",
+    "adjustSidebar": "Customize sidebar",
+    "adjustSidebarDesc": "Enter sidebar manage mode to drag tools into order and show or hide them with the eye icon.",
     "themeDefault": "Default",
     "themeModernMinimal": "Modern Minimal",
     "language": "Language",
@@ -549,6 +560,7 @@
     "clipboardEmptyDesc": "Copy some content before running this command",
     "copied": "Copied {{value}}",
     "historyFailed": "History operation failed",
+    "settingsFailed": "Failed to save settings",
     "pasteTarget": "Focus an input to paste into"
   },
   "common": {

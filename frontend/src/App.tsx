@@ -8,8 +8,8 @@ import {
   useRef,
   useState,
 } from 'react';
+import type { DragEvent, SetStateAction } from 'react';
 import { flushSync } from 'react-dom';
-import type { SetStateAction } from 'react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -41,6 +41,9 @@ import {
   Clock,
   ClockCounterClockwise,
   Command as CommandIcon,
+  DotsSixVertical,
+  Eye,
+  EyeClosed,
   FileCode,
   GearSix,
   GitDiff,
@@ -75,7 +78,7 @@ import {
 } from '../bindings/changeme/configservice';
 import { Log as LogFrontend } from '../bindings/changeme/logservice';
 import { SetAutoCheckEnabled } from '../bindings/changeme/updateservice';
-import type { Config as Settings } from '../bindings/changeme/models';
+import type { Config as Settings, SidebarToolConfig } from '../bindings/changeme/models';
 import { useLocation, useNavigate, useNavigationType } from 'react-router';
 import { resolveTheme } from './theme';
 
@@ -116,6 +119,15 @@ const defaultSettings: Settings = {
   autoCheckUpdates: true,
   language: 'zh-CN',
   sidebarMode: 'full',
+  sidebarTools: [
+    { id: 'json', enabled: true },
+    { id: 'time', enabled: true },
+    { id: 'text', enabled: true },
+    { id: 'base64', enabled: true },
+    { id: 'diff', enabled: true },
+    { id: 'jwt', enabled: true },
+    { id: 'url', enabled: true },
+  ],
   themeMode: 'dark',
   lightTheme: 'default-light',
   darkTheme: 'default-dark',
@@ -760,6 +772,104 @@ function routePath(page: Page) {
 function isPage(value: unknown): value is Page {
   return value === 'settings' || value === 'history' || tools.some((tool) => tool.id === value);
 }
+function isToolId(value: string): value is ToolId {
+  return tools.some((tool) => tool.id === value);
+}
+function resolveSidebarTools(configs: SidebarToolConfig[] | null | undefined): SidebarToolConfig[] {
+  const seen = new Set<string>();
+  const resolved: SidebarToolConfig[] = [];
+  for (const item of configs ?? []) {
+    if (!isToolId(item.id) || seen.has(item.id)) continue;
+    resolved.push({ id: item.id, enabled: item.enabled });
+    seen.add(item.id);
+  }
+  for (const tool of tools) {
+    if (!seen.has(tool.id)) resolved.push({ id: tool.id, enabled: true });
+  }
+  return resolved;
+}
+function availablePage(page: Page, sidebarTools: SidebarToolConfig[]): Page {
+  if (page === 'settings' || page === 'history') return page;
+  if (sidebarTools.some((item) => item.id === page && item.enabled)) return page;
+  const firstEnabled = sidebarTools.find((item) => item.enabled && isToolId(item.id));
+  return firstEnabled ? (firstEnabled.id as ToolId) : 'settings';
+}
+function moveSidebarTool(
+  list: SidebarToolConfig[],
+  fromId: string,
+  toId: string,
+  edge: 'before' | 'after',
+): SidebarToolConfig[] {
+  if (fromId === toId) return list;
+  const from = list.findIndex((item) => item.id === fromId);
+  if (from < 0) return list;
+  const next = [...list];
+  const [item] = next.splice(from, 1);
+  const to = next.findIndex((entry) => entry.id === toId);
+  if (to < 0) return list;
+  next.splice(edge === 'after' ? to + 1 : to, 0, item);
+  return next;
+}
+function moveSidebarToolBy(
+  list: SidebarToolConfig[],
+  id: string,
+  delta: number,
+): SidebarToolConfig[] {
+  const from = list.findIndex((item) => item.id === id);
+  const to = from + delta;
+  if (from < 0 || to < 0 || to >= list.length) return list;
+  const next = [...list];
+  const [item] = next.splice(from, 1);
+  next.splice(to, 0, item);
+  return next;
+}
+function paletteToolId(item: PaletteItem): ToolId | null {
+  if (item.tool) return item.tool;
+  if (item.page && item.page !== 'settings' && item.page !== 'history') return item.page;
+  return null;
+}
+function isHiddenFocusTarget(el: HTMLElement) {
+  return Boolean(el.closest('.is-hidden, [hidden], [inert], [aria-hidden="true"]'));
+}
+function canRestoreFocus(el: HTMLElement | null): el is HTMLElement {
+  if (!el || !el.isConnected) return false;
+  if (el instanceof HTMLButtonElement && el.disabled) return false;
+  if (
+    (el instanceof HTMLInputElement ||
+      el instanceof HTMLSelectElement ||
+      el instanceof HTMLTextAreaElement) &&
+    el.disabled
+  )
+    return false;
+  if (el.getAttribute('aria-disabled') === 'true') return false;
+  if (isHiddenFocusTarget(el)) return false;
+  const style = window.getComputedStyle(el);
+  return style.display !== 'none' && style.visibility !== 'hidden';
+}
+function firstFocusable(root: ParentNode | null): HTMLElement | null {
+  if (!root) return null;
+  const nodes = root.querySelectorAll<HTMLElement>(
+    'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+  );
+  for (const node of nodes) {
+    if (canRestoreFocus(node)) return node;
+  }
+  return null;
+}
+function restoreFocusAfterManage(previous: HTMLElement | null) {
+  const targets = [
+    canRestoreFocus(previous) ? previous : null,
+    firstFocusable(document.querySelector('.workspace .tool-slot:not(.is-hidden)')),
+    document.querySelector<HTMLElement>('.sidebar [aria-current="page"]'),
+    document.querySelector<HTMLElement>('.sidebar-palette'),
+    document.querySelector<HTMLElement>('.sidebar-toggle'),
+  ];
+  for (const target of targets) {
+    if (!canRestoreFocus(target)) continue;
+    target.focus();
+    if (document.activeElement === target) return;
+  }
+}
 function historyIndex() {
   const index = window.history.state?.idx;
   return typeof index === 'number' ? index : 0;
@@ -866,6 +976,8 @@ function AppShell() {
     target?: 'before' | 'after';
   }>(null);
   const [settings, setSettings] = useState<Settings>(defaultSettings);
+  const [sidebarManaging, setSidebarManaging] = useState(false);
+  const [historyRevision, setHistoryRevision] = useState(0);
   const [systemDark, setSystemDark] = useState(
     () =>
       typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches,
@@ -874,6 +986,12 @@ function AppShell() {
   settingsRef.current = settings;
   const nextDiffTarget = useRef<'before' | 'after'>('before');
   const settingsReady = useRef(false);
+  const saveInFlight = useRef(false);
+  const saveQueued = useRef(false);
+  const saveWaiters = useRef<Array<() => void>>([]);
+  const persistLatestRef = useRef<() => Promise<void>>(async () => {});
+  const manageEntered = useRef(false);
+  const manageFocusRestoreRef = useRef<HTMLElement | null>(null);
   const lastFocusedRef = useRef<Element | null>(null);
   const theme = resolveTheme(
     settings.themeMode,
@@ -1024,25 +1142,103 @@ function AppShell() {
         settingsReady.current = true;
       });
   }, []);
+  persistLatestRef.current = async () => {
+    if (saveInFlight.current) return;
+    saveInFlight.current = true;
+    try {
+      while (saveQueued.current) {
+        saveQueued.current = false;
+        const cfg = settingsRef.current;
+        try {
+          await SaveConfig(cfg);
+          if (settingsRef.current !== cfg) {
+            saveQueued.current = true;
+            continue;
+          }
+          void SetAutoCheckEnabled(cfg.autoCheckUpdates);
+          setHistoryRevision((current) => current + 1);
+        } catch {
+          toast.add({ title: t('toast.settingsFailed'), type: 'error' });
+          if (settingsRef.current !== cfg) saveQueued.current = true;
+        }
+      }
+    } finally {
+      saveInFlight.current = false;
+      if (saveQueued.current) void persistLatestRef.current();
+      else {
+        const waiters = saveWaiters.current;
+        saveWaiters.current = [];
+        for (const resolve of waiters) resolve();
+      }
+    }
+  };
+  const flushSettingsSave = () => {
+    if (!settingsReady.current) return Promise.resolve();
+    saveQueued.current = true;
+    const pending = new Promise<void>((resolve) => {
+      saveWaiters.current.push(resolve);
+    });
+    void persistLatestRef.current();
+    return pending;
+  };
   useEffect(() => {
     if (!settingsReady.current) return;
-    void SaveConfig(settings);
-    void SetAutoCheckEnabled(settings.autoCheckUpdates);
+    saveQueued.current = true;
+    void persistLatestRef.current();
   }, [settings]);
   useEffect(() => {
     localStorage.setItem('devutils.lastPage', JSON.stringify(page));
   }, [page]);
   const sidebarMode = (settings.sidebarMode as SidebarMode) || 'full';
+  const layoutSidebarMode = sidebarManaging ? 'full' : sidebarMode;
+  const resolvedSidebarTools = useMemo(
+    () => resolveSidebarTools(settings.sidebarTools),
+    [settings.sidebarTools],
+  );
+  const enabledToolIds = useMemo(
+    () =>
+      resolvedSidebarTools
+        .filter((item) => item.enabled && isToolId(item.id))
+        .map((item) => item.id as ToolId),
+    [resolvedSidebarTools],
+  );
+  const enabledToolSet = useMemo(() => new Set(enabledToolIds), [enabledToolIds]);
+  useLayoutEffect(() => {
+    if (sidebarManaging) return;
+    const next = availablePage(page, resolvedSidebarTools);
+    if (next !== page) routerNavigate(routePath(next), { replace: true });
+  }, [page, resolvedSidebarTools, routerNavigate, sidebarManaging]);
+  useLayoutEffect(() => {
+    if (sidebarManaging) {
+      if (!manageEntered.current) {
+        manageEntered.current = true;
+        const active = document.activeElement;
+        manageFocusRestoreRef.current = active instanceof HTMLElement ? active : null;
+        const handle = document.querySelector<HTMLElement>('[data-sidebar-drag-handle]');
+        (handle ?? document.getElementById('sidebar-manage-done'))?.focus();
+      }
+      return;
+    }
+    if (!manageEntered.current) return;
+    if (availablePage(page, resolvedSidebarTools) !== page) return;
+    manageEntered.current = false;
+    const previous = manageFocusRestoreRef.current;
+    manageFocusRestoreRef.current = null;
+    restoreFocusAfterManage(previous);
+  }, [page, resolvedSidebarTools, sidebarManaging]);
   const indexed = useMemo(() => {
     const isTool = tools.some((tool) => tool.id === page);
     const contexts = new Set<PaletteContext>();
     if (jsonSchemaOpen && page === 'json') contexts.add('json.schema');
     if (jsonWorkflowOpen && page === 'json') contexts.add('json.workflow');
-    const items = paletteItems.filter(
-      (item) =>
+    const items = paletteItems.filter((item) => {
+      const toolId = paletteToolId(item);
+      if (toolId && !enabledToolSet.has(toolId)) return false;
+      return (
         (!isTool || !item.tool || item.tool === page) &&
-        (!item.context || contexts.has(item.context)),
-    );
+        (!item.context || contexts.has(item.context))
+      );
+    });
     return buildIndex(
       items.map((item) => ({
         ...item,
@@ -1052,7 +1248,7 @@ function AppShell() {
       })),
       romanize,
     );
-  }, [t, jsonSchemaOpen, jsonWorkflowOpen, page, romanize]);
+  }, [t, jsonSchemaOpen, jsonWorkflowOpen, page, romanize, enabledToolSet]);
   const record = (
     tool: ToolId,
     action: string,
@@ -1074,6 +1270,7 @@ function AppShell() {
     }).catch(() => toast.add({ title: t('toast.historyFailed'), type: 'error' }));
   };
   const openHistory = async (item: HistoryItem) => {
+    if (!enabledToolSet.has(item.tool)) return;
     try {
       const content = await GetHistoryContent(item.id);
       setPending({
@@ -1091,11 +1288,16 @@ function AppShell() {
   const clearHistory = () => {
     void ClearHistory().catch(() => toast.add({ title: t('toast.historyFailed'), type: 'error' }));
   };
-  const cycleSidebar = () =>
+  const cycleSidebar = () => {
+    if (sidebarManaging) return;
     setSettings((s) => ({
       ...s,
       sidebarMode: s.sidebarMode === 'full' ? 'icon' : s.sidebarMode === 'icon' ? 'hidden' : 'full',
     }));
+  };
+  const toggleSidebarManage = () => setSidebarManaging((current) => !current);
+  const updateSidebarTools = (sidebarTools: SidebarToolConfig[]) =>
+    setSettings((current) => ({ ...current, sidebarTools }));
   const openPalette = () => {
     lastFocusedRef.current = document.activeElement;
     setPaletteOpen(true);
@@ -1140,11 +1342,14 @@ function AppShell() {
         if (!paletteOpen) lastFocusedRef.current = document.activeElement;
         setPaletteOpen((open) => !open);
       } else if (event.key === 'Escape' && paletteOpen) closePalette();
+      else if (event.key === 'Escape' && sidebarManaging) setSidebarManaging(false);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [paletteOpen, closePalette]);
+  }, [paletteOpen, closePalette, sidebarManaging]);
   const run = (item: IndexedItem) => {
+    const toolId = paletteToolId(item);
+    if (toolId && !enabledToolSet.has(toolId)) return;
     if (item.action === 'paste') {
       void pasteIntoFocused();
       return;
@@ -1200,13 +1405,20 @@ function AppShell() {
     const s = text.trim();
     if (!s) return;
     const currentPage = pageRef.current;
+    const enabledSidebarTools = new Set(
+      resolveSidebarTools(currentSettings.sidebarTools)
+        .filter((item) => item.enabled)
+        .map((item) => item.id),
+    );
     const trayTools = new Set(
-      currentSettings.trayMatchTools ?? ['json', 'time', 'text', 'base64', 'diff', 'jwt', 'url'],
+      (
+        currentSettings.trayMatchTools ?? ['json', 'time', 'text', 'base64', 'diff', 'jwt', 'url']
+      ).filter((id) => enabledSidebarTools.has(id)),
     );
     let tool: ToolId | null = null;
     let mode: string | undefined;
     let target: 'before' | 'after' | undefined;
-    if (currentPage === 'diff') {
+    if (currentPage === 'diff' && enabledSidebarTools.has('diff')) {
       tool = 'diff';
       target =
         currentSettings.diffClipboardTargetMode === 'before'
@@ -1230,7 +1442,7 @@ function AppShell() {
         if (!tool && trayTools.has('text')) tool = 'text';
       }
     }
-    if (!tool) return;
+    if (!tool || !enabledSidebarTools.has(tool)) return;
     const apply = (match: {
       tool: ToolId;
       input: string;
@@ -1275,6 +1487,7 @@ function AppShell() {
             size="icon-sm"
             className="sidebar-toggle relative top-px flex-none self-center rounded-lg text-muted-foreground [--wails-draggable:no-drag] hover:bg-muted hover:text-foreground"
             onClick={cycleSidebar}
+            disabled={sidebarManaging}
             aria-label={t('sidebar.toggle')}
             title={t('sidebar.toggle')}
           >
@@ -1307,9 +1520,17 @@ function AppShell() {
           <UpdatePill />
         </header>
         <div
-          className={`main relative z-[1] grid min-h-0 ${sidebarMode === 'hidden' ? 'grid-cols-[0px_minmax(0,1fr)] [&_.sidebar]:invisible [&_.sidebar]:overflow-hidden' : sidebarMode === 'icon' ? 'grid-cols-[56px_minmax(0,1fr)] [&_.sidebar]:overflow-hidden [&_.sidebar]:pt-3 [&_.sidebar-heading]:hidden [&_.sidebar-item]:justify-center [&_.sidebar-item]:px-0 [&_.sidebar-item_span]:hidden [&_.sidebar-palette_kbd]:hidden [&_.sidebar-palette_span]:hidden [&_.sidebar-palette]:justify-center' : 'grid-cols-[232px_minmax(0,1fr)]'}`}
+          className={`main relative z-[1] grid min-h-0 ${layoutSidebarMode === 'hidden' ? 'grid-cols-[0px_minmax(0,1fr)] [&_.sidebar]:invisible [&_.sidebar]:overflow-hidden' : layoutSidebarMode === 'icon' ? 'grid-cols-[56px_minmax(0,1fr)] [&_.sidebar]:overflow-hidden [&_.sidebar]:pt-3 [&_.sidebar-heading]:hidden [&_.sidebar-item]:justify-center [&_.sidebar-item]:px-0 [&_.sidebar-item_span]:hidden [&_.sidebar-palette_kbd]:hidden [&_.sidebar-palette_span]:hidden [&_.sidebar-palette]:justify-center' : 'grid-cols-[232px_minmax(0,1fr)]'}`}
         >
-          <Sidebar page={page} onNavigate={navigate} onOpenPalette={openPalette} />
+          <Sidebar
+            page={page}
+            onNavigate={navigate}
+            onOpenPalette={openPalette}
+            managing={sidebarManaging}
+            sidebarTools={resolvedSidebarTools}
+            onSidebarToolsChange={updateSidebarTools}
+            onExitManage={() => setSidebarManaging(false)}
+          />
           <main
             className={`workspace relative min-h-0 w-full overflow-x-hidden overflow-y-auto bg-background${tools.some((tool) => tool.id === page) || page === 'history' || page === 'settings' ? ' overflow-y-hidden' : ''}`}
             ref={workspaceRef}
@@ -1446,6 +1667,9 @@ function AppShell() {
                     setThemeMode={setSettingsWithThemeTransition}
                     tools={tools}
                     clearHistory={clearHistory}
+                    sidebarManaging={sidebarManaging}
+                    onToggleSidebarManage={toggleSidebarManage}
+                    flushSettingsSave={flushSettingsSave}
                   />
                 </Suspense>
               )}
@@ -1459,6 +1683,8 @@ function AppShell() {
                     active={page === 'history'}
                     openHistory={openHistory}
                     clear={clearHistory}
+                    enabledToolIds={enabledToolIds}
+                    historyRevision={historyRevision}
                   />
                 </Suspense>
               )}
@@ -1495,7 +1721,7 @@ function AppShell() {
               onClick={() => {
                 const d = matchDialog;
                 setMatchDialog(null);
-                if (d) {
+                if (d && enabledToolSet.has(d.tool)) {
                   if (
                     d.tool === 'diff' &&
                     d.target &&
@@ -1634,37 +1860,250 @@ function CommandPalette({
 const sidebarItemClassName =
   'sidebar-item flex h-auto min-h-0 w-full items-center justify-start gap-2.5 rounded-lg px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground aria-[current=page]:bg-primary aria-[current=page]:text-primary-foreground aria-[current=page]:hover:bg-primary aria-[current=page]:hover:text-primary-foreground dark:aria-[current=page]:hover:bg-primary [&_svg]:size-[17px]';
 
+function SidebarManageRow({
+  tool,
+  enabled,
+  index,
+  count,
+  dragging,
+  dropEdge,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onDragEnd,
+  onMove,
+  onToggle,
+}: {
+  tool: ToolDefinition;
+  enabled: boolean;
+  index: number;
+  count: number;
+  dragging: boolean;
+  dropEdge: 'before' | 'after' | null;
+  onDragStart: (event: DragEvent<HTMLDivElement>, id: ToolId) => void;
+  onDragOver: (event: DragEvent<HTMLDivElement>, id: ToolId) => void;
+  onDrop: (event: DragEvent<HTMLDivElement>, id: ToolId) => void;
+  onDragEnd: () => void;
+  onMove: (id: ToolId, delta: number) => void;
+  onToggle: (id: ToolId) => void;
+}) {
+  const { t } = useTranslation();
+  const name = t(tool.nameKey);
+  return (
+    <div
+      role="listitem"
+      draggable
+      aria-posinset={index + 1}
+      aria-setsize={count}
+      aria-grabbed={dragging}
+      onDragStart={(event) => onDragStart(event, tool.id)}
+      onDragOver={(event) => onDragOver(event, tool.id)}
+      onDrop={(event) => onDrop(event, tool.id)}
+      onDragEnd={onDragEnd}
+      className={`flex select-none items-center gap-0.5 rounded-lg border-y-2 ${
+        dropEdge === 'before'
+          ? 'border-t-primary border-b-transparent'
+          : dropEdge === 'after'
+            ? 'border-b-primary border-t-transparent'
+            : 'border-transparent'
+      } ${dragging ? 'bg-muted' : ''} ${enabled ? '' : 'opacity-40'}`}
+    >
+      <Button
+        data-sidebar-drag-handle=""
+        variant="ghost"
+        size="icon-sm"
+        className="flex-none cursor-grab active:cursor-grabbing"
+        aria-label={t('sidebar.dragTool', { name })}
+        aria-keyshortcuts="ArrowUp ArrowDown"
+        aria-describedby="sidebar-manage-hint"
+        onKeyDown={(event) => {
+          if (event.key === 'ArrowUp') {
+            event.preventDefault();
+            onMove(tool.id, -1);
+          } else if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            onMove(tool.id, 1);
+          }
+        }}
+      >
+        <DotsSixVertical size={16} weight="duotone" />
+        <span className="sr-only">
+          {t('sidebar.moveToolUp', { name })}. {t('sidebar.moveToolDown', { name })}
+        </span>
+      </Button>
+      <div
+        className={`${sidebarItemClassName} pointer-events-none min-w-0 flex-1 hover:bg-transparent`}
+      >
+        <tool.icon data-icon="inline-start" size={17} weight="duotone" />
+        <span className="min-w-0 truncate">{name}</span>
+      </div>
+      <Button
+        data-sidebar-control=""
+        variant="ghost"
+        size="icon-sm"
+        className="flex-none"
+        aria-pressed={enabled}
+        aria-label={t(enabled ? 'sidebar.hideTool' : 'sidebar.showTool', { name })}
+        onClick={() => onToggle(tool.id)}
+      >
+        {enabled ? <EyeClosed size={16} weight="duotone" /> : <Eye size={16} weight="duotone" />}
+      </Button>
+    </div>
+  );
+}
+
 function Sidebar({
   page,
   onNavigate,
   onOpenPalette,
+  managing,
+  sidebarTools,
+  onSidebarToolsChange,
+  onExitManage,
 }: {
   page: Page;
   onNavigate: (p: Page) => void;
   onOpenPalette: () => void;
+  managing: boolean;
+  sidebarTools: SidebarToolConfig[];
+  onSidebarToolsChange: (tools: SidebarToolConfig[]) => void;
+  onExitManage: () => void;
 }) {
   const { t } = useTranslation();
+  const [draggingId, setDraggingId] = useState<ToolId | null>(null);
+  const [liveMessage, setLiveMessage] = useState('');
+  const [dropTarget, setDropTarget] = useState<{ id: ToolId; edge: 'before' | 'after' } | null>(
+    null,
+  );
+  const orderedTools = sidebarTools.flatMap((item) => {
+    const tool = tools.find((entry) => entry.id === item.id);
+    return tool ? [{ tool, enabled: item.enabled }] : [];
+  });
+  const visibleTools = managing ? orderedTools : orderedTools.filter((item) => item.enabled);
+  const clearDrag = () => {
+    setDraggingId(null);
+    setDropTarget(null);
+  };
+  const announceMove = (id: ToolId, next: SidebarToolConfig[]) => {
+    const tool = tools.find((entry) => entry.id === id);
+    const position = next.findIndex((item) => item.id === id) + 1;
+    if (!tool || position === 0) return;
+    const message = t('sidebar.movedTool', {
+      name: t(tool.nameKey),
+      position,
+      count: next.length,
+    });
+    setLiveMessage('');
+    requestAnimationFrame(() => setLiveMessage(message));
+  };
   return (
-    <aside className="sidebar flex min-h-0 flex-col gap-0.5 overflow-auto border-r border-border bg-background px-3 pb-3.5">
-      <nav className="flex flex-col gap-0.5" aria-label={t('groups.tools')}>
-        <div className="sidebar-heading my-4 mb-1 px-2 text-[9px] font-medium uppercase tracking-[.08em] text-muted-foreground">
-          {t('groups.tools')}
-        </div>
-        {tools.map((tool) => (
-          <Button
-            key={tool.id}
-            variant="ghost"
-            className={sidebarItemClassName}
-            aria-current={page === tool.id ? 'page' : undefined}
-            aria-label={t(tool.nameKey)}
-            title={t(tool.nameKey)}
-            onClick={() => onNavigate(tool.id)}
-          >
-            <tool.icon data-icon="inline-start" size={17} weight="duotone" />
-            <span>{t(tool.nameKey)}</span>
+    <aside
+      id="app-sidebar"
+      className="sidebar flex min-h-0 flex-col gap-0.5 overflow-auto border-r border-border bg-background px-3 pb-3.5"
+    >
+      {managing && (
+        <div className="sticky top-0 z-10 mb-1 flex flex-none flex-col gap-2 border-b border-border bg-background py-3">
+          <div className="px-2">
+            <div className="text-xs font-semibold text-foreground">{t('sidebar.manageTitle')}</div>
+            <p
+              id="sidebar-manage-hint"
+              className="m-0 text-[10px] leading-[1.5] text-muted-foreground"
+            >
+              {t('sidebar.manageHint')}
+            </p>
+          </div>
+          <Button id="sidebar-manage-done" className="w-full text-[11px]" onClick={onExitManage}>
+            {t('sidebar.done')}
           </Button>
-        ))}
-      </nav>
+          <div className="sr-only" aria-live="polite" aria-atomic="true">
+            {liveMessage}
+          </div>
+        </div>
+      )}
+      {(managing || visibleTools.length > 0) && (
+        <nav
+          className="flex flex-col gap-0.5"
+          aria-label={managing ? t('sidebar.manageTitle') : t('groups.tools')}
+        >
+          <div className="sidebar-heading my-4 mb-1 px-2 text-[9px] font-medium uppercase tracking-[.08em] text-muted-foreground">
+            {t('groups.tools')}
+          </div>
+          {managing ? (
+            <div role="list" className="flex flex-col gap-0.5">
+              {visibleTools.map(({ tool, enabled }, index) => (
+                <SidebarManageRow
+                  key={tool.id}
+                  tool={tool}
+                  enabled={enabled}
+                  index={index}
+                  count={visibleTools.length}
+                  dragging={draggingId === tool.id}
+                  dropEdge={dropTarget?.id === tool.id ? dropTarget.edge : null}
+                  onDragStart={(event, id) => {
+                    if (
+                      event.target instanceof Element &&
+                      event.target.closest('[data-sidebar-control]')
+                    ) {
+                      event.preventDefault();
+                      return;
+                    }
+                    event.dataTransfer.effectAllowed = 'move';
+                    event.dataTransfer.setData('text/plain', id);
+                    setDraggingId(id);
+                  }}
+                  onDragOver={(event, id) => {
+                    event.preventDefault();
+                    event.dataTransfer.dropEffect = 'move';
+                    const rect = event.currentTarget.getBoundingClientRect();
+                    const edge = event.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
+                    setDropTarget((current) =>
+                      current?.id === id && current.edge === edge ? current : { id, edge },
+                    );
+                  }}
+                  onDrop={(event, id) => {
+                    event.preventDefault();
+                    const fromId = event.dataTransfer.getData('text/plain');
+                    const rect = event.currentTarget.getBoundingClientRect();
+                    const edge = event.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
+                    if (fromId)
+                      onSidebarToolsChange(moveSidebarTool(sidebarTools, fromId, id, edge));
+                    clearDrag();
+                  }}
+                  onDragEnd={clearDrag}
+                  onMove={(id, delta) => {
+                    const next = moveSidebarToolBy(sidebarTools, id, delta);
+                    if (next === sidebarTools) return;
+                    onSidebarToolsChange(next);
+                    announceMove(id, next);
+                  }}
+                  onToggle={(id) =>
+                    onSidebarToolsChange(
+                      sidebarTools.map((item) =>
+                        item.id === id ? { ...item, enabled: !item.enabled } : item,
+                      ),
+                    )
+                  }
+                />
+              ))}
+            </div>
+          ) : (
+            visibleTools.map(({ tool }) => (
+              <Button
+                key={tool.id}
+                variant="ghost"
+                className={sidebarItemClassName}
+                aria-current={page === tool.id ? 'page' : undefined}
+                aria-label={t(tool.nameKey)}
+                title={t(tool.nameKey)}
+                onClick={() => onNavigate(tool.id)}
+              >
+                <tool.icon data-icon="inline-start" size={17} weight="duotone" />
+                <span>{t(tool.nameKey)}</span>
+              </Button>
+            ))
+          )}
+        </nav>
+      )}
       <nav className="flex flex-col gap-0.5" aria-label={t('titlebar.history')}>
         <div className="sidebar-heading my-4 mb-1 px-2 text-[9px] font-medium uppercase tracking-[.08em] text-muted-foreground">
           {t('titlebar.history')}

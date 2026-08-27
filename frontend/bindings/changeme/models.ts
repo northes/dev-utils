@@ -9,6 +9,7 @@ export interface Config {
     "autoCheckUpdates": boolean;
     "language": string;
     "sidebarMode": string;
+    "sidebarTools": SidebarToolConfig[] | null;
     "themeMode": string;
     "lightTheme": string;
     "darkTheme": string;
@@ -59,4 +60,9 @@ export interface HistoryItem {
 export interface HistoryPage {
     "items": HistoryItem[] | null;
     "total": number;
+}
+
+export interface SidebarToolConfig {
+    "id": string;
+    "enabled": boolean;
 }

@@ -15,24 +15,41 @@ import (
 )
 
 type Config struct {
-	TrayMatchEnabled             bool     `json:"trayMatchEnabled"`
-	TrayMatchTools               []string `json:"trayMatchTools"`
-	URLTrayMatchMigrated         bool     `json:"urlTrayMatchMigrated"`
-	AutoOverwrite                bool     `json:"autoOverwrite"`
-	AutoCheckUpdates             bool     `json:"autoCheckUpdates"`
-	Language                     string   `json:"language"`
-	SidebarMode                  string   `json:"sidebarMode"`
-	ThemeMode                    string   `json:"themeMode"`
-	LightTheme                   string   `json:"lightTheme"`
-	DarkTheme                    string   `json:"darkTheme"`
-	DiffHighlightMode            string   `json:"diffHighlightMode"`
-	DiffClipboardTargetMode      string   `json:"diffClipboardTargetMode"`
-	CodeEditorFontSize           int      `json:"codeEditorFontSize"`
-	TimeResultOrder              []string `json:"timeResultOrder"`
-	HiddenTimeResults            []string `json:"hiddenTimeResults"`
-	JsonAutoFormatOnFill         bool     `json:"jsonAutoFormatOnFill"`
-	JsonAutoFormatOnFillMigrated bool     `json:"jsonAutoFormatOnFillMigrated"`
+	TrayMatchEnabled             bool                `json:"trayMatchEnabled"`
+	TrayMatchTools               []string            `json:"trayMatchTools"`
+	URLTrayMatchMigrated         bool                `json:"urlTrayMatchMigrated"`
+	AutoOverwrite                bool                `json:"autoOverwrite"`
+	AutoCheckUpdates             bool                `json:"autoCheckUpdates"`
+	Language                     string              `json:"language"`
+	SidebarMode                  string              `json:"sidebarMode"`
+	SidebarTools                 []SidebarToolConfig `json:"sidebarTools"`
+	ThemeMode                    string              `json:"themeMode"`
+	LightTheme                   string              `json:"lightTheme"`
+	DarkTheme                    string              `json:"darkTheme"`
+	DiffHighlightMode            string              `json:"diffHighlightMode"`
+	DiffClipboardTargetMode      string              `json:"diffClipboardTargetMode"`
+	CodeEditorFontSize           int                 `json:"codeEditorFontSize"`
+	TimeResultOrder              []string            `json:"timeResultOrder"`
+	HiddenTimeResults            []string            `json:"hiddenTimeResults"`
+	JsonAutoFormatOnFill         bool                `json:"jsonAutoFormatOnFill"`
+	JsonAutoFormatOnFillMigrated bool                `json:"jsonAutoFormatOnFillMigrated"`
 }
+
+type SidebarToolConfig struct {
+	ID      string `json:"id"`
+	Enabled bool   `json:"enabled"`
+}
+
+var defaultSidebarToolIDs = []string{"json", "time", "text", "base64", "diff", "jwt", "url"}
+
+func defaultSidebarTools() []SidebarToolConfig {
+	tools := make([]SidebarToolConfig, 0, len(defaultSidebarToolIDs))
+	for _, id := range defaultSidebarToolIDs {
+		tools = append(tools, SidebarToolConfig{ID: id, Enabled: true})
+	}
+	return tools
+}
+
 type HistoryItem struct {
 	ID        int64  `json:"id"`
 	Tool      string `json:"tool"`
@@ -65,9 +82,31 @@ type historyStored struct {
 }
 
 func defaultConfig() Config {
-	return Config{TrayMatchEnabled: true, TrayMatchTools: []string{"json", "time", "text", "base64", "diff", "jwt", "url"}, AutoOverwrite: true, AutoCheckUpdates: true, Language: "zh-CN", SidebarMode: "full", ThemeMode: "dark", LightTheme: "default-light", DarkTheme: "default-dark", DiffHighlightMode: "character", DiffClipboardTargetMode: "alternate", CodeEditorFontSize: 16, TimeResultOrder: []string{"local", "dateTime", "dateOnly", "timeOnly", "zonedIso8601", "rfc3339", "utc", "compact", "underscore", "unixSeconds", "unixMilliseconds", "unixNanoseconds"}, JsonAutoFormatOnFill: true, JsonAutoFormatOnFillMigrated: true}
+	return Config{TrayMatchEnabled: true, TrayMatchTools: []string{"json", "time", "text", "base64", "diff", "jwt", "url"}, AutoOverwrite: true, AutoCheckUpdates: true, Language: "zh-CN", SidebarMode: "full", SidebarTools: defaultSidebarTools(), ThemeMode: "dark", LightTheme: "default-light", DarkTheme: "default-dark", DiffHighlightMode: "character", DiffClipboardTargetMode: "alternate", CodeEditorFontSize: 16, TimeResultOrder: []string{"local", "dateTime", "dateOnly", "timeOnly", "zonedIso8601", "rfc3339", "utc", "compact", "underscore", "unixSeconds", "unixMilliseconds", "unixNanoseconds"}, JsonAutoFormatOnFill: true, JsonAutoFormatOnFillMigrated: true}
 }
 func normalizeConfig(cfg Config) Config {
+	validSidebarTool := make(map[string]bool, len(defaultSidebarToolIDs))
+	for _, id := range defaultSidebarToolIDs {
+		validSidebarTool[id] = true
+	}
+	if cfg.SidebarTools == nil {
+		cfg.SidebarTools = defaultSidebarTools()
+	} else {
+		tools := make([]SidebarToolConfig, 0, len(defaultSidebarToolIDs))
+		seen := make(map[string]bool, len(defaultSidebarToolIDs))
+		for _, tool := range cfg.SidebarTools {
+			if validSidebarTool[tool.ID] && !seen[tool.ID] {
+				tools = append(tools, tool)
+				seen[tool.ID] = true
+			}
+		}
+		for _, id := range defaultSidebarToolIDs {
+			if !seen[id] {
+				tools = append(tools, SidebarToolConfig{ID: id, Enabled: true})
+			}
+		}
+		cfg.SidebarTools = tools
+	}
 	trayTools := []string{"json", "time", "text", "base64", "diff", "jwt", "url"}
 	validTrayTool := make(map[string]bool, len(trayTools))
 	for _, id := range trayTools {
@@ -225,20 +264,57 @@ func (s *ConfigService) setOnChange(callback func(Config)) {
 	s.onChange = callback
 	s.mu.Unlock()
 }
-func (s *ConfigService) Save(cfg Config) {
-	cfg = normalizeConfig(cfg)
+
+func (s *ConfigService) Save(cfg Config) error {
 	s.mu.Lock()
+	cfg = normalizeConfig(cfg)
+	b, err := json.Marshal(cfg)
+	if err != nil {
+		s.mu.Unlock()
+		return err
+	}
+	if err := writeConfigAtomically(s.path, b); err != nil {
+		s.mu.Unlock()
+		return err
+	}
 	s.cfg = cfg
-	path := s.path
 	onChange := s.onChange
 	s.mu.Unlock()
-	if b, err := json.Marshal(cfg); err == nil {
-		_ = os.MkdirAll(filepath.Dir(path), 0o755)
-		_ = os.WriteFile(path, b, 0o600)
-	}
 	if onChange != nil {
 		onChange(cfg)
 	}
+	return nil
+}
+
+func writeConfigAtomically(path string, data []byte) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".devutils-config-*")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	defer func() {
+		_ = tmp.Close()
+		_ = os.Remove(tmpPath)
+	}()
+	if err := tmp.Chmod(0o600); err != nil {
+		return err
+	}
+	if _, err := tmp.Write(data); err != nil {
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		return err
+	}
+	return nil
 }
 func (s *ConfigService) writeIndexLocked() {
 	b, err := json.Marshal(s.history)
@@ -251,11 +327,7 @@ func (s *ConfigService) writeIndexLocked() {
 func (s *ConfigService) GetHistory() []HistoryItem {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	items := make([]HistoryItem, len(s.history))
-	for i, v := range s.history {
-		items[i] = v.Item
-	}
-	return items
+	return s.enabledHistoryItemsLocked()
 }
 
 type HistoryPage struct {
@@ -272,7 +344,8 @@ func (s *ConfigService) GetHistoryPage(offset int, limit int) (HistoryPage, erro
 	if limit < 1 || limit > 100 {
 		limit = 20
 	}
-	total := len(s.history)
+	items := s.enabledHistoryItemsLocked()
+	total := len(items)
 	if offset >= total {
 		return HistoryPage{Items: []HistoryItem{}, Total: total}, nil
 	}
@@ -280,17 +353,32 @@ func (s *ConfigService) GetHistoryPage(offset int, limit int) (HistoryPage, erro
 	if end > total {
 		end = total
 	}
-	items := make([]HistoryItem, end-offset)
-	for i, v := range s.history[offset:end] {
-		items[i] = v.Item
-	}
-	return HistoryPage{Items: items, Total: total}, nil
+	return HistoryPage{Items: items[offset:end], Total: total}, nil
 }
 
 type HistoryFilter struct {
 	Tool string `json:"tool"`
 	From int64  `json:"from"`
 	To   int64  `json:"to"`
+}
+
+func (s *ConfigService) sidebarToolEnabledLocked(toolID string) bool {
+	for _, tool := range s.cfg.SidebarTools {
+		if tool.ID == toolID {
+			return tool.Enabled
+		}
+	}
+	return false
+}
+
+func (s *ConfigService) enabledHistoryItemsLocked() []HistoryItem {
+	items := make([]HistoryItem, 0, len(s.history))
+	for _, entry := range s.history {
+		if s.sidebarToolEnabledLocked(entry.Item.Tool) {
+			items = append(items, entry.Item)
+		}
+	}
+	return items
 }
 
 func (s *ConfigService) QueryHistory(offset int, limit int, filter HistoryFilter) (HistoryPage, error) {
@@ -302,13 +390,14 @@ func (s *ConfigService) QueryHistory(offset int, limit int, filter HistoryFilter
 	if limit < 1 || limit > 100 {
 		limit = 20
 	}
-	filtered := make([]HistoryItem, 0, len(s.history))
-	for _, v := range s.history {
-		if filter.Tool != "" && v.Item.Tool != filter.Tool {
+	items := s.enabledHistoryItemsLocked()
+	filtered := make([]HistoryItem, 0, len(items))
+	for _, item := range items {
+		if filter.Tool != "" && item.Tool != filter.Tool {
 			continue
 		}
 		if filter.From != 0 || filter.To != 0 {
-			t, err := time.Parse(time.RFC3339Nano, v.Item.At)
+			t, err := time.Parse(time.RFC3339Nano, item.At)
 			if err != nil {
 				continue
 			}
@@ -320,7 +409,7 @@ func (s *ConfigService) QueryHistory(offset int, limit int, filter HistoryFilter
 				continue
 			}
 		}
-		filtered = append(filtered, v.Item)
+		filtered = append(filtered, item)
 	}
 	total := len(filtered)
 	if offset >= total {
@@ -357,6 +446,9 @@ func (s *ConfigService) GetHistoryContent(id int64) (HistoryContent, error) {
 	defer s.mu.Unlock()
 	for _, entry := range s.history {
 		if entry.Item.ID == id {
+			if !s.sidebarToolEnabledLocked(entry.Item.Tool) {
+				return HistoryContent{}, errors.New("history entry not found")
+			}
 			return readGzipJSON(entry.File)
 		}
 	}

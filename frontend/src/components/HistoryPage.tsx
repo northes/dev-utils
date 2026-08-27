@@ -134,6 +134,16 @@ export function ClearHistoryDialog({
 }
 
 const pageSize = 50;
+function startOfDayMs(date: Date) {
+  const start = new Date(date);
+  start.setHours(0, 0, 0, 0);
+  return start.getTime();
+}
+function endOfDayMs(date: Date) {
+  const end = new Date(date);
+  end.setHours(23, 59, 59, 999);
+  return end.getTime();
+}
 const historyTools: Array<{ id: ToolId; nameKey: string }> = (
   ['json', 'time', 'text', 'base64', 'diff', 'jwt', 'url'] as const
 ).map((id) => ({ id, nameKey: `tools.${id}.name` }));
@@ -142,18 +152,23 @@ export default function HistoryPage({
   openHistory,
   clear,
   active,
+  enabledToolIds,
+  historyRevision,
 }: {
   openHistory: (item: HistoryItem) => void;
   clear: () => void;
   active: boolean;
+  enabledToolIds: ToolId[];
+  historyRevision: number;
 }) {
   const { t, i18n } = useTranslation();
   const [confirmClear, setConfirmClear] = useState(false);
   const [rangeOpen, setRangeOpen] = useState(false);
   const [tool, setTool] = useState<'all' | ToolId>('all');
+  const visibleHistoryTools = historyTools.filter((item) => enabledToolIds.includes(item.id));
   const toolOptions = [
     { value: 'all', label: t('history.allTools') },
-    ...historyTools.map((h) => ({ value: h.id, label: t(h.nameKey) })),
+    ...visibleHistoryTools.map((h) => ({ value: h.id, label: t(h.nameKey) })),
   ];
   const [range, setRange] = useState<DateRange | undefined>(undefined);
   const [page, setPage] = useState(1);
@@ -163,6 +178,7 @@ export default function HistoryPage({
   const [error, setError] = useState(false);
   const [reload, setReload] = useState(0);
   const prevActive = useRef(active);
+  const enabledToolSet = useMemo(() => new Set(enabledToolIds), [enabledToolIds]);
   useEffect(() => {
     if (active && !prevActive.current) setReload((r) => r + 1);
     if (!active) {
@@ -172,15 +188,24 @@ export default function HistoryPage({
     prevActive.current = active;
   }, [active]);
   useEffect(() => {
+    if (tool !== 'all' && !enabledToolSet.has(tool)) {
+      setTool('all');
+      setPage(1);
+    }
+  }, [enabledToolSet, tool]);
+  useEffect(() => {
     let cancelled = false;
+    const from = range?.from ? startOfDayMs(range.from) : 0;
+    const to = range?.to ? endOfDayMs(range.to) : 0;
+    const selectedTool = tool === 'all' ? '' : tool;
     setLoading(true);
-    const from = range?.from ? range.from.getTime() : 0;
-    const to = range?.to ? range.to.getTime() + 59999 : 0;
-    QueryHistory((page - 1) * pageSize, pageSize, { tool: tool === 'all' ? '' : tool, from, to })
+    QueryHistory((page - 1) * pageSize, pageSize, { tool: selectedTool, from, to })
       .then((result) => {
         if (cancelled) return;
         setItems(
-          (result.items ?? []).map(toHistoryItem).filter((x): x is HistoryItem => x !== null),
+          (result.items ?? [])
+            .map(toHistoryItem)
+            .filter((item): item is HistoryItem => item !== null),
         );
         setTotal(result.total);
         setError(false);
@@ -194,7 +219,7 @@ export default function HistoryPage({
     return () => {
       cancelled = true;
     };
-  }, [tool, range, page, reload]);
+  }, [tool, range, page, reload, historyRevision]);
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const clearAll = () => {
     clear();
@@ -333,7 +358,7 @@ export default function HistoryPage({
                   </SelectTrigger>
                   <SelectContent alignItemWithTrigger={false}>
                     <SelectItem value="all">{t('history.allTools')}</SelectItem>
-                    {historyTools.map((h) => (
+                    {visibleHistoryTools.map((h) => (
                       <SelectItem key={h.id} value={h.id}>
                         {t(h.nameKey)}
                       </SelectItem>
@@ -392,7 +417,10 @@ export default function HistoryPage({
               columns={columns}
               data={loading ? [] : items}
               emptyState={emptyState}
-              onRowClick={(item) => void openHistory(item)}
+              onRowClick={(item) => {
+                if (!enabledToolSet.has(item.tool)) return;
+                void openHistory(item);
+              }}
             />
           )}
         </ToolLayoutContent>
