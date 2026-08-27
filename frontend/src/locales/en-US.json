@@ -202,6 +202,36 @@
         "templateArrayValue": "The template path resolves to an array"
       }
     },
+    "convert": {
+      "title": "Convert",
+      "format": "Format",
+      "output": "Output",
+      "actions": "Convert output actions",
+      "export": "Export",
+      "exported": "Exported {{name}}",
+      "exportFailed": "Export failed",
+      "errorTitle": "Output unavailable",
+      "formats": {
+        "xml": "XML",
+        "toml": "TOML",
+        "yaml": "YAML",
+        "csv": "CSV"
+      },
+      "errors": {
+        "invalidJson": "Input is not valid JSON",
+        "jsonComments": "Conversion does not accept JSON with comments",
+        "unsafeInteger": "An integer is outside the safe range and cannot be converted losslessly",
+        "unsupportedFormat": "This target format is not supported",
+        "unsupportedType": "A value type cannot be converted",
+        "unsupportedNumber": "A number is not finite and cannot be converted",
+        "tomlRoot": "TOML only supports a root object, not arrays or scalars",
+        "tomlNull": "TOML cannot represent null",
+        "xmlInvalidName": "Key is not a valid XML element name: {{key}}",
+        "xmlInvalidCharacter": "XML cannot represent this character: {{codePoint}}",
+        "csvMixedRows": "CSV cannot represent an array that mixes objects, arrays, and scalars",
+        "failed": "Conversion could not be completed"
+      }
+    },
     "invalidJsonDesc": "Content is not valid JSON, cannot continue",
     "subtitle": "Format, minify, validate and extract paths",
     "lines": "lines",

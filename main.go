@@ -91,6 +91,7 @@ func main() {
 	cfgService := NewConfigService()
 	logService := NewLogService()
 	updateService := NewUpdateService(currentVersion)
+	fileService := NewFileService()
 	dockService := dock.New()
 	isQuitting := false
 	app := application.New(application.Options{
@@ -103,6 +104,7 @@ func main() {
 			application.NewService(cfgService),
 			application.NewService(logService),
 			application.NewService(updateService),
+			application.NewService(fileService),
 			application.NewService(dockService),
 		},
 		Mac: application.MacOptions{

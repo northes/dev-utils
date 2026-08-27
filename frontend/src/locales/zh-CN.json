@@ -204,6 +204,36 @@
         "templateArrayValue": "模板路径匹配到了数组"
       }
     },
+    "convert": {
+      "title": "转换",
+      "format": "格式",
+      "output": "输出",
+      "actions": "转换输出操作",
+      "export": "导出",
+      "exported": "已导出 {{name}}",
+      "exportFailed": "导出失败",
+      "errorTitle": "无法生成输出",
+      "formats": {
+        "xml": "XML",
+        "toml": "TOML",
+        "yaml": "YAML",
+        "csv": "CSV"
+      },
+      "errors": {
+        "invalidJson": "输入不是有效 JSON",
+        "jsonComments": "转换不接受带注释的 JSON",
+        "unsafeInteger": "整数超出安全范围，无法无损转换",
+        "unsupportedFormat": "不支持该目标格式",
+        "unsupportedType": "存在无法转换的值类型",
+        "unsupportedNumber": "数字不是有限值，无法转换",
+        "tomlRoot": "TOML 只支持根级对象，不能是数组或基本类型",
+        "tomlNull": "TOML 无法表示 null",
+        "xmlInvalidName": "键名无法作为 XML 元素名: {{key}}",
+        "xmlInvalidCharacter": "XML 无法表示该字符: {{codePoint}}",
+        "csvMixedRows": "CSV 无法表示对象、数组与基本类型混排的数组",
+        "failed": "无法完成转换"
+      }
+    },
     "invalidJsonDesc": "内容不是有效的 JSON，无法继续",
     "subtitle": "格式化、压缩、校验与路径提取",
     "detected": "JSON 状态",
