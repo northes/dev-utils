@@ -19,6 +19,7 @@ import {
   ToolLayoutFooter,
   ToolLayoutHeader,
   ToolLayoutToolbar,
+  ToolLayoutToolbarGroup,
   type PendingAction,
 } from './shared';
 import '../styles/tools/editor.css';
@@ -606,14 +607,16 @@ export default function DiffTool({
             </>
           }
           right={
-            <Label className="flex h-8 flex-none items-center gap-2 border border-transparent bg-transparent py-0 pr-1.5 pl-3 text-[11px] text-muted-foreground">
-              <span>{t('diffTool.collapseUnchanged')}</span>
-              <Switch
-                checked={collapseUnchanged}
-                onCheckedChange={() => setCollapseUnchanged((value) => !value)}
-                size="sm"
-              />
-            </Label>
+            <ToolLayoutToolbarGroup>
+              <Label className="flex h-8 flex-none items-center gap-2 border border-transparent bg-transparent py-0 pr-1.5 text-[11px] text-muted-foreground">
+                <span>{t('diffTool.collapseUnchanged')}</span>
+                <Switch
+                  checked={collapseUnchanged}
+                  onCheckedChange={() => setCollapseUnchanged((value) => !value)}
+                  size="sm"
+                />
+              </Label>
+            </ToolLayoutToolbarGroup>
           }
         />
         <ToolLayoutContent>

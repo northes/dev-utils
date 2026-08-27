@@ -334,6 +334,20 @@ export function ToolLayoutToolbar({
   );
 }
 
+export function ToolLayoutToolbarGroup({
+  children,
+  className = '',
+}: {
+  children?: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={`flex min-w-0 flex-wrap items-end gap-5${className ? ` ${className}` : ''}`}>
+      {children}
+    </div>
+  );
+}
+
 export function ToolLayoutContent({
   children,
   className = '',

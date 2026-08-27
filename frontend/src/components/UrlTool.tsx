@@ -15,6 +15,7 @@ import {
   ToolLayoutFooter,
   ToolLayoutHeader,
   ToolLayoutToolbar,
+  ToolLayoutToolbarGroup,
   ToolLayout,
   useFocusOnActivate,
   type PendingAction,
@@ -172,14 +173,16 @@ export default function UrlTool({
         <ToolLayoutHeader title={t('urlTool.title')} />
         <ToolLayoutToolbar
           right={
-            <Label className="flex h-8 flex-none items-center gap-2 border border-transparent bg-transparent py-0 pr-1.5 pl-3 text-[11px] text-muted-foreground">
-              <span>{t('urlTool.editResults')}</span>
-              <Switch
-                checked={editResults}
-                onCheckedChange={(checked) => setEditResults(checked === true)}
-                size="sm"
-              />
-            </Label>
+            <ToolLayoutToolbarGroup>
+              <Label className="flex h-8 flex-none items-center gap-2 border border-transparent bg-transparent py-0 pr-1.5 text-[11px] text-muted-foreground">
+                <span>{t('urlTool.editResults')}</span>
+                <Switch
+                  checked={editResults}
+                  onCheckedChange={(checked) => setEditResults(checked === true)}
+                  size="sm"
+                />
+              </Label>
+            </ToolLayoutToolbarGroup>
           }
         />
         <ToolLayoutContent>

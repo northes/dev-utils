@@ -45,6 +45,7 @@ import {
   ToolLayoutFooter,
   ToolLayoutHeader,
   ToolLayoutToolbar,
+  ToolLayoutToolbarGroup,
   ToolLayout,
   useFocusOnActivate,
   type PendingAction,
@@ -845,7 +846,7 @@ export default function JsonTool({
     />
   );
   const jsonGridClass = convertMode
-    ? 'grid-cols-2 grid-rows-[minmax(0,1fr)] gap-3 @max-[959px]/json-page:grid-cols-1 @max-[959px]/json-page:grid-rows-[minmax(0,1fr)_minmax(0,1fr)] @min-[960px]/json-page:grid-cols-2 @min-[960px]/json-page:grid-rows-[minmax(0,1fr)]'
+    ? 'grid-cols-2 grid-rows-[minmax(0,1fr)] gap-3'
     : workflowMode
       ? 'grid-cols-2 grid-rows-[minmax(0,1fr)] gap-3'
       : schema
@@ -1034,20 +1035,20 @@ export default function JsonTool({
             </Label>
           }
           right={
-            <div className="json-toolbar-modes flex shrink-0 flex-nowrap items-end gap-2 @max-[480px]/json-page:min-w-0 @max-[480px]/json-page:flex-wrap">
-              <Label className="flex h-8 flex-none items-center gap-2 border border-transparent bg-transparent py-0 pr-1.5 pl-3 text-[11px] text-muted-foreground">
+            <ToolLayoutToolbarGroup>
+              <Label className="flex h-8 flex-none items-center gap-2 border border-transparent bg-transparent py-0 pr-1.5 text-[11px] text-muted-foreground">
                 <span>{t('jsonTool.schema')}</span>
                 <Switch checked={schema} onCheckedChange={toggleSchema} size="sm" />
               </Label>
-              <Label className="flex h-8 flex-none items-center gap-2 border border-transparent bg-transparent py-0 pr-1.5 pl-3 text-[11px] text-muted-foreground">
+              <Label className="flex h-8 flex-none items-center gap-2 border border-transparent bg-transparent py-0 pr-1.5 text-[11px] text-muted-foreground">
                 <span>{t('jsonTool.workflow.title')}</span>
                 <Switch checked={workflowMode} onCheckedChange={toggleWorkflow} size="sm" />
               </Label>
-              <Label className="flex h-8 flex-none items-center gap-2 border border-transparent bg-transparent py-0 pr-1.5 pl-3 text-[11px] text-muted-foreground">
+              <Label className="flex h-8 flex-none items-center gap-2 border border-transparent bg-transparent py-0 pr-1.5 text-[11px] text-muted-foreground">
                 <span>{t('jsonTool.convert.title')}</span>
                 <Switch checked={convertMode} onCheckedChange={toggleConvert} size="sm" />
               </Label>
-            </div>
+            </ToolLayoutToolbarGroup>
           }
         />
         <ToolLayoutContent>
