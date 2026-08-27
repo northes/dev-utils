@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { Fragment, useMemo, useState, type MouseEvent } from 'react';
 import { flexRender, getCoreRowModel, useReactTable, type ColumnDef } from '@tanstack/react-table';
 import { CaretDown, CaretRight } from '@phosphor-icons/react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
@@ -23,16 +23,45 @@ function scalar(value: unknown, t: Props['t']) {
   return <span className="text-muted-foreground">{t('jsonTool.tablePreviewUnsupported')}</span>;
 }
 
-function Value({ value, t, depth = 0 }: Props & { depth?: number }): ReactNode {
+function stopToggle(event: MouseEvent) {
+  event.stopPropagation();
+}
+
+function ValueCell({ value, t, depth = 0 }: Props & { depth?: number }) {
+  const collapsible = isContainer(value);
   const [expanded, setExpanded] = useState(false);
-  if (!isContainer(value)) return scalar(value, t);
+  const toggle = (event: MouseEvent) => {
+    stopToggle(event);
+    setExpanded((current) => !current);
+  };
+  return (
+    <TableCell
+      className={collapsible ? 'json-table-collapsible' : undefined}
+      onClick={collapsible ? toggle : undefined}
+    >
+      {collapsible ? (
+        <NestedValue value={value} t={t} depth={depth} expanded={expanded} onToggle={toggle} />
+      ) : (
+        scalar(value, t)
+      )}
+    </TableCell>
+  );
+}
+
+function NestedValue({
+  value,
+  t,
+  depth = 0,
+  expanded,
+  onToggle,
+}: Props & { depth?: number; expanded: boolean; onToggle: (event: MouseEvent) => void }) {
   const isArray = Array.isArray(value);
   const entries = isArray
     ? value.map((item, i) => [String(i), item] as const)
-    : Object.entries(value);
+    : Object.entries(value as Record<string, unknown>);
   const label = isArray
-    ? `[${value.length} ${t('jsonTool.tablePreviewItems')}]`
-    : `{${Object.keys(value).length} ${t('jsonTool.tablePreviewKeys')}}`;
+    ? `[${(value as unknown[]).length} ${t('jsonTool.tablePreviewItems')}]`
+    : `{${Object.keys(value as Record<string, unknown>).length} ${t('jsonTool.tablePreviewKeys')}}`;
   return (
     <div className="json-table-nested">
       <Button
@@ -44,15 +73,15 @@ function Value({ value, t, depth = 0 }: Props & { depth?: number }): ReactNode {
           expanded ? t('jsonTool.tablePreviewCollapse') : t('jsonTool.tablePreviewExpand')
         }
         title={expanded ? t('jsonTool.tablePreviewCollapse') : t('jsonTool.tablePreviewExpand')}
-        onClick={() => setExpanded((current) => !current)}
+        onClick={onToggle}
       >
         {expanded ? <CaretDown /> : <CaretRight />}
       </Button>
       <span className="json-table-container-label">{label}</span>
       {expanded && entries.length > 0 && (
-        <div className="json-table-child">
+        <div className="json-table-child" onClick={stopToggle}>
           {isArray && isObjectArray(value) ? (
-            <ObjectArray value={value as Record<string, unknown>[]} t={t} />
+            <ObjectArray value={value as Record<string, unknown>[]} t={t} stickyHeader={false} />
           ) : (
             <KeyValue value={value} t={t} depth={depth + 1} />
           )}
@@ -72,9 +101,7 @@ function KeyValue({ value, t, depth = 0 }: Props & { depth?: number }) {
         {entries.map(([key, item]) => (
           <TableRow key={key}>
             <TableHead className="json-table-key">{key}</TableHead>
-            <TableCell>
-              <Value value={item} t={t} depth={depth} />
-            </TableCell>
+            <ValueCell value={item} t={t} depth={depth} />
           </TableRow>
         ))}
       </TableBody>
@@ -82,7 +109,11 @@ function KeyValue({ value, t, depth = 0 }: Props & { depth?: number }) {
   );
 }
 
-function ObjectArray({ value, t }: Props & { value: Record<string, unknown>[] }) {
+function ObjectArray({
+  value,
+  t,
+  stickyHeader = true,
+}: Props & { value: Record<string, unknown>[]; stickyHeader?: boolean }) {
   const keys = useMemo(() => [...new Set(value.flatMap((row) => Object.keys(row)))], [value]);
   const columns = useMemo<ColumnDef<Record<string, unknown>>[]>(
     () => [
@@ -97,7 +128,7 @@ function ObjectArray({ value, t }: Props & { value: Record<string, unknown>[] })
       ...keys.map((key) => ({
         accessorKey: key,
         header: key,
-        cell: ({ row }) => <Value value={row.original[key]} t={t} />,
+        cell: ({ row }) => <ValueCell value={row.original[key]} t={t} />,
       })),
     ],
     [keys, t],
@@ -106,7 +137,7 @@ function ObjectArray({ value, t }: Props & { value: Record<string, unknown>[] })
   return (
     <div className="json-table-scroll">
       <Table containerClassName="overflow-x-visible" className="json-table-data">
-        <TableHeader className="sticky top-0 z-10 bg-card">
+        <TableHeader className={stickyHeader ? 'sticky top-0 z-10 bg-card' : 'bg-card'}>
           {table.getHeaderGroups().map((group) => (
             <TableRow key={group.id}>
               {group.headers.map((header) => (
@@ -120,11 +151,19 @@ function ObjectArray({ value, t }: Props & { value: Record<string, unknown>[] })
         <TableBody>
           {table.getRowModel().rows.map((row) => (
             <TableRow key={row.id}>
-              {row.getVisibleCells().map((cell) => (
-                <TableCell key={cell.id}>
-                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                </TableCell>
-              ))}
+              {row
+                .getVisibleCells()
+                .map((cell) =>
+                  cell.column.id === '__rowIndex' ? (
+                    <TableCell key={cell.id}>
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </TableCell>
+                  ) : (
+                    <Fragment key={cell.id}>
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </Fragment>
+                  ),
+                )}
             </TableRow>
           ))}
         </TableBody>

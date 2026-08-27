@@ -90,6 +90,9 @@
   height: 30px;
   padding: 5px 9px;
 }
+.json-table-collapsible {
+  cursor: pointer;
+}
 .json-table-nested {
   min-width: 120px;
   color: var(--muted-foreground);
