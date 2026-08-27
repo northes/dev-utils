@@ -25,12 +25,8 @@ import { codeFolding, syntaxTree } from '@codemirror/language';
 import { EditorView, keymap } from '@codemirror/view';
 import { acceptCompletion } from '@codemirror/autocomplete';
 import { SaveText } from '../../bindings/changeme/fileservice';
-import {
-  convertJson,
-  JSON_CONVERT_FORMATS,
-  JsonConverterError,
-  type JsonConvertFormat,
-} from '../lib/json-converter';
+import { JSON_CONVERT_FORMATS, type JsonConvertFormat } from '../lib/json-converter';
+import { useDebouncedJsonConversion } from '../hooks/useDebouncedJsonConversion';
 import { quietEditorTheme } from './codeMirrorTheme';
 import {
   Copy,
@@ -271,6 +267,10 @@ const CONVERT_EXTENSIONS: Record<JsonConvertFormat, string> = {
   csv: 'csv',
 };
 
+function isConvertFormat(value: string | undefined): value is JsonConvertFormat {
+  return value === 'yaml' || value === 'xml' || value === 'toml' || value === 'csv';
+}
+
 type JsonPageMode = 'plain' | 'schema' | 'workflow' | 'convert';
 function modeHostHidden(visible: boolean) {
   return visible ? '' : ' is-hidden absolute inset-0 invisible pointer-events-none';
@@ -289,6 +289,8 @@ function tryAutoFormat(src: string) {
     return src;
   }
 }
+const json5Language = json5();
+
 function JsonEditorPane({
   label,
   value,
@@ -349,6 +351,7 @@ function JsonEditorPane({
       }),
     [],
   );
+  const extensions = useMemo(() => [json5Language, foldExt, pasteExt], [foldExt, pasteExt]);
   return (
     <div className="json-pane flex min-h-0 min-w-0 flex-1 flex-col gap-2">
       <span className="json-pane-label flex-none font-mono text-[10px] font-medium leading-none tracking-[.04em] text-muted-foreground uppercase">
@@ -385,7 +388,7 @@ function JsonEditorPane({
           theme={theme}
           editable={!readOnly}
           placeholder={placeholder}
-          extensions={[json5(), foldExt, pasteExt]}
+          extensions={extensions}
         />
         {tablePreview && (
           <div
@@ -414,7 +417,14 @@ export default function JsonTool({
   theme: string;
   autoFormatOnFill: boolean;
   onAutoFormatOnFillChange: (value: boolean) => void;
-  record: (tool: ToolId, action: string, detail: string, input: string, output?: string) => void;
+  record: (
+    tool: ToolId,
+    action: string,
+    detail: string,
+    input: string,
+    output?: string,
+    meta?: { mode?: string; mediaType?: string; name?: string; bytes?: number },
+  ) => void;
   pending: PendingAction | null;
   clearPending: () => void;
 }) {
@@ -444,20 +454,14 @@ export default function JsonTool({
   autoFormatRef.current = autoFormatOnFill;
   useFocusOnActivate(active, () => views.current.get('input')?.focus());
   const cmTheme = quietEditorTheme;
-  const jsonValue = useMemo(() => {
-    try {
-      return parseJsonLoose(input);
-    } catch {
-      return null;
-    }
-  }, [input]);
   const inputPreview = useMemo(() => {
     try {
-      return { valid: true, value: parseJsonLoose(input) };
+      return { valid: true as const, value: parseJsonLoose(input) };
     } catch {
-      return { valid: false, value: null };
+      return { valid: false as const, value: null };
     }
   }, [input]);
+  const jsonValue = inputPreview.valid ? inputPreview.value : null;
   const resultPreview = useMemo(() => {
     try {
       return { valid: true, value: parseJsonLoose(result) };
@@ -565,7 +569,7 @@ export default function JsonTool({
       setCommentDialog({ mode: minify ? 'minify' : 'format', pane });
     else runTransform(pane, minify, false);
   };
-  const changeInput = (value: string) => setInput(value);
+  const changeInput = setInput;
   const toggleSchema = () => setMode((current) => (current === 'schema' ? 'plain' : 'schema'));
   const toggleWorkflow = () =>
     setMode((current) => (current === 'workflow' ? 'plain' : 'workflow'));
@@ -578,53 +582,71 @@ export default function JsonTool({
       })),
     [t],
   );
+  const conversion = useDebouncedJsonConversion(convertMode, input, convertFormat);
+  const [displayedConvert, setDisplayedConvert] = useState({
+    text: '',
+    format: convertFormat,
+  });
+  const convertReady =
+    conversion.status === 'ok' && conversion.input === input && conversion.format === convertFormat;
+  useEffect(() => {
+    if (conversion.status !== 'ok') return;
+    if (conversion.input !== input || conversion.format !== convertFormat) return;
+    const next = { text: conversion.output, format: conversion.format };
+    setDisplayedConvert((current) =>
+      current.text === next.text && current.format === next.format ? current : next,
+    );
+  }, [conversion, convertFormat, input]);
   const convertLang = useMemo((): Extension[] => {
-    if (convertFormat === 'xml') return [xml(), EditorView.lineWrapping];
-    if (convertFormat === 'yaml') return [yaml(), EditorView.lineWrapping];
+    if (displayedConvert.format === 'xml') return [xml(), EditorView.lineWrapping];
+    if (displayedConvert.format === 'yaml') return [yaml(), EditorView.lineWrapping];
     return [EditorView.lineWrapping];
-  }, [convertFormat]);
-  const convertResult = useMemo(() => {
-    if (!convertMode) return { kind: 'idle' as const };
-    if (!input.trim()) return { kind: 'empty' as const };
-    try {
-      return { kind: 'ok' as const, text: convertJson(input, convertFormat) };
-    } catch (error) {
-      if (error instanceof JsonConverterError)
-        return {
-          kind: 'error' as const,
-          message: t(`jsonTool.convert.errors.${error.code}`, error.params),
-        };
-      return { kind: 'error' as const, message: t('jsonTool.convert.errors.failed') };
-    }
-  }, [convertMode, convertFormat, input, t]);
-  const convertOutput = convertResult.kind === 'ok' ? convertResult.text : '';
+  }, [displayedConvert.format]);
+  const schemaResultExt = useMemo(() => [json5Language, foldExt], [foldExt]);
+  const convertErrorMessage =
+    conversion.status === 'error'
+      ? t(
+          `jsonTool.convert.errors.${conversion.error.code === 'workerError' ? 'failed' : conversion.error.code}`,
+          conversion.error.params,
+        )
+      : '';
   const copyConvert = async () => {
-    if (convertResult.kind !== 'ok') return;
+    if (
+      conversion.status !== 'ok' ||
+      conversion.input !== input ||
+      conversion.format !== convertFormat
+    )
+      return;
+    const text = conversion.output;
     try {
       if (!navigator.clipboard) throw new Error('clipboard');
-      await navigator.clipboard.writeText(convertResult.text);
+      await navigator.clipboard.writeText(text);
     } catch {
       toast.add({ title: t('jsonTool.workflow.clipboardWriteFailed'), type: 'error' });
       return;
     }
-    const bytes = new TextEncoder().encode(convertResult.text).length;
+    const bytes = new TextEncoder().encode(text).length;
     toast.add({ title: t('toast.copied', { value: `${bytes} ${t('jsonTool.bytes')}` }) });
-    record(
-      'json',
-      t('jsonTool.copied'),
-      `${bytes} ${t('jsonTool.bytes')}`,
-      input,
-      convertResult.text,
-    );
+    record('json', t('jsonTool.copied'), `${bytes} ${t('jsonTool.bytes')}`, input, text, {
+      mode: convertFormat,
+    });
   };
   const exportConvert = async () => {
-    if (convertResult.kind !== 'ok') return;
+    if (
+      conversion.status !== 'ok' ||
+      conversion.input !== input ||
+      conversion.format !== convertFormat
+    )
+      return;
+    const text = conversion.output;
     const filename = `converted.${CONVERT_EXTENSIONS[convertFormat]}`;
     try {
-      const path = await SaveText(convertResult.text, filename);
+      const path = await SaveText(text, filename);
       if (!path) return;
       toast.add({ title: t('jsonTool.convert.exported', { name: filename }) });
-      record('json', t('jsonTool.convert.export'), filename, input, convertResult.text);
+      record('json', t('jsonTool.convert.export'), filename, input, text, {
+        mode: convertFormat,
+      });
     } catch {
       toast.add({ title: t('jsonTool.convert.exportFailed'), type: 'error' });
     }
@@ -844,7 +866,7 @@ export default function JsonTool({
           label: t('jsonTool.copy'),
           icon: Copy,
           variant: 'secondary',
-          disabled: convertResult.kind !== 'ok',
+          disabled: !convertReady,
           onPress: () => void copyConvert(),
         },
         {
@@ -852,7 +874,7 @@ export default function JsonTool({
           label: t('jsonTool.convert.export'),
           icon: DownloadSimple,
           variant: 'primary',
-          disabled: convertResult.kind !== 'ok',
+          disabled: !convertReady,
           onPress: () => void exportConvert(),
         },
       ]}
@@ -930,6 +952,13 @@ export default function JsonTool({
     if (pending.action === 'restore') {
       changeInput(pending.input);
       if (pending.output !== undefined) setResult(pending.output);
+      if (isConvertFormat(pending.mode)) {
+        setConvertFormat(pending.mode);
+        setMode('convert');
+        if (pending.output !== undefined) {
+          setDisplayedConvert({ text: pending.output, format: pending.mode });
+        }
+      }
       return;
     }
     if (pending.action === 'validate') {
@@ -976,24 +1005,24 @@ export default function JsonTool({
     }
   }, [schema, input, path]);
   useEffect(() => {
-    for (const v of views.current.values()) v.requestMeasure();
-    const timer = window.setTimeout(() => {
-      for (const v of views.current.values()) v.requestMeasure();
-      const view = views.current.get(schema ? 'path' : 'input');
-      if (!view) return;
-      view.focus();
-      if (schema) {
-        const end = view.state.doc.length;
-        view.dispatch({ selection: { anchor: end } });
-      }
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [mode, schema]);
+    const frame = window.requestAnimationFrame(() => {
+      const keys =
+        mode === 'schema'
+          ? ['input', 'path', 'result']
+          : mode === 'convert'
+            ? ['input', 'convert']
+            : ['input'];
+      for (const key of keys) views.current.get(key)?.requestMeasure();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [mode]);
   return (
     <Reveal index={0} fill active={active}>
       <ToolLayout className="json-page [container-name:json-page] [container-type:inline-size]">
         <ToolLayoutHeader title={t('jsonTool.title')} />
         <ToolLayoutToolbar
+          className="json-toolbar @max-[700px]/json-page:flex-col @max-[700px]/json-page:items-stretch"
+          rightClassName="@max-[700px]/json-page:ml-0"
           left={
             <Label className="flex h-8 flex-none items-center gap-2 border border-transparent bg-transparent py-0 pr-1.5 text-[11px] text-muted-foreground">
               <Checkbox
@@ -1004,7 +1033,7 @@ export default function JsonTool({
             </Label>
           }
           right={
-            <>
+            <div className="json-toolbar-modes flex shrink-0 flex-nowrap items-end gap-2 @max-[480px]/json-page:min-w-0 @max-[480px]/json-page:flex-wrap">
               <Label className="flex h-8 flex-none items-center gap-2 border border-transparent bg-transparent py-0 pr-1.5 pl-3 text-[11px] text-muted-foreground">
                 <span>{t('jsonTool.schema')}</span>
                 <Switch checked={schema} onCheckedChange={toggleSchema} size="sm" />
@@ -1017,7 +1046,7 @@ export default function JsonTool({
                 <span>{t('jsonTool.convert.title')}</span>
                 <Switch checked={convertMode} onCheckedChange={toggleConvert} size="sm" />
               </Label>
-            </>
+            </div>
           }
         />
         <ToolLayoutContent>
@@ -1047,41 +1076,37 @@ export default function JsonTool({
                 aria-hidden={!convertMode}
                 {...(!convertMode ? { inert: true } : {})}
               >
-                <div className="flex h-7 min-h-7 flex-none items-center">
-                  <Select
-                    items={convertFormats}
-                    value={convertFormat}
-                    onValueChange={(value) => {
-                      if (
-                        value === 'xml' ||
-                        value === 'toml' ||
-                        value === 'yaml' ||
-                        value === 'csv'
-                      )
-                        setConvertFormat(value);
-                    }}
+                <span className="json-pane-label flex-none font-mono text-[10px] font-medium leading-none tracking-[.04em] text-muted-foreground uppercase">
+                  {t('jsonTool.convert.format')}
+                </span>
+                <Select
+                  items={convertFormats}
+                  value={convertFormat}
+                  onValueChange={(value) => {
+                    if (value === 'xml' || value === 'toml' || value === 'yaml' || value === 'csv')
+                      setConvertFormat(value);
+                  }}
+                >
+                  <SelectTrigger
+                    size="sm"
+                    className="h-7 w-full min-w-0 text-[11px]"
+                    aria-label={t('jsonTool.convert.format')}
                   >
-                    <SelectTrigger
-                      size="sm"
-                      className="h-7 w-full min-w-0 text-[11px]"
-                      aria-label={t('jsonTool.convert.format')}
-                    >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {convertFormats.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {convertFormats.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <div className="json-pane-editor relative flex min-h-0 min-w-0 flex-1">
                   <CodeMirror
                     className="json-cm"
                     height="100%"
-                    value={convertOutput}
+                    value={displayedConvert.text}
                     editable={false}
                     theme={cmTheme}
                     onCreateEditor={(v) => {
@@ -1090,11 +1115,11 @@ export default function JsonTool({
                     }}
                     extensions={convertLang}
                   />
-                  {convertResult.kind === 'error' ? (
+                  {conversion.status === 'error' ? (
                     <div className="absolute inset-0 z-10 flex min-h-0">
                       <JsonErrorPanel
                         title={t('jsonTool.convert.errorTitle')}
-                        description={convertResult.message}
+                        description={convertErrorMessage}
                       />
                     </div>
                   ) : null}
@@ -1158,7 +1183,7 @@ export default function JsonTool({
                           v.contentDOM.setAttribute('aria-label', t('jsonTool.result'));
                           views.current.set('result', v);
                         }}
-                        extensions={[json5(), foldExt]}
+                        extensions={schemaResultExt}
                       />
                       {pathError ? (
                         <div className="absolute inset-0 z-10 flex min-h-0">

@@ -306,13 +306,27 @@ export function ToolLayoutHeader({ title }: { title: string }) {
   );
 }
 
-export function ToolLayoutToolbar({ left, right }: { left?: ReactNode; right?: ReactNode }) {
+export function ToolLayoutToolbar({
+  left,
+  right,
+  className = '',
+  rightClassName = '',
+}: {
+  left?: ReactNode;
+  right?: ReactNode;
+  className?: string;
+  rightClassName?: string;
+}) {
   if (!left && !right) return null;
   return (
-    <div className="tool-layout-toolbar row-start-2 flex min-w-0 flex-wrap items-end gap-4 px-0.5 pb-3 max-[700px]:flex-col max-[700px]:items-stretch">
+    <div
+      className={`tool-layout-toolbar row-start-2 flex min-w-0 flex-wrap items-end gap-4 px-0.5 pb-3 max-[700px]:flex-col max-[700px]:items-stretch${className ? ` ${className}` : ''}`}
+    >
       {left ? <div className="flex min-w-0 flex-wrap items-end gap-4">{left}</div> : null}
       {right ? (
-        <div className="ml-auto flex min-w-0 flex-wrap items-end gap-2 max-[700px]:ml-0">
+        <div
+          className={`ml-auto flex min-w-0 flex-wrap items-end gap-2 max-[700px]:ml-0${rightClassName ? ` ${rightClassName}` : ''}`}
+        >
           {right}
         </div>
       ) : null}

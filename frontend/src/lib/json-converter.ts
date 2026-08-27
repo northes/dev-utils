@@ -48,8 +48,15 @@ function finiteNumber(value: number): string {
  * 只在 JSON 词法层扫描数字和注释。这样字符串里的数字不会被当成数字，
  * 且安全整数检查一定发生在 JSON.parse 之前。
  */
-const JSON_NUMBER = /-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/;
+const JSON_NUMBER = /-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/y;
 const SAFE_INTEGER_TEXT = '9007199254740991';
+
+function jsonNumberAt(source: string, index: number): string | undefined {
+  JSON_NUMBER.lastIndex = index;
+  const match = JSON_NUMBER.exec(source);
+  JSON_NUMBER.lastIndex = 0;
+  return match?.[0];
+}
 
 function allZeros(value: string): boolean {
   return /^0*$/.test(value);
@@ -132,10 +139,10 @@ function inspectJsonSource(source: string): void {
     }
 
     if (char === '-' || /\d/.test(char)) {
-      const match = source.slice(index).match(JSON_NUMBER);
-      if (match && isNumberBoundary(source[index + match[0].length])) {
-        if (isUnsafeIntegerLiteral(match[0])) convertFail('unsafeInteger');
-        index += match[0].length - 1;
+      const number = jsonNumberAt(source, index);
+      if (number && isNumberBoundary(source[index + number.length])) {
+        if (isUnsafeIntegerLiteral(number)) convertFail('unsafeInteger');
+        index += number.length - 1;
       }
     }
   }
