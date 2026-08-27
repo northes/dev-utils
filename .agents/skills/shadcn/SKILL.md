@@ -19,21 +19,6 @@ A framework for building ui, components and design systems. Components are added
 
 The JSON above contains the project config and installed components. Use `npx shadcn@latest docs <component>` to get documentation and example URLs for any component.
 
-## 本项目约束
-
-- 项目配置位于 `frontend/components.json`，当前使用 Tailwind v4、`base-nova` 和 `@phosphor-icons/react`；导入别名使用 `@/`。执行 CLI 前先在 `frontend/` 目录读取当前配置，不要依据默认模板猜测。
-- 本项目的 shadcn 源码基于 `@base-ui/react`。使用 Base UI 的 `render` 组合方式和实际生成的 props，不要把 Radix 的 `asChild`、事件签名或 primitive API 带入本项目。
-- UI 组件是 `frontend/src/components/ui/` 中已提交的源码，不是黑盒 npm 包；允许按项目需求修改源码，但新增前先用 CLI 搜索并检查已安装组件，不要手写平行组件。
-- `Button` 使用 `onClick` 和 `disabled`；`Switch` 使用 `checked` 和 `onCheckedChange`；`Select` 使用受控 `value` 和 `onValueChange`，配合与 `SelectItem` 一致的 `items`；`Toggle` 使用 `pressed` 和 `onPressedChange`。
-- 项目内部语义 variant 映射为 shadcn variant：`primary`→`default`、`secondary`→`outline`、`tertiary`→`ghost`、`danger`→`destructive`。不要把内部名称直接传给 shadcn `Button`。
-- 图标统一从 `@phosphor-icons/react` 引入，默认使用 `weight="duotone"`；状态选中等明确语义可以使用 `fill`。字体使用系统默认栈，不在 CSS 引入 `frontend/public/` 中未使用的 Inter TTF。
-- 项目颜色必须消费 shadcn 语义 token；亮暗主题通过根节点主题属性和现有 token 级联实现，不在组件或 CodeMirror 中写主题颜色。
-- 样式入口是 `frontend/src/index.css`，主题变量在 `frontend/src/styles/globals.css`；保持系统字体栈，不引入未使用的 Inter 字体，`body` 的 `user-select: none` 约定不能被局部样式随意覆盖。
-- 工具页遵循 `layout-guidance` 的扁平结构，不用带边框、圆角和独立背景的卡片包裹编辑区；需要分隔时使用既有 Separator 或 1px 语义边线。
-- 破坏性操作使用项目现有 `AlertDialog` 组合，根节点受控传入 `open`/`onOpenChange`，取消使用 `AlertDialogCancel`，确认使用 `AlertDialogAction`。确认按钮使用 `destructive` 语义，不绕过组件默认的可访问性和键盘行为。
-- 动效使用 `tw-animate-css` 提供的 `animate-in/out`、`fade-*`、`zoom-*`、`slide-*` 类；不新增 framer-motion。
-- shadcn 组件的安装、检索、文档查看和更新遵循本 skill 的 CLI 流程；本项目不使用 Context7 查询 shadcn 组件 API，也不手工抓取 GitHub/raw 源码。
-
 ## Principles
 
 1. **Use existing components first.** Use `npx shadcn@latest search` to check registries before writing custom UI. Check community registries too.
@@ -45,7 +30,7 @@ The JSON above contains the project config and installed components. Use `npx sh
 
 These rules are **always enforced**. Each links to a file with Incorrect/Correct code pairs.
 
-### Styling & Tailwind → [styling.md](rules/styling.md)
+### Styling & Tailwind → [styling.md](./rules/styling.md)
 
 - **`className` for layout, not styling.** Never override component colors or typography.
 - **No `space-x-*` or `space-y-*`.** Use `flex` with `gap-*`. For vertical stacks, `flex flex-col gap-*`.
@@ -55,7 +40,7 @@ These rules are **always enforced**. Each links to a file with Incorrect/Correct
 - **Use `cn()` for conditional classes.** Don't write manual template literal ternaries.
 - **No manual `z-index` on overlay components.** Dialog, Sheet, Popover, etc. handle their own stacking.
 
-### Forms & Inputs → [forms.md](rules/forms.md)
+### Forms & Inputs → [forms.md](./rules/forms.md)
 
 - **Forms use `FieldGroup` + `Field`.** Never use raw `div` with `space-y-*` or `grid gap-*` for form layout.
 - **`InputGroup` uses `InputGroupInput`/`InputGroupTextarea`.** Never raw `Input`/`Textarea` inside `InputGroup`.
@@ -64,17 +49,17 @@ These rules are **always enforced**. Each links to a file with Incorrect/Correct
 - **`FieldSet` + `FieldLegend` for grouping related checkboxes/radios.** Don't use a `div` with a heading.
 - **Field validation uses `data-invalid` + `aria-invalid`.** `data-invalid` on `Field`, `aria-invalid` on the control. For disabled: `data-disabled` on `Field`, `disabled` on the control.
 
-### Component Structure → [composition.md](rules/composition.md)
+### Component Structure → [composition.md](./rules/composition.md)
 
 - **Items always inside their Group.** `SelectItem` → `SelectGroup`. `DropdownMenuItem` → `DropdownMenuGroup`. `CommandItem` → `CommandGroup`.
-- **Use `asChild` (radix) or `render` (base) for custom triggers.** Check `base` field from `npx shadcn@latest info`. → [base-vs-radix.md](rules/base-vs-radix.md)
+- **Use `asChild` (radix) or `render` (base) for custom triggers.** Check `base` field from `npx shadcn@latest info`. → [base-vs-radix.md](./rules/base-vs-radix.md)
 - **Dialog, Sheet, and Drawer always need a Title.** `DialogTitle`, `SheetTitle`, `DrawerTitle` required for accessibility. Use `className="sr-only"` if visually hidden.
 - **Use full Card composition.** `CardHeader`/`CardTitle`/`CardDescription`/`CardContent`/`CardFooter`. Don't dump everything in `CardContent`.
 - **Button has no `isPending`/`isLoading`.** Compose with `Spinner` + `data-icon` + `disabled`.
 - **`TabsTrigger` must be inside `TabsList`.** Never render triggers directly in `Tabs`.
 - **`Avatar` always needs `AvatarFallback`.** For when the image fails to load.
 
-### Use Components, Not Custom Markup → [composition.md](rules/composition.md)
+### Use Components, Not Custom Markup → [composition.md](./rules/composition.md)
 
 - **Use existing components before custom markup.** Check if a component exists before writing a styled `div`.
 - **Callouts use `Alert`.** Don't build custom styled divs.
@@ -86,13 +71,13 @@ These rules are **always enforced**. Each links to a file with Incorrect/Correct
 - **Use `Skeleton`** for loading placeholders. No custom `animate-pulse` divs.
 - **Use `Badge`** instead of custom styled spans.
 
-### Icons → [icons.md](rules/icons.md)
+### Icons → [icons.md](./rules/icons.md)
 
 - **Icons in `Button` use `data-icon`.** `data-icon="inline-start"` or `data-icon="inline-end"` on the icon.
 - **No sizing classes on icons inside components.** Components handle icon sizing via CSS. No `size-4` or `w-4 h-4`.
 - **Pass icons as objects, not string keys.** `icon={CheckIcon}`, not a string lookup.
 
-### Chat & Messaging → [chat.md](rules/chat.md)
+### Chat & Messaging → [chat.md](./rules/chat.md)
 
 - **Chat UI composes the chat primitives.** Conversations use `MessageScroller`, rows use `Message`, surfaces use `Bubble`. Never hand-rolled bubble `div`s or a raw scroll container.
 - **`MessageScroller` owns scroll behavior.** Streaming follow, anchoring, and jump-to-latest (`MessageScrollerButton`) are built in. Don't write a `useStickToBottom`/`ResizeObserver` hook.
@@ -177,7 +162,7 @@ The injected project context contains these key fields:
 - **`packageManager`** → use this for any non-shadcn dependency installs (e.g. `pnpm add date-fns` vs `npm install date-fns`).
 - **`preset`** → resolved preset code and values for the current project. Use `npx shadcn@latest preset resolve --json` when you only need preset information.
 
-See [cli.md — `info` command](cli.md) for the full field reference.
+See [cli.md — `info` command](./cli.md) for the full field reference.
 
 ## Component Docs, Examples, and Usage
 
@@ -281,12 +266,12 @@ npx shadcn@latest view owner/repo/item
 
 ## Detailed References
 
-- [rules/forms.md](rules/forms.md) — FieldGroup, Field, InputGroup, ToggleGroup, FieldSet, validation states
-- [rules/composition.md](rules/composition.md) — Groups, overlays, Card, Tabs, Avatar, Alert, Empty, Toast, Separator, Skeleton, Badge, Button loading
-- [rules/chat.md](rules/chat.md) — MessageScroller, Message, Bubble, Attachment, Marker; streaming, anchoring, jump-to-latest
-- [rules/icons.md](rules/icons.md) — data-icon, icon sizing, passing icons as objects
-- [rules/styling.md](rules/styling.md) — Semantic colors, variants, className, spacing, size, truncate, dark mode, cn(), z-index
-- [rules/base-vs-radix.md](rules/base-vs-radix.md) — asChild vs render, Select, ToggleGroup, Slider, Accordion
-- [cli.md](cli.md) — Commands, flags, presets, templates
-- [registry.md](registry.md) — Authoring source registries, `include`, item definitions, dependencies, GitHub registry rules
-- [customization.md](customization.md) — Theming, CSS variables, extending components
+- [rules/forms.md](./rules/forms.md) — FieldGroup, Field, InputGroup, ToggleGroup, FieldSet, validation states
+- [rules/composition.md](./rules/composition.md) — Groups, overlays, Card, Tabs, Avatar, Alert, Empty, Toast, Separator, Skeleton, Badge, Button loading
+- [rules/chat.md](./rules/chat.md) — MessageScroller, Message, Bubble, Attachment, Marker; streaming, anchoring, jump-to-latest
+- [rules/icons.md](./rules/icons.md) — data-icon, icon sizing, passing icons as objects
+- [rules/styling.md](./rules/styling.md) — Semantic colors, variants, className, spacing, size, truncate, dark mode, cn(), z-index
+- [rules/base-vs-radix.md](./rules/base-vs-radix.md) — asChild vs render, Select, ToggleGroup, Slider, Accordion
+- [cli.md](./cli.md) — Commands, flags, presets, templates
+- [registry.md](./registry.md) — Authoring source registries, `include`, item definitions, dependencies, GitHub registry rules
+- [customization.md](./customization.md) — Theming, CSS variables, extending components
