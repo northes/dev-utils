@@ -1631,6 +1631,9 @@ function CommandPalette({
   );
 }
 
+const sidebarItemClassName =
+  'sidebar-item flex h-auto min-h-0 w-full items-center justify-start gap-2.5 rounded-lg px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground aria-[current=page]:bg-primary aria-[current=page]:text-primary-foreground aria-[current=page]:hover:bg-primary aria-[current=page]:hover:text-primary-foreground dark:aria-[current=page]:hover:bg-primary [&_svg]:size-[17px]';
+
 function Sidebar({
   page,
   onNavigate,
@@ -1651,7 +1654,7 @@ function Sidebar({
           <Button
             key={tool.id}
             variant="ghost"
-            className={`sidebar-item flex h-auto min-h-0 w-full items-center justify-start gap-2.5 rounded-lg px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground [&_svg]:size-[17px]${page === tool.id ? ' bg-primary text-primary-foreground' : ''}`}
+            className={sidebarItemClassName}
             aria-current={page === tool.id ? 'page' : undefined}
             aria-label={t(tool.nameKey)}
             title={t(tool.nameKey)}
@@ -1668,7 +1671,7 @@ function Sidebar({
         </div>
         <Button
           variant="ghost"
-          className={`sidebar-item flex h-auto min-h-0 w-full items-center justify-start gap-2.5 rounded-lg px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground [&_svg]:size-[17px]${page === 'history' ? ' bg-primary text-primary-foreground' : ''}`}
+          className={sidebarItemClassName}
           aria-current={page === 'history' ? 'page' : undefined}
           aria-label={t('titlebar.history')}
           title={t('titlebar.history')}
@@ -1684,7 +1687,7 @@ function Sidebar({
         </div>
         <Button
           variant="ghost"
-          className={`sidebar-item flex h-auto min-h-0 w-full items-center justify-start gap-2.5 rounded-lg px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground [&_svg]:size-[17px]${page === 'settings' ? ' bg-primary text-primary-foreground' : ''}`}
+          className={sidebarItemClassName}
           aria-current={page === 'settings' ? 'page' : undefined}
           aria-label={t('titlebar.settings')}
           title={t('titlebar.settings')}
