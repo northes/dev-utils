@@ -8,7 +8,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import type { DragEvent, SetStateAction } from 'react';
+import type { SetStateAction } from 'react';
 import { flushSync } from 'react-dom';
 import {
   AlertDialog,
@@ -33,6 +33,23 @@ import {
 } from './components/ui/command';
 import { Clipboard, Events } from '@wailsio/runtime';
 import { useTranslation } from 'react-i18next';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import {
   BracketsCurly,
   CaretLeft as ArrowLeft,
@@ -793,22 +810,6 @@ function availablePage(page: Page, sidebarTools: SidebarToolConfig[]): Page {
   if (sidebarTools.some((item) => item.id === page && item.enabled)) return page;
   const firstEnabled = sidebarTools.find((item) => item.enabled && isToolId(item.id));
   return firstEnabled ? (firstEnabled.id as ToolId) : 'settings';
-}
-function moveSidebarTool(
-  list: SidebarToolConfig[],
-  fromId: string,
-  toId: string,
-  edge: 'before' | 'after',
-): SidebarToolConfig[] {
-  if (fromId === toId) return list;
-  const from = list.findIndex((item) => item.id === fromId);
-  if (from < 0) return list;
-  const next = [...list];
-  const [item] = next.splice(from, 1);
-  const to = next.findIndex((entry) => entry.id === toId);
-  if (to < 0) return list;
-  next.splice(edge === 'after' ? to + 1 : to, 0, item);
-  return next;
 }
 function moveSidebarToolBy(
   list: SidebarToolConfig[],
@@ -1865,12 +1866,6 @@ function SidebarManageRow({
   enabled,
   index,
   count,
-  dragging,
-  dropEdge,
-  onDragStart,
-  onDragOver,
-  onDrop,
-  onDragEnd,
   onMove,
   onToggle,
 }: {
@@ -1878,41 +1873,43 @@ function SidebarManageRow({
   enabled: boolean;
   index: number;
   count: number;
-  dragging: boolean;
-  dropEdge: 'before' | 'after' | null;
-  onDragStart: (event: DragEvent<HTMLDivElement>, id: ToolId) => void;
-  onDragOver: (event: DragEvent<HTMLDivElement>, id: ToolId) => void;
-  onDrop: (event: DragEvent<HTMLDivElement>, id: ToolId) => void;
-  onDragEnd: () => void;
   onMove: (id: ToolId, delta: number) => void;
   onToggle: (id: ToolId) => void;
 }) {
   const { t } = useTranslation();
   const name = t(tool.nameKey);
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: tool.id });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 1 : undefined,
+  };
   return (
     <div
+      ref={setNodeRef}
+      style={style}
       role="listitem"
-      draggable
       aria-posinset={index + 1}
       aria-setsize={count}
-      aria-grabbed={dragging}
-      onDragStart={(event) => onDragStart(event, tool.id)}
-      onDragOver={(event) => onDragOver(event, tool.id)}
-      onDrop={(event) => onDrop(event, tool.id)}
-      onDragEnd={onDragEnd}
-      className={`flex select-none items-center gap-0.5 rounded-lg border-y-2 ${
-        dropEdge === 'before'
-          ? 'border-t-primary border-b-transparent'
-          : dropEdge === 'after'
-            ? 'border-b-primary border-t-transparent'
-            : 'border-transparent'
-      } ${dragging ? 'bg-muted' : ''} ${enabled ? '' : 'opacity-40'}`}
+      aria-grabbed={isDragging}
+      className={`flex select-none items-center gap-0.5 rounded-lg border-y-2 border-transparent ${isDragging ? 'bg-muted' : ''} ${enabled ? '' : 'opacity-40'}`}
     >
       <Button
+        ref={setActivatorNodeRef}
         data-sidebar-drag-handle=""
         variant="ghost"
         size="icon-sm"
         className="flex-none cursor-grab active:cursor-grabbing"
+        {...attributes}
+        {...listeners}
         aria-label={t('sidebar.dragTool', { name })}
         aria-keyshortcuts="ArrowUp ArrowDown"
         aria-describedby="sidebar-manage-hint"
@@ -1923,6 +1920,8 @@ function SidebarManageRow({
           } else if (event.key === 'ArrowDown') {
             event.preventDefault();
             onMove(tool.id, 1);
+          } else {
+            listeners?.onKeyDown?.(event);
           }
         }}
       >
@@ -1970,20 +1969,16 @@ function Sidebar({
   onExitManage: () => void;
 }) {
   const { t } = useTranslation();
-  const [draggingId, setDraggingId] = useState<ToolId | null>(null);
   const [liveMessage, setLiveMessage] = useState('');
-  const [dropTarget, setDropTarget] = useState<{ id: ToolId; edge: 'before' | 'after' } | null>(
-    null,
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
   const orderedTools = sidebarTools.flatMap((item) => {
     const tool = tools.find((entry) => entry.id === item.id);
     return tool ? [{ tool, enabled: item.enabled }] : [];
   });
   const visibleTools = managing ? orderedTools : orderedTools.filter((item) => item.enabled);
-  const clearDrag = () => {
-    setDraggingId(null);
-    setDropTarget(null);
-  };
   const announceMove = (id: ToolId, next: SidebarToolConfig[]) => {
     const tool = tools.find((entry) => entry.id === id);
     const position = next.findIndex((item) => item.id === id) + 1;
@@ -2030,61 +2025,47 @@ function Sidebar({
           </div>
           {managing ? (
             <div role="list" className="flex flex-col gap-0.5">
-              {visibleTools.map(({ tool, enabled }, index) => (
-                <SidebarManageRow
-                  key={tool.id}
-                  tool={tool}
-                  enabled={enabled}
-                  index={index}
-                  count={visibleTools.length}
-                  dragging={draggingId === tool.id}
-                  dropEdge={dropTarget?.id === tool.id ? dropTarget.edge : null}
-                  onDragStart={(event, id) => {
-                    if (
-                      event.target instanceof Element &&
-                      event.target.closest('[data-sidebar-control]')
-                    ) {
-                      event.preventDefault();
-                      return;
-                    }
-                    event.dataTransfer.effectAllowed = 'move';
-                    event.dataTransfer.setData('text/plain', id);
-                    setDraggingId(id);
-                  }}
-                  onDragOver={(event, id) => {
-                    event.preventDefault();
-                    event.dataTransfer.dropEffect = 'move';
-                    const rect = event.currentTarget.getBoundingClientRect();
-                    const edge = event.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
-                    setDropTarget((current) =>
-                      current?.id === id && current.edge === edge ? current : { id, edge },
-                    );
-                  }}
-                  onDrop={(event, id) => {
-                    event.preventDefault();
-                    const fromId = event.dataTransfer.getData('text/plain');
-                    const rect = event.currentTarget.getBoundingClientRect();
-                    const edge = event.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
-                    if (fromId)
-                      onSidebarToolsChange(moveSidebarTool(sidebarTools, fromId, id, edge));
-                    clearDrag();
-                  }}
-                  onDragEnd={clearDrag}
-                  onMove={(id, delta) => {
-                    const next = moveSidebarToolBy(sidebarTools, id, delta);
-                    if (next === sidebarTools) return;
-                    onSidebarToolsChange(next);
-                    announceMove(id, next);
-                  }}
-                  onToggle={(id) =>
-                    onSidebarToolsChange(
-                      sidebarTools.map((item) =>
-                        item.id === id ? { ...item, enabled: !item.enabled } : item,
-                      ),
-                    )
-                  }
-                />
-              ))}
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={({ active, over }: DragEndEvent) => {
+                  if (!over || active.id === over.id) return;
+                  const from = sidebarTools.findIndex((item) => item.id === String(active.id));
+                  const to = sidebarTools.findIndex((item) => item.id === String(over.id));
+                  if (from < 0 || to < 0) return;
+                  const next = arrayMove(sidebarTools, from, to);
+                  onSidebarToolsChange(next);
+                  announceMove(String(active.id) as ToolId, next);
+                }}
+              >
+                <SortableContext
+                  items={visibleTools.map(({ tool }) => tool.id)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  {visibleTools.map(({ tool, enabled }, index) => (
+                    <SidebarManageRow
+                      key={tool.id}
+                      tool={tool}
+                      enabled={enabled}
+                      index={index}
+                      count={visibleTools.length}
+                      onMove={(id, delta) => {
+                        const next = moveSidebarToolBy(sidebarTools, id, delta);
+                        if (next === sidebarTools) return;
+                        onSidebarToolsChange(next);
+                        announceMove(id, next);
+                      }}
+                      onToggle={(id) =>
+                        onSidebarToolsChange(
+                          sidebarTools.map((item) =>
+                            item.id === id ? { ...item, enabled: !item.enabled } : item,
+                          ),
+                        )
+                      }
+                    />
+                  ))}
+                </SortableContext>
+              </DndContext>
             </div>
           ) : (
             visibleTools.map(({ tool }) => (
