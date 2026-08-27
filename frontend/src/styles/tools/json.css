@@ -168,6 +168,11 @@
   min-height: 0;
   padding: 5px 9px;
 }
+.json-workflow-path-cm .cm-editor,
+.json-workflow-path-cm .cm-scroller,
+.json-workflow-path-cm .cm-content {
+  font-size: calc(var(--code-editor-font-size) - 2px) !important;
+}
 .json-workflow-path-cm .cm-line {
   padding: 0;
 }
