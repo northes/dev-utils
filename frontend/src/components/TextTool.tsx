@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
+import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from './ui/popover';
 import { Button } from './ui/button';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { useTranslation } from 'react-i18next';
-import { CaretDown, CaretUp, Copy, Trash } from '@phosphor-icons/react';
+import { Copy, Trash } from '@phosphor-icons/react';
 import CodeMirror from '@uiw/react-codemirror';
 import { EditorView } from '@codemirror/view';
 import { quietEditorTheme } from './codeMirrorTheme';
@@ -21,14 +20,43 @@ import {
 import { toast } from './ui/toast';
 import '../styles/tools/editor.css';
 
-const countDetails = (characters: string[]) =>
-  Array.from(
-    characters.reduce(
-      (counts, character) => counts.set(character, (counts.get(character) ?? 0) + 1),
-      new Map<string, number>(),
-    ),
-  ).sort(([left], [right]) => left.localeCompare(right, 'zh-CN'));
-const words = (value: string) => value.match(/[A-Za-z]+(?:['’-][A-Za-z]+)*/g) ?? [];
+const CJK_CHAR = /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/u;
+const CJK_WORD = /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]+/gu;
+const ENGLISH_WORD = /[A-Za-z]+(?:['’-][A-Za-z]+)*/g;
+const SENTENCE_END = /[.!?。！？…]+/u;
+
+const countSentences = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed) return 0;
+  return trimmed.split(SENTENCE_END).filter((part) => part.trim()).length;
+};
+
+const countParagraphs = (value: string) => {
+  if (!value.trim()) return 0;
+  return value.split(/\r?\n(?:[ \t]*\r?\n)+/).filter((part) => part.trim()).length;
+};
+
+const analyzeText = (value: string) => {
+  const chars = [...value];
+  const chineseWords = value.match(CJK_WORD)?.length ?? 0;
+  const englishWords = value.match(ENGLISH_WORD)?.length ?? 0;
+  return {
+    characters: chars.length,
+    chinese: chars.filter((x) => CJK_CHAR.test(x)).length,
+    english: chars.filter((x) => /[A-Za-z]/.test(x)).length,
+    digits: chars.filter((x) => /\d/.test(x)).length,
+    punctuation: chars.filter((x) => /\p{P}/u.test(x)).length,
+    charactersNoSpaces: chars.filter((x) => !/\s/.test(x)).length,
+    words: chineseWords + englishWords,
+    chineseWords,
+    englishWords,
+    sentences: countSentences(value),
+    paragraphs: countParagraphs(value),
+    lines: value ? value.split(/\r?\n/).length : 0,
+    bytes: new TextEncoder().encode(value).length,
+  };
+};
+
 type CaseMode = 'upper' | 'lower' | 'lineUpper' | 'lineLower' | 'wordUpper' | 'wordLower';
 const caseModes: CaseMode[] = [
   'upper',
@@ -38,7 +66,6 @@ const caseModes: CaseMode[] = [
   'wordUpper',
   'wordLower',
 ];
-type SortDescriptor = { column: 'entry' | 'count'; direction: 'ascending' | 'descending' };
 const transformCase = (value: string, mode: CaseMode) =>
   mode === 'upper'
     ? value.toUpperCase()
@@ -57,6 +84,58 @@ const transformCase = (value: string, mode: CaseMode) =>
                 (word) => word[0].toUpperCase() + word.slice(1).toLowerCase(),
               )
             : value.replace(/[A-Za-z]+/g, (word) => word[0].toLowerCase() + word.slice(1));
+
+function StatLink({
+  label,
+  count,
+  items,
+}: {
+  label: string;
+  count: number;
+  items: Array<{ key: string; label: string; count: number }>;
+}) {
+  const { t } = useTranslation();
+  return (
+    <Popover>
+      <PopoverTrigger
+        render={
+          <Button
+            variant="link"
+            size="sm"
+            className="h-auto min-h-0 min-w-0 flex-none px-0 py-0"
+            aria-label={t('textTool.showDetails', { label })}
+          />
+        }
+      >
+        <span>{label}</span>
+        <span className="font-mono tabular-nums">{count.toLocaleString()}</span>
+      </PopoverTrigger>
+      <PopoverContent align="start" side="top" className="w-64">
+        <PopoverTitle>{label}</PopoverTitle>
+        <div className="flex flex-col gap-1.5">
+          {items.map((item) => (
+            <div key={item.key} className="flex items-baseline justify-between gap-4">
+              <span className="text-muted-foreground">{item.label}</span>
+              <span className="font-mono tabular-nums text-foreground">
+                {item.count.toLocaleString()}
+              </span>
+            </div>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function StatPlain({ label, count }: { label: string; count: number }) {
+  return (
+    <span className="inline-flex min-w-0 flex-none items-center gap-1 text-[0.8rem]">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="font-mono tabular-nums text-foreground">{count.toLocaleString()}</span>
+    </span>
+  );
+}
+
 export default function TextTool({
   active,
   record,
@@ -74,28 +153,7 @@ export default function TextTool({
   const consumed = useRef<PendingAction | null>(null);
   const inputView = useRef<EditorView | null>(null);
   useFocusOnActivate(active, () => inputView.current?.focus());
-  const [sort, setSort] = useState<SortDescriptor>({ column: 'count', direction: 'descending' });
-  const stats = useMemo(() => {
-    const chars = [...value],
-      wordList = words(value),
-      details: Array<[string, string[]]> = [
-        ['chinese', chars.filter((x) => /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/u.test(x))],
-        ['english', chars.filter((x) => /[A-Za-z]/.test(x))],
-        ['digits', chars.filter((x) => /\d/.test(x))],
-        ['words', wordList],
-        ['punctuation', chars.filter((x) => /[\p{P}]/u.test(x))],
-      ];
-    return [
-      ...details.map(([key, items]) => ({
-        key,
-        count: items.length,
-        details: countDetails(items),
-        detail: items.length > 0,
-      })),
-      { key: 'lines', count: value ? value.split(/\r?\n/).length : 0, details: [], detail: false },
-      { key: 'bytes', count: new TextEncoder().encode(value).length, details: [], detail: false },
-    ];
-  }, [value]);
+  const stats = useMemo(() => analyzeText(value), [value]);
   const apply = (action: string, fn: (input: string) => string) => {
     const next = fn(value);
     setValue(next);
@@ -108,23 +166,6 @@ export default function TextTool({
     });
     record('text', t('textTool.copy'), `${[...value].length} ${t('textTool.characters')}`, value);
   };
-  const copyDetail = (entry: string, count: number) => {
-    const copied = `${entry}: ${count}`;
-    navigator.clipboard?.writeText(copied).catch(() => {});
-    toast.add({ title: t('toast.copied', { value: copied }) });
-    record('text', t('textTool.copied'), copied, value);
-  };
-  const sorted = (details: Array<[string, number]>) =>
-    [...details].sort(([a, ac], [b, bc]) => {
-      const order = sort.column === 'count' ? ac - bc : a.localeCompare(b, 'zh-CN');
-      return sort.direction === 'descending' ? -order : order;
-    });
-  const toggle = (column: 'entry' | 'count') =>
-    setSort((current) =>
-      current.column === column
-        ? { column, direction: current.direction === 'ascending' ? 'descending' : 'ascending' }
-        : { column, direction: 'ascending' },
-    );
   useEffect(() => {
     if (!pending || pending.tool !== 'text' || consumed.current === pending) return;
     consumed.current = pending;
@@ -184,106 +225,42 @@ export default function TextTool({
               }}
             />
           </div>
-          <div className="grid grid-cols-7 gap-px overflow-hidden rounded-lg border border-border bg-border">
-            {stats.map((stat) => (
-              <div className="flex flex-col gap-1.5 bg-card p-3.5 text-foreground" key={stat.key}>
-                {stat.detail ? (
-                  <Popover>
-                    <PopoverTrigger
-                      render={
-                        <Button
-                          variant="ghost"
-                          className="flex w-full flex-col items-start gap-1.5 p-0 text-left hover:bg-transparent"
-                          aria-label={t('textTool.showDetails', {
-                            label: t(`textTool.${stat.key}`),
-                          })}
-                        />
-                      }
-                    >
-                      <span className="font-mono text-[9px] font-normal capitalize text-muted-foreground">
-                        {t(`textTool.${stat.key}`)}
-                      </span>
-                      <strong className="font-mono text-base leading-none font-medium">
-                        {stat.count.toLocaleString()}
-                      </strong>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[320px] overflow-hidden p-0">
-                      <div className="max-h-[min(420px,calc(100vh-32px))] overflow-auto [scrollbar-gutter:auto]">
-                        <Table>
-                          <TableHeader className="sticky top-0 bg-card">
-                            <TableRow>
-                              <TableHead className="h-8 px-2.5 text-left">
-                                <Button
-                                  variant="ghost"
-                                  className="h-8 w-full justify-start gap-1 rounded-none px-0 text-[9px] uppercase"
-                                  onClick={() => toggle('entry')}
-                                >
-                                  {t('textTool.detailEntry')}
-                                  {sort.column === 'entry' &&
-                                    (sort.direction === 'ascending' ? (
-                                      <CaretUp data-icon="inline-end" size={10} weight="duotone" />
-                                    ) : (
-                                      <CaretDown
-                                        data-icon="inline-end"
-                                        size={10}
-                                        weight="duotone"
-                                      />
-                                    ))}
-                                </Button>
-                              </TableHead>
-                              <TableHead className="h-8 px-2.5 text-right">
-                                <Button
-                                  variant="ghost"
-                                  className="h-8 w-full justify-end gap-1 rounded-none px-0 text-[9px] uppercase"
-                                  onClick={() => toggle('count')}
-                                >
-                                  {t('textTool.detailCount')}
-                                  {sort.column === 'count' &&
-                                    (sort.direction === 'ascending' ? (
-                                      <CaretUp data-icon="inline-end" size={10} weight="duotone" />
-                                    ) : (
-                                      <CaretDown
-                                        data-icon="inline-end"
-                                        size={10}
-                                        weight="duotone"
-                                      />
-                                    ))}
-                                </Button>
-                              </TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {sorted(stat.details).map(([entry, count]) => (
-                              <TableRow
-                                key={entry}
-                                onClick={() => copyDetail(entry, count)}
-                                className="cursor-pointer hover:bg-accent"
-                              >
-                                <TableCell className="h-8 px-2.5 py-1 font-mono text-[11px]">
-                                  {entry}
-                                </TableCell>
-                                <TableCell className="h-8 px-2.5 py-1 text-right font-mono text-[10px] text-muted-foreground">
-                                  {count.toLocaleString()}
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    </PopoverContent>
-                  </Popover>
-                ) : (
-                  <>
-                    <span className="font-mono text-[9px] font-normal capitalize text-muted-foreground">
-                      {t(`textTool.${stat.key}`)}
-                    </span>
-                    <strong className="font-mono text-base leading-none font-medium">
-                      {stat.count.toLocaleString()}
-                    </strong>
-                  </>
-                )}
-              </div>
-            ))}
+          <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1">
+            <StatLink
+              label={t('textTool.totalCharacters')}
+              count={stats.characters}
+              items={[
+                { key: 'chinese', label: t('textTool.chinese'), count: stats.chinese },
+                { key: 'english', label: t('textTool.english'), count: stats.english },
+                { key: 'digits', label: t('textTool.digits'), count: stats.digits },
+                { key: 'punctuation', label: t('textTool.punctuation'), count: stats.punctuation },
+                {
+                  key: 'charactersNoSpaces',
+                  label: t('textTool.charactersNoSpaces'),
+                  count: stats.charactersNoSpaces,
+                },
+              ]}
+            />
+            <StatLink
+              label={t('textTool.totalWords')}
+              count={stats.words}
+              items={[
+                {
+                  key: 'chineseWords',
+                  label: t('textTool.chineseWords'),
+                  count: stats.chineseWords,
+                },
+                {
+                  key: 'englishWords',
+                  label: t('textTool.englishWords'),
+                  count: stats.englishWords,
+                },
+              ]}
+            />
+            <StatPlain label={t('textTool.sentences')} count={stats.sentences} />
+            <StatPlain label={t('textTool.paragraphs')} count={stats.paragraphs} />
+            <StatPlain label={t('textTool.lines')} count={stats.lines} />
+            <StatPlain label={t('textTool.bytes')} count={stats.bytes} />
           </div>
         </ToolLayoutContent>
         <ToolLayoutFooter>
