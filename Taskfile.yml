@@ -20,6 +20,11 @@ includes:
   android: ./build/android/Taskfile.yml
 
 tasks:
+  gp:
+    summary: push to all remote repos
+    cmds:
+      - git push --tags -f && git push --tags -f github && git push && git push github
+
   build:
     summary: Builds the application
     cmds:
