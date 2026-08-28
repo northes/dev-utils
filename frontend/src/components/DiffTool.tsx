@@ -39,6 +39,7 @@ const diffTheme = EditorView.theme({
   },
   '.cm-content': { padding: '9px 0 20px' },
   '.cm-line': { padding: '0 12px 0 8px' },
+  '.cm-indent-markers::before': { left: '8px' },
   '.cm-gutters': {
     backgroundColor: 'var(--muted)',
     border: 0,
