@@ -4,7 +4,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { BracketsCurly, CaretDown, Check } from '@phosphor-icons/react';
 
-export type ToolId = 'json' | 'time' | 'text' | 'base64' | 'diff' | 'jwt' | 'url';
+export type ToolId = 'json' | 'time' | 'text' | 'base64' | 'diff' | 'jwt' | 'url' | 'image';
 export type PendingAction = {
   tool: ToolId;
   action: string;

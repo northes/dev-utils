@@ -21,6 +21,7 @@ import {
   FileCode,
   GitDiff,
   Hash,
+  Image as ImageIcon,
   Key,
   LinkSimple,
   TextAa,
@@ -54,7 +55,8 @@ export function toHistoryItem(item: StoredHistoryItem): HistoryItem | null {
     item.tool === 'base64' ||
     item.tool === 'diff' ||
     item.tool === 'jwt' ||
-    item.tool === 'url'
+    item.tool === 'url' ||
+    item.tool === 'image'
     ? { ...item, tool: item.tool, detail: normalizeHistoryDetail(item.detail) }
     : null;
 }
@@ -89,6 +91,8 @@ export function HistoryIcon({ tool }: { tool: ToolId }) {
     <Key weight="duotone" />
   ) : tool === 'url' ? (
     <LinkSimple weight="duotone" />
+  ) : tool === 'image' ? (
+    <ImageIcon weight="duotone" />
   ) : (
     <TextAa weight="duotone" />
   );
@@ -145,7 +149,7 @@ function endOfDayMs(date: Date) {
   return end.getTime();
 }
 const historyTools: Array<{ id: ToolId; nameKey: string }> = (
-  ['json', 'time', 'text', 'base64', 'diff', 'jwt', 'url'] as const
+  ['json', 'time', 'text', 'base64', 'diff', 'jwt', 'url', 'image'] as const
 ).map((id) => ({ id, nameKey: `tools.${id}.name` }));
 
 export default function HistoryPage({
@@ -274,14 +278,14 @@ export default function HistoryPage({
     [t, i18n.language],
   );
   const emptyState = loading ? (
-    <div className="flex items-center justify-center py-10">
+    <div className="flex h-auto min-h-0 flex-1 items-center justify-center">
       <span
         className="size-4 animate-spin rounded-full border-2 border-border border-t-muted-foreground"
         aria-hidden="true"
       />
     </div>
   ) : (
-    <div className="flex flex-col items-center justify-center gap-2 py-10 text-center">
+    <div className="flex h-auto min-h-0 flex-1 flex-col items-center justify-center gap-2 text-center">
       <Hash size={28} weight="duotone" className="text-muted-foreground" />
       <div className="text-sm font-medium text-foreground">{t('history.emptyTitle')}</div>
       <div className="text-xs text-muted-foreground">{t('history.emptyHint')}</div>
@@ -412,11 +416,12 @@ export default function HistoryPage({
               <span className="text-sm font-medium text-foreground">{t('history.loadFailed')}</span>
               <span className="text-xs text-muted-foreground">{t('history.loadFailedHint')}</span>
             </Button>
+          ) : loading || items.length === 0 ? (
+            emptyState
           ) : (
             <DataTable
               columns={columns}
-              data={loading ? [] : items}
-              emptyState={emptyState}
+              data={items}
               onRowClick={(item) => {
                 if (!enabledToolSet.has(item.tool)) return;
                 void openHistory(item);

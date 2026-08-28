@@ -1,0 +1,74 @@
+.image-tool-stage {
+  touch-action: none;
+  user-select: none;
+}
+
+.image-tool-check {
+  background-color: var(--muted);
+  background-image:
+    linear-gradient(45deg, var(--border) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--border) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--border) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--border) 75%);
+  background-size: 16px 16px;
+  background-position:
+    0 0,
+    0 8px,
+    8px -8px,
+    -8px 0;
+}
+
+.image-tool-handle {
+  position: absolute;
+  z-index: 2;
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  padding: 0;
+  border: 1px solid var(--background);
+  border-radius: 1px;
+  background: var(--primary);
+  box-shadow: 0 0 0 8px transparent;
+  pointer-events: auto;
+}
+
+.image-tool-handle:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 50%, transparent);
+}
+
+.image-tool-crop {
+  pointer-events: none;
+  box-shadow: 0 0 0 9999px color-mix(in srgb, var(--background) 58%, transparent);
+}
+
+.image-tool-rotate {
+  position: absolute;
+  left: 50%;
+  top: -28px;
+  z-index: 3;
+  width: 12px;
+  height: 12px;
+  margin-left: -6px;
+  padding: 0;
+  border: 1px solid var(--background);
+  border-radius: 999px;
+  background: var(--primary);
+}
+
+.image-tool-rotate::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 12px;
+  width: 1px;
+  height: 16px;
+  background: var(--primary);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.image-tool-rotate:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 50%, transparent);
+}

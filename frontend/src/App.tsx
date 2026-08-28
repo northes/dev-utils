@@ -65,6 +65,7 @@ import {
   GearSix,
   GitDiff,
   Key,
+  Image as ImageIcon,
   LinkSimple,
   SidebarSimple,
   TextAa,
@@ -173,6 +174,7 @@ const Base64Tool = lazy(() => import('./components/Base64Tool'));
 const DiffTool = lazy(() => import('./components/DiffTool'));
 const JwtTool = lazy(() => import('./components/JwtTool'));
 const UrlTool = lazy(() => import('./components/UrlTool'));
+const ImageTool = lazy(() => import('./components/ImageTool'));
 const SettingsPage = lazy(() => import('./components/SettingsPage'));
 const HistoryPage = lazy(() => import('./components/HistoryPage'));
 const tools: ToolDefinition[] = [
@@ -224,6 +226,14 @@ const tools: ToolDefinition[] = [
     descriptionKey: 'tools.url.description',
     icon: LinkSimple,
     keywords: 'url uri link query params hash path 地址 链接 参数 路径 哈希',
+  },
+  {
+    id: 'image' as const,
+    nameKey: 'tools.image.name',
+    descriptionKey: 'tools.image.description',
+    icon: ImageIcon,
+    keywords:
+      'image picture crop expand watermark quality png jpg jpeg svg webp 图片 裁剪 扩充 水印 质量 导出',
   },
 ];
 const paletteItems: PaletteItem[] = [
@@ -298,6 +308,14 @@ const paletteItems: PaletteItem[] = [
     icon: LinkSimple,
     keywords: 'url uri link query params hash path 地址 链接 参数 路径 哈希 打开工具',
     page: 'url',
+  },
+  {
+    id: 'open:image',
+    labelKey: 'commands.openImage',
+    groupKey: 'groups.tools',
+    icon: ImageIcon,
+    keywords: 'image picture crop expand watermark 图片 裁剪 扩充 水印 打开工具',
+    page: 'image',
   },
   {
     id: 'paste',
@@ -665,6 +683,24 @@ const paletteItems: PaletteItem[] = [
     keywords: 'copy result clipboard 复制 结果 剪贴板',
     tool: 'url',
     action: 'copy',
+  },
+  {
+    id: 'image:clear',
+    labelKey: 'imageTool.clear',
+    groupKey: 'tools.image.name',
+    icon: ImageIcon,
+    keywords: 'clear reset empty 清空 重置',
+    tool: 'image',
+    action: 'clear',
+  },
+  {
+    id: 'image:export',
+    labelKey: 'imageTool.export',
+    groupKey: 'tools.image.name',
+    icon: ImageIcon,
+    keywords: 'export save download 导出 保存 下载',
+    tool: 'image',
+    action: 'export',
   },
   {
     id: 'diff:swap',
@@ -1600,6 +1636,20 @@ function AppShell() {
                   <UrlTool
                     active={page === 'url'}
                     theme={theme}
+                    record={record}
+                    pending={pending}
+                    clearPending={() => setPending(null)}
+                  />
+                </Suspense>
+              )}
+            </div>
+            <div
+              className={`tool-slot h-full min-h-0 overflow-hidden${page === 'image' ? '' : ' is-hidden absolute inset-0 invisible pointer-events-none'}`}
+            >
+              {visited.has('image') && (
+                <Suspense fallback={null}>
+                  <ImageTool
+                    active={page === 'image'}
                     record={record}
                     pending={pending}
                     clearPending={() => setPending(null)}
