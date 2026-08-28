@@ -541,7 +541,7 @@ function ImageToolDisclosure({
   children: React.ReactNode;
 }) {
   return (
-    <section className="flex flex-col border-t border-border pt-3">
+    <section className="flex min-w-0 flex-col border-t border-border pt-3">
       <button
         type="button"
         id={`${id}-toggle`}
@@ -1275,6 +1275,22 @@ export default function ImageTool({
     );
   };
 
+  const onDragEnter = (event: React.DragEvent) => {
+    event.preventDefault();
+    setOver(true);
+  };
+
+  const onDragOver = (event: React.DragEvent) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+  };
+
+  const onDragLeave = (event: React.DragEvent) => {
+    const next = event.relatedTarget;
+    if (next instanceof Node && event.currentTarget.contains(next)) return;
+    setOver(false);
+  };
+
   const onDrop = (event: React.DragEvent) => {
     event.preventDefault();
     setOver(false);
@@ -1334,43 +1350,39 @@ export default function ImageTool({
         <ToolLayoutHeader title={t('imageTool.title')} />
         <ToolLayoutContent>
           <div className="grid h-full min-h-0 min-w-0 grid-cols-[minmax(0,1.2fr)_minmax(228px,0.72fr)] grid-rows-[minmax(0,1fr)] max-[700px]:grid-cols-1 max-[700px]:grid-rows-[minmax(0,1fr)_minmax(0,1fr)]">
-            <div className="flex min-h-0 min-w-0 flex-col">
+            <div className="flex h-full min-h-0 min-w-0 flex-col">
               <div
                 ref={previewRef}
                 tabIndex={source ? 0 : -1}
                 aria-label={t('imageTool.preview')}
-                onDragEnter={(event) => {
-                  event.preventDefault();
-                  setOver(true);
-                }}
-                onDragOver={(event) => {
-                  event.preventDefault();
-                  event.dataTransfer.dropEffect = 'copy';
-                }}
-                onDragLeave={() => setOver(false)}
+                data-empty={source ? undefined : 'true'}
+                data-over={over ? 'true' : undefined}
+                data-dragging={pointer.dragging ? 'true' : undefined}
+                onDragEnter={onDragEnter}
+                onDragOver={onDragOver}
+                onDragLeave={onDragLeave}
                 onDrop={onDrop}
-                className={`image-tool-stage relative min-h-0 flex-1 overflow-hidden ${
-                  over
-                    ? 'border border-dashed border-primary'
-                    : source
-                      ? ''
-                      : 'border border-dashed border-border'
-                }`}
+                className="image-tool-stage relative min-h-0 flex-1 overflow-hidden"
               >
+                {over ? (
+                  <span className="sr-only" role="status">
+                    {t('imageTool.drop')}
+                  </span>
+                ) : null}
                 {!source ? (
-                  <div className="flex h-full min-h-0 flex-col items-center justify-center gap-2 px-4 text-center">
+                  <div className="image-tool-empty">
                     <button
                       ref={emptyRef}
                       type="button"
                       onClick={() => void openNative()}
-                      className="flex max-w-[240px] flex-col items-center gap-1 rounded-sm border-0 bg-transparent p-0 text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                      className="image-tool-empty-action"
                     >
-                      <strong className="text-xs text-foreground">
+                      <strong className="image-tool-empty-title">
                         {over ? t('imageTool.drop') : t('imageTool.emptyTitle')}
                       </strong>
-                      <span className="text-[11px] leading-5">{t('imageTool.emptyHint')}</span>
+                      <span className="image-tool-empty-hint">{t('imageTool.emptyHint')}</span>
                     </button>
-                    <label className="text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline">
+                    <label className="image-tool-file">
                       <span>{t('imageTool.chooseFile')}</span>
                       <input
                         type="file"
@@ -1405,7 +1417,8 @@ export default function ImageTool({
                               alt={source.name}
                               draggable={false}
                               aria-label={expandEditing ? t('imageTool.moveImage') : undefined}
-                              className={`absolute max-h-none max-w-none select-none ${expandEditing ? 'cursor-move' : ''} ${imageSelected ? 'outline outline-1 outline-primary' : ''} ${showFinalPreview ? 'opacity-0' : ''}`}
+                              data-selected={imageSelected ? 'true' : undefined}
+                              className={`image-tool-photo absolute max-h-none max-w-none select-none ${expandEditing ? 'cursor-move' : ''} ${showFinalPreview ? 'opacity-0' : ''}`}
                               style={imageStyle}
                               onPointerDown={expandEditing ? beginImageMove : undefined}
                             />
@@ -1543,7 +1556,9 @@ export default function ImageTool({
                           key={wm.id}
                           role="group"
                           aria-label={t('imageTool.watermarkLayer', { text: wm.text })}
-                          className={`absolute z-[3] flex cursor-move items-center justify-center overflow-visible border ${selected ? 'border-primary' : 'border-primary/50'}`}
+                          aria-roledescription={t('imageTool.watermarkMove')}
+                          data-selected={selected ? 'true' : undefined}
+                          className="image-tool-layer absolute z-[3] flex cursor-move items-center justify-center overflow-visible"
                           style={{
                             left,
                             top,
@@ -1582,13 +1597,13 @@ export default function ImageTool({
                         </div>
                       );
                     })}
-                    <span className="pointer-events-none absolute bottom-2 left-2 z-[4] font-mono text-[10px] font-medium tracking-[.02em] text-muted-foreground">
+                    <span className="image-tool-hud pointer-events-none absolute bottom-2 left-2 font-mono text-[10px] font-medium tracking-[.02em]">
                       {t('imageTool.dimensions', { width: out.w, height: out.h })}
                     </span>
                     <Button
                       variant="ghost"
                       size="icon-sm"
-                      className="absolute top-2 right-2 z-[4] min-w-7"
+                      className="image-tool-replace absolute top-2 right-2 bg-background"
                       aria-label={t('imageTool.replace')}
                       onClick={() => void openNative()}
                     >
@@ -1598,16 +1613,17 @@ export default function ImageTool({
                 )}
               </div>
             </div>
-            <div className="flex min-h-0 min-w-0 flex-col overflow-x-hidden overflow-y-auto border-border max-[700px]:border-t min-[701px]:border-l [padding-inline-end:var(--overlay-scrollbar-hit-size)]">
-              <div className="flex flex-col gap-3 py-3 pl-3">
+            <div className="image-tool-controls flex h-full min-h-0 min-w-0 flex-col overflow-x-hidden overflow-y-auto border-border max-[700px]:border-t min-[701px]:border-l [padding-inline-end:var(--overlay-scrollbar-hit-size)]">
+              <div className="flex flex-col gap-3 py-3 pl-3 max-[700px]:pl-0">
                 <section className="flex flex-col gap-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <h2 className="m-0 font-mono text-[10px] font-medium uppercase tracking-[.04em] text-muted-foreground">
+                  <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-2 gap-y-1">
+                    <h2 className="m-0 min-w-0 font-mono text-[10px] font-medium uppercase tracking-[.04em] text-muted-foreground">
                       {t('imageTool.size')}
                     </h2>
-                    <div className="flex gap-1">
+                    <div className="image-tool-size-actions">
                       <Toggle
                         size="sm"
+                        className="flex-none"
                         pressed={sizeSession?.mode === 'crop'}
                         disabled={!source}
                         onClick={() => beginSizeEdit('crop')}
@@ -1619,6 +1635,7 @@ export default function ImageTool({
                       </Toggle>
                       <Toggle
                         size="sm"
+                        className="flex-none"
                         pressed={sizeSession?.mode === 'expand'}
                         disabled={!source}
                         onClick={() => beginSizeEdit('expand')}
@@ -1631,13 +1648,13 @@ export default function ImageTool({
                     </div>
                   </div>
                   {sizeSession ? (
-                    <p className="m-0 text-[11px] leading-5 text-muted-foreground">
+                    <p className="m-0 text-[11px] leading-5 text-muted-foreground" role="status">
                       {sizeSession.mode === 'crop'
                         ? t('imageTool.cropHint')
                         : t('imageTool.expandHint')}
                     </p>
                   ) : null}
-                  <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-end gap-2">
+                  <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-end gap-2 min-[701px]:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
                     <Label
                       htmlFor="image-size-width"
                       className="flex-col items-stretch gap-1.5 text-[11px] text-muted-foreground"
@@ -1675,7 +1692,7 @@ export default function ImageTool({
                     <Button
                       variant="outline"
                       size="sm"
-                      className="flex-none"
+                      className="h-8 flex-none min-[701px]:col-span-2"
                       disabled={!source}
                       onClick={applySize}
                     >
@@ -1683,7 +1700,7 @@ export default function ImageTool({
                     </Button>
                   </div>
                   {sizeSession ? (
-                    <div className="flex justify-end gap-2">
+                    <div className="flex flex-wrap justify-end gap-2">
                       <Button
                         variant="ghost"
                         size="sm"
