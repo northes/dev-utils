@@ -388,22 +388,17 @@
     "after": "Modified",
     "clear": "Clear",
     "swap": "Swap",
-    "clipboardTarget": "Clipboard target",
+    "clipboardTarget": "Fill after tray match",
+    "clipboardTargetHint": "Keep the Diff Compare panel open so tray matching fills by this rule. Text content only; whatever format the clipboard text is in, it is filled by this rule. While this panel is open, even JSON will not switch to the JSON tool.",
+    "clipboardTargetHintLabel": "About fill rules",
     "targets": {
-      "alternate": "Alternate",
-      "before": "Always original",
-      "after": "Always modified"
+      "alternate": "Alternate fill",
+      "before": "Always left",
+      "after": "Always right"
     },
     "filled": {
       "before": "Filled original",
       "after": "Filled modified"
-    },
-    "highlightMode": "Highlight scope",
-    "modes": {
-      "word-alt": "Word-Alt",
-      "word": "Word",
-      "character": "Character",
-      "none": "None"
     },
     "collapseUnchanged": "Collapse unchanged lines"
   },

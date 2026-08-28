@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { minimalSetup } from 'codemirror';
-import { getChunks, MergeView, type Chunk } from '@codemirror/merge';
+import { MergeView, type Chunk } from '@codemirror/merge';
 import { RangeSetBuilder, type Extension } from '@codemirror/state';
 import { Decoration, EditorView, type DecorationSet, ViewPlugin } from '@codemirror/view';
 import { StreamLanguage } from '@codemirror/language';
 import { json } from '@codemirror/lang-json';
 import { quietEditorTheme } from './codeMirrorTheme';
-import { ArrowsLeftRight, Trash } from '@phosphor-icons/react';
+import { ArrowsLeftRight, Info, Trash } from '@phosphor-icons/react';
+import { Tooltip } from '@base-ui/react/tooltip';
 import { useTranslation } from 'react-i18next';
+import { Button } from './ui/button';
 import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Switch } from './ui/switch';
@@ -26,7 +28,6 @@ import '../styles/tools/editor.css';
 import '../styles/tools/diff.css';
 
 type Counts = { deletions: number; additions: number };
-export type HighlightMode = 'word-alt' | 'word' | 'character' | 'none';
 const diffTheme = EditorView.theme({
   '&': {
     height: '100%!important',
@@ -241,67 +242,10 @@ function detectLanguage(value: string) {
   if (/^---\s*$|^(?:[\w.-]+|"[^"]+"):\s*(?:[^{}\[\n].*)?$|^\s*-\s+\w+/m.test(source)) return 'YAML';
   return 'Plain Text';
 }
-function wordRanges(view: EditorView, chunk: Chunk, side: 'a' | 'b', mode: 'word-alt' | 'word') {
-  const doc = view.state.doc;
-  const base = side === 'a' ? chunk.fromA : chunk.fromB;
-  const ranges: Array<[number, number]> = [];
-  for (const change of chunk.changes) {
-    const oppositeEmpty = side === 'a' ? change.fromB === change.toB : change.fromA === change.toA;
-    if (oppositeEmpty) continue;
-    const from = base + (side === 'a' ? change.fromA : change.fromB);
-    const to = base + (side === 'a' ? change.toA : change.toB);
-    if (from === to) continue;
-    let line = doc.lineAt(Math.min(from, doc.length));
-    const last = doc.lineAt(Math.min(to, doc.length)).number;
-    while (true) {
-      const source = doc.sliceString(line.from, line.to);
-      const matcher = mode === 'word-alt' ? /\S+/gu : /[\p{L}\p{N}_]+/gu;
-      let match: RegExpExecArray | null;
-      let found = false;
-      while ((match = matcher.exec(source))) {
-        const start = line.from + match.index;
-        const end = start + match[0].length;
-        if (start < to && end > from) {
-          ranges.push([Math.max(start, from), Math.min(end, to)]);
-          found = true;
-        }
-      }
-      if (!found) ranges.push([from, to]);
-      if (line.number === last) break;
-      line = doc.line(line.number + 1);
-    }
-  }
-  return ranges.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
-}
-function wordHighlight(mode: 'word-alt' | 'word') {
-  return ViewPlugin.fromClass(
-    class {
-      decorations: DecorationSet;
-      constructor(view: EditorView) {
-        this.decorations = this.build(view);
-      }
-      update(update) {
-        if (update.docChanged || update.transactions.length)
-          this.decorations = this.build(update.view);
-      }
-      build(view: EditorView) {
-        const info = getChunks(view.state);
-        if (!info) return Decoration.none;
-        const builder = new RangeSetBuilder<Decoration>();
-        for (const chunk of info.chunks)
-          for (const [from, to] of wordRanges(view, chunk, info.side!, mode))
-            if (from < to) builder.add(from, to, Decoration.mark({ class: 'cm-changedText' }));
-        return builder.finish();
-      }
-    },
-    { decorations: (value) => value.decorations },
-  );
-}
 function DiffMerge({
   before,
   after,
   theme,
-  mode,
   languageExtensions,
   lastFilled,
   fillLabel,
@@ -316,7 +260,6 @@ function DiffMerge({
   before: string;
   after: string;
   theme: string;
-  mode: HighlightMode;
   languageExtensions: Extension[];
   lastFilled: 'before' | 'after' | null;
   fillLabel: string;
@@ -344,32 +287,17 @@ function DiffMerge({
         );
         queueMicrotask(refresh);
       });
-    const inline = mode === 'character' ? [] : mode === 'none' ? [] : [wordHighlight(mode)];
     merge = new MergeView({
       parent: host.current,
       a: {
         doc: before,
-        extensions: [
-          minimalSetup,
-          quietEditorTheme,
-          diffTheme,
-          ...languageExtensions,
-          ...inline,
-          update('a'),
-        ],
+        extensions: [minimalSetup, quietEditorTheme, diffTheme, ...languageExtensions, update('a')],
       },
       b: {
         doc: after,
-        extensions: [
-          minimalSetup,
-          quietEditorTheme,
-          diffTheme,
-          ...languageExtensions,
-          ...inline,
-          update('b'),
-        ],
+        extensions: [minimalSetup, quietEditorTheme, diffTheme, ...languageExtensions, update('b')],
       },
-      highlightChanges: mode === 'character',
+      highlightChanges: true,
       gutter: true,
       collapseUnchanged: collapseUnchanged ? { margin: 3, minSize: 4 } : undefined,
       diffConfig: { scanLimit: 3000, timeout: 1000 },
@@ -407,7 +335,7 @@ function DiffMerge({
       mergeRef.current = null;
       merge.destroy();
     };
-  }, [theme, mode, languageExtensions, collapseUnchanged, aLabel, bLabel]);
+  }, [theme, languageExtensions, collapseUnchanged, aLabel, bLabel]);
   useEffect(() => {
     const m = mergeRef.current;
     if (!m) return;
@@ -433,15 +361,9 @@ function DiffMerge({
     </div>
   );
 }
-const highlightModes: HighlightMode[] = ['word-alt', 'word', 'character', 'none'];
-function normalizeHighlightMode(value: string): HighlightMode {
-  return highlightModes.includes(value as HighlightMode) ? (value as HighlightMode) : 'word-alt';
-}
 export default function DiffTool({
   active,
   theme,
-  highlightMode,
-  onHighlightModeChange,
   clipboardTargetMode,
   onClipboardTargetModeChange,
   pending,
@@ -449,8 +371,6 @@ export default function DiffTool({
 }: {
   active: boolean;
   theme: string;
-  highlightMode: string;
-  onHighlightModeChange: (mode: HighlightMode) => void;
   clipboardTargetMode: string;
   onClipboardTargetModeChange: (mode: 'alternate' | 'before' | 'after') => void;
   record?: unknown;
@@ -463,7 +383,6 @@ export default function DiffTool({
   const [lastFilled, setLastFilled] = useState<'before' | 'after' | null>(null);
   const [collapseUnchanged, setCollapseUnchanged] = useState(false);
   const noticeTimer = useRef<number | null>(null);
-  const mode = normalizeHighlightMode(highlightMode);
   const targetMode =
     clipboardTargetMode === 'before' || clipboardTargetMode === 'after'
       ? clipboardTargetMode
@@ -518,11 +437,6 @@ export default function DiffTool({
       clearPending();
       return;
     }
-    if (pending.action === 'highlight' && pending.mode) {
-      onHighlightModeChange(normalizeHighlightMode(pending.mode));
-      clearPending();
-      return;
-    }
     const target = pending.target ?? 'before';
     if (target === 'before') setBefore(pending.input);
     else setAfter(pending.input);
@@ -549,63 +463,58 @@ export default function DiffTool({
         <ToolLayoutHeader title={t('diffTool.title')} />
         <ToolLayoutToolbar
           left={
-            <>
-              <div className="flex h-8 flex-none items-center gap-2 text-[11px] text-muted-foreground">
-                <span id="diff-clipboard-target-label">{t('diffTool.clipboardTarget')}</span>
-                <Select
-                  value={targetMode}
-                  items={(['alternate', 'before', 'after'] as const).map((key) => ({
-                    value: key,
-                    label: t(`diffTool.targets.${key}`),
-                  }))}
-                  onValueChange={(value) => {
-                    if (value === 'before' || value === 'after' || value === 'alternate')
-                      onClipboardTargetModeChange(value);
-                  }}
+            <div className="flex h-8 flex-none items-center gap-2 text-[11px] text-muted-foreground">
+              <span id="diff-clipboard-target-label" className="whitespace-nowrap">
+                {t('diffTool.clipboardTarget')}
+              </span>
+              <Select
+                value={targetMode}
+                items={(['alternate', 'before', 'after'] as const).map((key) => ({
+                  value: key,
+                  label: t(`diffTool.targets.${key}`),
+                }))}
+                onValueChange={(value) => {
+                  if (value === 'before' || value === 'after' || value === 'alternate')
+                    onClipboardTargetModeChange(value);
+                }}
+              >
+                <SelectTrigger
+                  className="h-8 w-32 flex-none text-[11px]"
+                  aria-labelledby="diff-clipboard-target-label"
                 >
-                  <SelectTrigger
-                    className="h-8 w-32 flex-none text-[11px]"
-                    aria-labelledby="diff-clipboard-target-label"
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(['alternate', 'before', 'after'] as const).map((key) => (
-                      <SelectItem key={key} value={key}>
-                        {t(`diffTool.targets.${key}`)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex h-8 flex-none items-center gap-2 text-[11px] text-muted-foreground">
-                <span id="diff-highlight-mode-label">{t('diffTool.highlightMode')}</span>
-                <Select
-                  value={mode}
-                  items={highlightModes.map((key) => ({
-                    value: key,
-                    label: t(`diffTool.modes.${key}`),
-                  }))}
-                  onValueChange={(value) => {
-                    if (value !== null) onHighlightModeChange(normalizeHighlightMode(value));
-                  }}
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(['alternate', 'before', 'after'] as const).map((key) => (
+                    <SelectItem key={key} value={key}>
+                      {t(`diffTool.targets.${key}`)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Tooltip.Root>
+                <Tooltip.Trigger
+                  delay={300}
+                  render={
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      className="size-6 min-w-6 flex-none"
+                      aria-label={t('diffTool.clipboardTargetHintLabel')}
+                    />
+                  }
                 >
-                  <SelectTrigger
-                    className="h-8 w-32 flex-none text-[11px]"
-                    aria-labelledby="diff-highlight-mode-label"
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {highlightModes.map((key) => (
-                      <SelectItem key={key} value={key}>
-                        {t(`diffTool.modes.${key}`)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </>
+                  <Info />
+                </Tooltip.Trigger>
+                <Tooltip.Portal>
+                  <Tooltip.Positioner side="bottom" sideOffset={6}>
+                    <Tooltip.Popup className="max-w-72 origin-(--transform-origin) rounded-md bg-popover px-2.5 py-2 text-xs leading-relaxed text-popover-foreground shadow-md ring-1 ring-foreground/10 outline-hidden data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95">
+                      {t('diffTool.clipboardTargetHint')}
+                    </Tooltip.Popup>
+                  </Tooltip.Positioner>
+                </Tooltip.Portal>
+              </Tooltip.Root>
+            </div>
           }
           right={
             <ToolLayoutToolbarGroup>
@@ -626,7 +535,6 @@ export default function DiffTool({
               before={before}
               after={after}
               theme={theme}
-              mode={mode}
               languageExtensions={languageExtensions}
               collapseUnchanged={collapseUnchanged}
               lastFilled={lastFilled}

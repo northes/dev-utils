@@ -70,7 +70,6 @@ import {
   TextAa,
   TextT,
 } from '@phosphor-icons/react';
-import type { HighlightMode } from './components/DiffTool';
 import type { ToolDefinition } from './components/SettingsPage';
 import { type HistoryItem, normalizeHistoryDetail } from './components/HistoryPage';
 import {
@@ -148,7 +147,6 @@ const defaultSettings: Settings = {
   themeMode: 'dark',
   lightTheme: 'default-light',
   darkTheme: 'default-dark',
-  diffHighlightMode: 'character',
   diffClipboardTargetMode: 'alternate',
   codeEditorFontSize: 16,
   timeResultOrder: [
@@ -685,50 +683,6 @@ const paletteItems: PaletteItem[] = [
     keywords: 'clear reset 清空 重置',
     tool: 'diff',
     action: 'clear',
-  },
-  {
-    id: 'diff:highlightWordAlt',
-    labelKey: 'diffTool.modes.word-alt',
-    groupKey: 'tools.diff.name',
-    subgroupKey: 'diffTool.highlightMode',
-    icon: GitDiff,
-    keywords: 'highlight mode word alt 高亮 按词 交替',
-    tool: 'diff',
-    action: 'highlight',
-    mode: 'word-alt',
-  },
-  {
-    id: 'diff:highlightWord',
-    labelKey: 'diffTool.modes.word',
-    groupKey: 'tools.diff.name',
-    subgroupKey: 'diffTool.highlightMode',
-    icon: GitDiff,
-    keywords: 'highlight mode word 高亮 按词',
-    tool: 'diff',
-    action: 'highlight',
-    mode: 'word',
-  },
-  {
-    id: 'diff:highlightCharacter',
-    labelKey: 'diffTool.modes.character',
-    groupKey: 'tools.diff.name',
-    subgroupKey: 'diffTool.highlightMode',
-    icon: GitDiff,
-    keywords: 'highlight mode character 高亮 按字符 逐字',
-    tool: 'diff',
-    action: 'highlight',
-    mode: 'character',
-  },
-  {
-    id: 'diff:highlightNone',
-    labelKey: 'diffTool.modes.none',
-    groupKey: 'tools.diff.name',
-    subgroupKey: 'diffTool.highlightMode',
-    icon: GitDiff,
-    keywords: 'highlight mode none off 高亮 关闭',
-    tool: 'diff',
-    action: 'highlight',
-    mode: 'none',
   },
   {
     id: 'diff:fillAlternate',
@@ -1613,10 +1567,6 @@ function AppShell() {
                   <DiffTool
                     active={page === 'diff'}
                     theme={theme}
-                    highlightMode={settings.diffHighlightMode}
-                    onHighlightModeChange={(diffHighlightMode: HighlightMode) =>
-                      setSettings((current) => ({ ...current, diffHighlightMode }))
-                    }
                     clipboardTargetMode={settings.diffClipboardTargetMode}
                     onClipboardTargetModeChange={(diffClipboardTargetMode) =>
                       setSettings((current) => ({ ...current, diffClipboardTargetMode }))

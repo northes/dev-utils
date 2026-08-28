@@ -13,7 +13,6 @@ export interface Config {
     "themeMode": string;
     "lightTheme": string;
     "darkTheme": string;
-    "diffHighlightMode": string;
     "diffClipboardTargetMode": string;
     "codeEditorFontSize": number;
     "timeResultOrder": string[] | null;

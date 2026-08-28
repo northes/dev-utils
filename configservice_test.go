@@ -16,6 +16,36 @@ func TestDefaultConfigTheme(t *testing.T) {
 	}
 }
 
+func TestConfigIgnoresLegacyDiffHighlightMode(t *testing.T) {
+	cfg := defaultConfig()
+	if err := json.Unmarshal([]byte(`{"diffHighlightMode":"word","language":"en-US"}`), &cfg); err != nil {
+		t.Fatalf("解码含旧 diffHighlightMode 的配置失败: %v", err)
+	}
+	if cfg.Language != "en-US" {
+		t.Fatalf("解码旧配置时应保留其他字段，语言为 %q", cfg.Language)
+	}
+}
+
+func TestConfigServiceSaveOmitsLegacyDiffHighlightMode(t *testing.T) {
+	root := t.TempDir()
+	service := &ConfigService{path: filepath.Join(root, "config.json"), cfg: normalizeConfig(defaultConfig())}
+
+	if err := service.Save(defaultConfig()); err != nil {
+		t.Fatalf("保存配置失败: %v", err)
+	}
+	b, err := os.ReadFile(service.path)
+	if err != nil {
+		t.Fatalf("读取保存后的配置失败: %v", err)
+	}
+	var saved map[string]json.RawMessage
+	if err := json.Unmarshal(b, &saved); err != nil {
+		t.Fatalf("保存后的配置不是有效 JSON: %v", err)
+	}
+	if _, ok := saved["diffHighlightMode"]; ok {
+		t.Fatal("保存后的配置不应包含 diffHighlightMode")
+	}
+}
+
 func TestNormalizeConfigTheme(t *testing.T) {
 	tests := []struct {
 		name string

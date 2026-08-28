@@ -26,7 +26,6 @@ type Config struct {
 	ThemeMode                    string              `json:"themeMode"`
 	LightTheme                   string              `json:"lightTheme"`
 	DarkTheme                    string              `json:"darkTheme"`
-	DiffHighlightMode            string              `json:"diffHighlightMode"`
 	DiffClipboardTargetMode      string              `json:"diffClipboardTargetMode"`
 	CodeEditorFontSize           int                 `json:"codeEditorFontSize"`
 	TimeResultOrder              []string            `json:"timeResultOrder"`
@@ -82,7 +81,7 @@ type historyStored struct {
 }
 
 func defaultConfig() Config {
-	return Config{TrayMatchEnabled: true, TrayMatchTools: []string{"json", "time", "text", "base64", "diff", "jwt", "url"}, AutoOverwrite: true, AutoCheckUpdates: true, Language: "zh-CN", SidebarMode: "full", SidebarTools: defaultSidebarTools(), ThemeMode: "dark", LightTheme: "default-light", DarkTheme: "default-dark", DiffHighlightMode: "character", DiffClipboardTargetMode: "alternate", CodeEditorFontSize: 16, TimeResultOrder: []string{"local", "dateTime", "dateOnly", "timeOnly", "zonedIso8601", "rfc3339", "utc", "compact", "underscore", "unixSeconds", "unixMilliseconds", "unixNanoseconds"}, JsonAutoFormatOnFill: true, JsonAutoFormatOnFillMigrated: true}
+	return Config{TrayMatchEnabled: true, TrayMatchTools: []string{"json", "time", "text", "base64", "diff", "jwt", "url"}, AutoOverwrite: true, AutoCheckUpdates: true, Language: "zh-CN", SidebarMode: "full", SidebarTools: defaultSidebarTools(), ThemeMode: "dark", LightTheme: "default-light", DarkTheme: "default-dark", DiffClipboardTargetMode: "alternate", CodeEditorFontSize: 16, TimeResultOrder: []string{"local", "dateTime", "dateOnly", "timeOnly", "zonedIso8601", "rfc3339", "utc", "compact", "underscore", "unixSeconds", "unixMilliseconds", "unixNanoseconds"}, JsonAutoFormatOnFill: true, JsonAutoFormatOnFillMigrated: true}
 }
 func normalizeConfig(cfg Config) Config {
 	validSidebarTool := make(map[string]bool, len(defaultSidebarToolIDs))
@@ -148,11 +147,6 @@ func normalizeConfig(cfg Config) Config {
 	}
 	if cfg.DarkTheme != "default-dark" && cfg.DarkTheme != "modern-minimal-dark" {
 		cfg.DarkTheme = "default-dark"
-	}
-	switch cfg.DiffHighlightMode {
-	case "word-alt", "word", "character", "none":
-	default:
-		cfg.DiffHighlightMode = "character"
 	}
 	switch cfg.DiffClipboardTargetMode {
 	case "alternate", "before", "after":
