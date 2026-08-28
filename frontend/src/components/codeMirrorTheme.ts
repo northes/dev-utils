@@ -9,18 +9,27 @@ import {
   syntaxTree,
   unfoldEffect,
 } from '@codemirror/language';
-import { EditorView, ViewPlugin } from '@codemirror/view';
+import { RangeSetBuilder, StateEffect, StateField } from '@codemirror/state';
+import {
+  Decoration,
+  EditorView,
+  ViewPlugin,
+  type DecorationSet,
+  type ViewUpdate,
+} from '@codemirror/view';
 import { tags } from '@lezer/highlight';
 import { indentationMarkers } from '@replit/codemirror-indentation-markers';
 
 const indentMarkerColor = 'color-mix(in srgb, var(--muted-foreground) 20%, transparent)';
 const indentMarkerActive = 'color-mix(in srgb, var(--primary) 30%, transparent)';
+const indentMarkerThickness = 1;
+const indentMarkerActiveThickness = 1.5;
 const indentGuides = indentationMarkers({
   highlightActiveBlock: true,
   hideFirstIndent: false,
   markerType: 'fullScope',
-  thickness: 1,
-  activeThickness: 1.5,
+  thickness: indentMarkerThickness,
+  activeThickness: indentMarkerActiveThickness,
   colors: {
     light: indentMarkerColor,
     dark: indentMarkerColor,
@@ -52,10 +61,11 @@ const quietBase = EditorView.theme({
     left: '6px',
     zIndex: '0',
   },
+  '.cm-indent-markers.cm-indent-guide-hover::before': {
+    background: 'var(--indent-hover-layer), var(--indent-markers)',
+  },
   '.cm-indent-guide-foldable': {
     cursor: 'pointer',
-    '--indent-marker-bg-color': indentMarkerActive,
-    '--indent-marker-active-bg-color': indentMarkerActive,
   },
 });
 const quietSyntax = HighlightStyle.define([
@@ -128,7 +138,12 @@ function matchingFold(view: EditorView, range: { from: number; to: number }) {
   return found;
 }
 
-function pointerFoldTarget(view: EditorView, event: MouseEvent) {
+function leadingWhitespaceLength(text: string) {
+  const match = /^[ \t]*/.exec(text);
+  return match ? match[0].length : 0;
+}
+
+function pointerGuideTarget(view: EditorView, event: MouseEvent) {
   if (event.shiftKey || event.metaKey || event.ctrlKey || event.altKey) return null;
   const target = event.target;
   if (!(target instanceof Element)) return null;
@@ -137,55 +152,217 @@ function pointerFoldTarget(view: EditorView, event: MouseEvent) {
   const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
   if (pos == null) return null;
   const line = view.state.doc.lineAt(pos);
+  const empty = !line.text.trim();
   const indentCols = visualIndentColumns(line.text, view.state.tabSize);
   const indentEnd = line.from + leadingWhitespaceLength(line.text);
-  if (line.text.trim() && pos >= indentEnd) return null;
+  if (!empty && pos >= indentEnd) return null;
   const column = clickedGuideColumn(view, event, line.from);
   if (column == null) return null;
-  if (line.text.trim() && column >= indentCols) return null;
-  const range = foldRangeForGuide(view, line.from, column);
+  if (!empty && column >= indentCols) return null;
+  return { lineFrom: line.from, column, empty };
+}
+
+function pointerFoldTarget(view: EditorView, event: MouseEvent) {
+  const guide = pointerGuideTarget(view, event);
+  if (!guide) return null;
+  const range = foldRangeForGuide(view, guide.lineFrom, guide.column);
   return range ? { range } : null;
 }
 
-function leadingWhitespaceLength(text: string) {
-  const match = /^[ \t]*/.exec(text);
-  return match ? match[0].length : 0;
+type IndentHover = { seedFrom: number; column: number };
+
+const setIndentHover = StateEffect.define<IndentHover | null>();
+
+const indentHoverField = StateField.define<IndentHover | null>({
+  create: () => null,
+  update(value, tr) {
+    for (const effect of tr.effects) {
+      if (effect.is(setIndentHover)) return effect.value;
+    }
+    if (tr.docChanged) return null;
+    return value;
+  },
+});
+
+function hoverEq(a: IndentHover | null, b: IndentHover | null) {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a.seedFrom === b.seedFrom && a.column === b.column;
+}
+
+function indentHoverLayer(column: number, unit: number, thickness: number) {
+  const startOffset = column / unit;
+  return `repeating-linear-gradient(to right, var(--indent-marker-active-bg-color) 0 ${thickness}px, transparent ${thickness}px ${unit}ch) ${startOffset * unit}.5ch/calc(${unit}ch - 1px) no-repeat`;
+}
+
+function visibleRangeContainingLine(view: EditorView, lineFrom: number) {
+  const line = view.state.doc.lineAt(lineFrom);
+  for (const range of view.visibleRanges) {
+    if (line.to < range.from) return null;
+    if (line.from <= range.to && line.to >= range.from) return range;
+  }
+  return null;
+}
+
+function indentBlockInVisibleRange(
+  view: EditorView,
+  seedFrom: number,
+  column: number,
+  vis: { from: number; to: number },
+) {
+  const { doc } = view.state;
+  const tabSize = view.state.tabSize;
+  const seed = doc.lineAt(seedFrom);
+  if (seed.to < vis.from || seed.from > vis.to) return null;
+  const minLine = doc.lineAt(vis.from).number;
+  const maxLine = doc.lineAt(vis.to).number;
+  const isBarrier = (line: { text: string }) =>
+    Boolean(line.text.trim()) && visualIndentColumns(line.text, tabSize) <= column;
+
+  let fromNo = seed.number;
+  let toNo = seed.number;
+  for (let n = seed.number - 1; n >= minLine; n--) {
+    const line = doc.line(n);
+    if (line.to < vis.from || isBarrier(line)) break;
+    fromNo = n;
+  }
+  for (let n = seed.number + 1; n <= maxLine; n++) {
+    const line = doc.line(n);
+    if (line.from > vis.to || isBarrier(line)) break;
+    toNo = n;
+  }
+  return { from: doc.line(fromNo).from, to: doc.line(toNo).to };
+}
+
+function lineInHoverBlock(
+  view: EditorView,
+  lineFrom: number,
+  column: number,
+  block: { from: number; to: number },
+) {
+  if (lineFrom < block.from || lineFrom > block.to) return false;
+  const line = view.state.doc.lineAt(lineFrom);
+  return !line.text.trim() || visualIndentColumns(line.text, view.state.tabSize) > column;
+}
+
+function hoverBlock(view: EditorView, seedFrom: number, column: number) {
+  const foldRange = foldRangeForGuide(view, seedFrom, column);
+  if (foldRange) return foldRange;
+  const vis = visibleRangeContainingLine(view, seedFrom);
+  if (!vis) return null;
+  return indentBlockInVisibleRange(view, seedFrom, column, vis);
+}
+
+function buildIndentHoverDecorations(view: EditorView): DecorationSet {
+  const hover = view.state.field(indentHoverField);
+  if (!hover) return Decoration.none;
+  const vis = visibleRangeContainingLine(view, hover.seedFrom);
+  if (!vis) return Decoration.none;
+  const unit = getIndentUnit(view.state);
+  if (unit <= 0 || hover.column % unit !== 0) return Decoration.none;
+  const foldRange = foldRangeForGuide(view, hover.seedFrom, hover.column);
+  const block = foldRange ?? indentBlockInVisibleRange(view, hover.seedFrom, hover.column, vis);
+  if (!block) return Decoration.none;
+  const layer = indentHoverLayer(hover.column, unit, indentMarkerActiveThickness);
+  const deco = Decoration.line({
+    class: foldRange ? 'cm-indent-guide-hover cm-indent-guide-foldable' : 'cm-indent-guide-hover',
+    attributes: { style: `--indent-hover-layer: ${layer}` },
+  });
+  const builder = new RangeSetBuilder<Decoration>();
+  const tabSize = view.state.tabSize;
+  let lastFrom = -1;
+  for (const vr of view.visibleRanges) {
+    const from = Math.max(vr.from, block.from);
+    const to = Math.min(vr.to, block.to);
+    if (from >= to) continue;
+    let pos = from;
+    while (pos <= to) {
+      const line = view.state.doc.lineAt(pos);
+      if (line.from !== lastFrom) {
+        const empty = !line.text.trim();
+        const indent = visualIndentColumns(line.text, tabSize);
+        if (empty || indent > hover.column) {
+          builder.add(line.from, line.from, deco);
+          lastFrom = line.from;
+        }
+      }
+      if (line.to >= to) break;
+      pos = line.to + 1;
+    }
+  }
+  return builder.finish();
+}
+
+function sameHoverBlock(view: EditorView, current: IndentHover, next: IndentHover) {
+  if (current.column !== next.column) return false;
+  const block = hoverBlock(view, current.seedFrom, current.column);
+  return !!block && lineInHoverBlock(view, next.seedFrom, next.column, block);
 }
 
 const indentGuideFold = ViewPlugin.fromClass(
   class {
-    hot: HTMLElement | null = null;
-    clear() {
-      this.hot?.classList.remove('cm-indent-guide-foldable');
-      this.hot = null;
+    decorations: DecorationSet;
+    constructor(view: EditorView) {
+      this.decorations = buildIndentHoverDecorations(view);
     }
-    setHot(line: HTMLElement | null) {
-      if (this.hot === line) return;
-      this.clear();
-      if (!line) return;
-      this.hot = line;
-      line.classList.add('cm-indent-guide-foldable');
-    }
-    destroy() {
-      this.clear();
+    update(update: ViewUpdate) {
+      const hover = update.state.field(indentHoverField);
+      const hoverMoved =
+        update.docChanged ||
+        update.viewportChanged ||
+        update.heightChanged ||
+        update.transactions.some((tr) => tr.effects.some((e) => e.is(setIndentHover)));
+      if (!hoverMoved) return;
+      if (hover && !visibleRangeContainingLine(update.view, hover.seedFrom)) {
+        this.decorations = Decoration.none;
+        const view = update.view;
+        queueMicrotask(() => {
+          const current = view.state.field(indentHoverField);
+          if (current && !visibleRangeContainingLine(view, current.seedFrom)) {
+            view.dispatch({ effects: setIndentHover.of(null) });
+          }
+        });
+        return;
+      }
+      this.decorations = buildIndentHoverDecorations(update.view);
     }
   },
   {
+    decorations: (v) => v.decorations,
     eventHandlers: {
       mousemove(event, view) {
         if (event.buttons) {
-          this.clear();
+          if (view.state.field(indentHoverField))
+            view.dispatch({ effects: setIndentHover.of(null) });
           return false;
         }
-        const hit = pointerFoldTarget(view, event);
-        const line = hit
-          ? ((event.target as Element).closest('.cm-indent-markers') as HTMLElement | null)
-          : null;
-        this.setHot(line);
+        const guide = pointerGuideTarget(view, event);
+        const current = view.state.field(indentHoverField);
+        if (!guide) {
+          if (current) view.dispatch({ effects: setIndentHover.of(null) });
+          return false;
+        }
+        if (guide.empty) {
+          const block = current ? hoverBlock(view, current.seedFrom, current.column) : null;
+          if (
+            current &&
+            current.column === guide.column &&
+            block &&
+            lineInHoverBlock(view, guide.lineFrom, guide.column, block)
+          ) {
+            return false;
+          }
+          if (current) view.dispatch({ effects: setIndentHover.of(null) });
+          return false;
+        }
+        const next = { seedFrom: guide.lineFrom, column: guide.column };
+        if (hoverEq(current, next)) return false;
+        if (current && sameHoverBlock(view, current, next)) return false;
+        view.dispatch({ effects: setIndentHover.of(next) });
         return false;
       },
-      mouseleave() {
-        this.clear();
+      mouseleave(_event, view) {
+        if (view.state.field(indentHoverField)) view.dispatch({ effects: setIndentHover.of(null) });
         return false;
       },
       mousedown(event, view) {
@@ -206,6 +383,7 @@ const indentGuideFold = ViewPlugin.fromClass(
 export const quietEditorTheme = [
   indentGuides,
   codeFolding(),
+  indentHoverField,
   indentGuideFold,
   quietBase,
   syntaxHighlighting(quietSyntax),
