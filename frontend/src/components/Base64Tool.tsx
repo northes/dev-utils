@@ -1,14 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from './ui/button';
 import { Dialogs } from '@wailsio/runtime';
-import {
-  Copy,
-  DownloadSimple,
-  File as FileIcon,
-  FileImage,
-  Trash,
-  UploadSimple,
-} from '@phosphor-icons/react';
+import { Copy, DownloadSimple, File as FileIcon, FileImage, Trash } from '@phosphor-icons/react';
 import { useTranslation } from 'react-i18next';
 import CodeMirror from '@uiw/react-codemirror';
 import { EditorView } from '@codemirror/view';
@@ -27,6 +20,7 @@ import {
   type ToolId,
 } from './shared';
 import { toast } from './ui/toast';
+import FileDropEmpty, { hasFileTransfer } from './FileDropEmpty';
 import '../styles/tools/editor.css';
 
 type OutputKind = 'text' | 'image' | 'file';
@@ -238,47 +232,50 @@ export default function Base64Tool({
     await navigator.clipboard?.writeText(output).catch(() => {});
     toast.add({ title: t('toast.copied', { value: bytesLabel(output.length) }) });
   };
-  const load = async (file: File) => {
-    if (file.size > MAX_BYTES) {
-      toast.add({
-        title: t('base64Tool.tooLarge', { size: bytesLabel(MAX_BYTES) }),
-        type: 'warning',
-      });
-      return;
-    }
-    try {
-      const data = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onerror = () => reject(reader.error);
-        reader.onload = () => resolve(String(reader.result));
-        reader.readAsDataURL(file);
-      });
-      const info = {
-        name: file.name,
-        type: file.type || 'application/octet-stream',
-        size: file.size,
-        data,
-        image: file.type.startsWith('image/'),
-      };
-      setSourceFile(info);
-      setInput(data);
-      record(
-        'base64',
-        t('base64Tool.encoded'),
-        `${info.image ? t('base64Tool.image') : t('base64Tool.file')} · ${bytesLabel(file.size)}`,
-        data,
-        data.replace(/^data:[^,]+,/, ''),
-        {
-          mode: info.image ? 'image' : 'file',
-          mediaType: info.type,
+  const load = useCallback(
+    async (file: File) => {
+      if (file.size > MAX_BYTES) {
+        toast.add({
+          title: t('base64Tool.tooLarge', { size: bytesLabel(MAX_BYTES) }),
+          type: 'warning',
+        });
+        return;
+      }
+      try {
+        const data = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onerror = () => reject(reader.error);
+          reader.onload = () => resolve(String(reader.result));
+          reader.readAsDataURL(file);
+        });
+        const info = {
           name: file.name,
-          bytes: file.size,
-        },
-      );
-    } catch {
-      toast.add({ title: t('base64Tool.invalid'), type: 'error' });
-    }
-  };
+          type: file.type || 'application/octet-stream',
+          size: file.size,
+          data,
+          image: file.type.startsWith('image/'),
+        };
+        setSourceFile(info);
+        setInput(data);
+        record(
+          'base64',
+          t('base64Tool.encoded'),
+          `${info.image ? t('base64Tool.image') : t('base64Tool.file')} · ${bytesLabel(file.size)}`,
+          data,
+          data.replace(/^data:[^,]+,/, ''),
+          {
+            mode: info.image ? 'image' : 'file',
+            mediaType: info.type,
+            name: file.name,
+            bytes: file.size,
+          },
+        );
+      } catch {
+        toast.add({ title: t('base64Tool.invalid'), type: 'error' });
+      }
+    },
+    [record, t],
+  );
   useEffect(() => {
     if (!pending || pending.tool !== 'base64' || consumed.current === pending) return;
     consumed.current = pending;
@@ -302,16 +299,25 @@ export default function Base64Tool({
   }, [pending, output]);
   useEffect(() => {
     if (!active) return;
+    const dragover = (event: DragEvent) => {
+      const transfer = event.dataTransfer;
+      if (!transfer || !hasFileTransfer(transfer)) return;
+      event.preventDefault();
+      transfer.dropEffect = 'copy';
+    };
     const drop = (event: DragEvent) => {
       const file = event.dataTransfer?.files[0];
-      if (file) {
-        event.preventDefault();
-        void load(file);
-      }
+      if (!file) return;
+      event.preventDefault();
+      void load(file);
     };
+    window.addEventListener('dragover', dragover);
     window.addEventListener('drop', drop);
-    return () => window.removeEventListener('drop', drop);
-  }, [active]);
+    return () => {
+      window.removeEventListener('dragover', dragover);
+      window.removeEventListener('drop', drop);
+    };
+  }, [active, load]);
   const save = async () => {
     if (!outputFile) return;
     try {
@@ -377,17 +383,14 @@ export default function Base64Tool({
         />
       </div>
       {!input && (
-        <div className="flex min-h-0 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border text-muted-foreground">
-          <FileImage size={27} weight="duotone" />
-          <span className="text-[10px]">{t('base64Tool.fileHint')}</span>
-          <Button
-            variant="outline"
-            onClick={() => fileInput?.click()}
-            className="h-[30px] text-[10px] [&_svg]:size-3.5"
-          >
-            <UploadSimple data-icon="inline-start" weight="duotone" />
-            {t('base64Tool.chooseFile')}
-          </Button>
+        <div className="min-h-0">
+          <FileDropEmpty
+            icon={FileImage}
+            title={t('base64Tool.emptyTitle')}
+            desc={t('base64Tool.fileHint')}
+            actionLabel={t('base64Tool.chooseFile')}
+            onChooseFile={() => fileInput?.click()}
+          />
           <input
             ref={setFileInput}
             className="hidden"

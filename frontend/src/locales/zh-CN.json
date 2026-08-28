@@ -32,6 +32,9 @@
     "vertical": "垂直滚动条",
     "horizontal": "水平滚动条"
   },
+  "fileDrop": {
+    "release": "松开即可导入"
+  },
   "statusbar": {
     "openPalette": "打开命令面板"
   },
@@ -374,6 +377,7 @@
     "copy": "复制结果",
     "clear": "清空",
     "chooseFile": "选择文件",
+    "emptyTitle": "导入文件",
     "fileHint": "拖入、粘贴或选择文件",
     "detected": "识别结果",
     "encoded": "Base64 编码",
@@ -464,13 +468,12 @@
     "actions": "图片操作",
     "preview": "预览",
     "emptyTitle": "选择一张图片",
-    "emptyHint": "点击打开文件，或拖入 PNG、JPG、SVG、WebP",
+    "emptyHint": "选择文件，或拖入 PNG、JPG、SVG、WebP",
     "open": "打开图片",
     "openTitle": "选择图片",
     "chooseFile": "从文件选择",
     "fileInput": "选择图片文件",
     "replace": "更换图片",
-    "drop": "松开以载入图片",
     "unsupported": "不支持的图片格式",
     "loadFailed": "无法载入图片",
     "tooLarge": "图片超过 10 MB 限制",

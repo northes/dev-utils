@@ -32,6 +32,9 @@
     "vertical": "Vertical scrollbar",
     "horizontal": "Horizontal scrollbar"
   },
+  "fileDrop": {
+    "release": "Release to import"
+  },
   "statusbar": {
     "openPalette": "Open command palette"
   },
@@ -374,6 +377,7 @@
     "copy": "Copy result",
     "clear": "Clear",
     "chooseFile": "Choose file",
+    "emptyTitle": "Import a file",
     "fileHint": "Drop, paste, or choose a file",
     "detected": "Detected",
     "encoded": "Base64 encoded",
@@ -464,13 +468,12 @@
     "actions": "Image actions",
     "preview": "Preview",
     "emptyTitle": "Choose an image",
-    "emptyHint": "Click to open a file, or drop PNG, JPG, SVG, or WebP",
+    "emptyHint": "Choose a file, or drop PNG, JPG, SVG, or WebP",
     "open": "Open image",
     "openTitle": "Choose image",
     "chooseFile": "Choose from files",
     "fileInput": "Choose image file",
     "replace": "Replace image",
-    "drop": "Drop to load image",
     "unsupported": "Unsupported image format",
     "loadFailed": "Could not load image",
     "tooLarge": "Image exceeds the 10 MB limit",

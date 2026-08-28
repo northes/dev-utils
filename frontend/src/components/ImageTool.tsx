@@ -13,6 +13,7 @@ import {
   CaretRight,
   Crop,
   DownloadSimple,
+  Image as ImageIcon,
   Plus,
   Trash,
   UploadSimple,
@@ -51,6 +52,7 @@ import {
   type ToolId,
 } from './shared';
 import { toast } from './ui/toast';
+import FileDropEmpty, { hasFileTransfer, useFileDragOver } from './FileDropEmpty';
 import './ImageTool.css';
 
 type SizeMode = 'crop' | 'expand';
@@ -89,7 +91,6 @@ type Watermark = WatermarkDraft & {
 const MAX_BYTES = 10 * 1024 * 1024;
 const MAX_OUTPUT = 8192;
 const MIN_CROP = 8;
-const ACCEPT = 'image/png,image/jpeg,image/svg+xml,image/webp,.png,.jpg,.jpeg,.svg,.webp';
 const OPEN_PATTERN = '*.png;*.jpg;*.jpeg;*.svg;*.webp';
 const EDGE_HANDLES: EdgeHandle[] = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
 const CORNER_HANDLES: CornerHandle[] = ['nw', 'ne', 'se', 'sw'];
@@ -156,6 +157,7 @@ function isSupportedName(name: string, mime = '') {
     mimeFromName(name) || /^(image\/png|image\/jpeg|image\/svg\+xml|image\/webp)$/.test(mime),
   );
 }
+
 function toDataUrl(data: string, mime: string) {
   if (data.startsWith('data:')) return data;
   return `data:${mime || 'image/png'};base64,${data.replace(/\s/g, '')}`;
@@ -605,7 +607,8 @@ export default function ImageTool({
   const [imageSelected, setImageSelected] = useState(false);
   const [sizeInput, setSizeInput] = useState({ w: '', h: '' });
   const [pane, setPane] = useState({ w: 0, h: 0 });
-  const [over, setOver] = useState(false);
+  const fileDrag = useFileDragOver();
+  const over = fileDrag.over;
   const [openFill, setOpenFill] = useState(false);
   const [openQuality, setOpenQuality] = useState(false);
   const [openWatermark, setOpenWatermark] = useState(false);
@@ -680,18 +683,18 @@ export default function ImageTool({
       ].join('|')
     : '';
 
-  const replaceJpegPreview = (next: { url: string; key: string } | null) => {
+  const replaceJpegPreview = useCallback((next: { url: string; key: string } | null) => {
     const nextUrl = next?.url ?? null;
     if (jpegPreviewRef.current && jpegPreviewRef.current !== nextUrl)
       URL.revokeObjectURL(jpegPreviewRef.current);
     jpegPreviewRef.current = nextUrl;
     setJpegPreview(next);
-  };
+  }, []);
 
-  const invalidateJpegPreview = () => {
+  const invalidateJpegPreview = useCallback(() => {
     jpegTaskRef.current += 1;
     replaceJpegPreview(null);
-  };
+  }, [replaceJpegPreview]);
 
   const startGeometry = (
     event: ReactPointerEvent,
@@ -702,30 +705,33 @@ export default function ImageTool({
     pointer.start(event, onMoveFn, onEnd);
   };
 
-  const resetImage = (next: SourceImage | null) => {
-    pointer.stop(true);
-    invalidateJpegPreview();
-    setSource(next);
-    setSizeMode('crop');
-    setCrop(next ? { x: 0, y: 0, w: next.width, h: next.height } : { x: 0, y: 0, w: 1, h: 1 });
-    setExpand(
-      next
-        ? { width: next.width, height: next.height, imageX: 0, imageY: 0 }
-        : { width: 1, height: 1, imageX: 0, imageY: 0 },
-    );
-    setFillTransparent(true);
-    setFillColor('#ffffff');
-    setQuality(92);
-    setWatermarks([]);
-    setSelectedId('');
-    setImageSelected(false);
-    setDraft(DEFAULT_DRAFT);
-    setOver(false);
-    setOpenFill(false);
-    setOpenQuality(false);
-    setOpenWatermark(false);
-    setSizeSession(null);
-  };
+  const resetImage = useCallback(
+    (next: SourceImage | null) => {
+      pointer.stop(true);
+      invalidateJpegPreview();
+      setSource(next);
+      setSizeMode('crop');
+      setCrop(next ? { x: 0, y: 0, w: next.width, h: next.height } : { x: 0, y: 0, w: 1, h: 1 });
+      setExpand(
+        next
+          ? { width: next.width, height: next.height, imageX: 0, imageY: 0 }
+          : { width: 1, height: 1, imageX: 0, imageY: 0 },
+      );
+      setFillTransparent(true);
+      setFillColor('#ffffff');
+      setQuality(92);
+      setWatermarks([]);
+      setSelectedId('');
+      setImageSelected(false);
+      setDraft(DEFAULT_DRAFT);
+      fileDrag.clear();
+      setOpenFill(false);
+      setOpenQuality(false);
+      setOpenWatermark(false);
+      setSizeSession(null);
+    },
+    [fileDrag.clear, invalidateJpegPreview, pointer.stop],
+  );
 
   const clearSelection = () => {
     setSelectedId('');
@@ -757,38 +763,74 @@ export default function ImageTool({
     setDraft((current) => ({ ...current, ...patch }));
   };
 
-  const applyLoaded = async (dataUrl: string, name: string, mime: string) => {
-    try {
-      const img = await loadHtmlImage(dataUrl);
-      const width = img.naturalWidth || img.width || 1;
-      const height = img.naturalHeight || img.height || 1;
-      resetImage({ name, mime: mime || mimeFromName(name) || 'image/png', dataUrl, width, height });
-    } catch {
-      toast.add({ title: t('imageTool.loadFailed'), type: 'error' });
-    }
-  };
+  const applyLoaded = useCallback(
+    async (dataUrl: string, name: string, mime: string) => {
+      try {
+        const img = await loadHtmlImage(dataUrl);
+        const width = img.naturalWidth || img.width || 1;
+        const height = img.naturalHeight || img.height || 1;
+        resetImage({
+          name,
+          mime: mime || mimeFromName(name) || 'image/png',
+          dataUrl,
+          width,
+          height,
+        });
+      } catch {
+        toast.add({ title: t('imageTool.loadFailed'), type: 'error' });
+      }
+    },
+    [resetImage, t],
+  );
 
-  const loadFile = async (file: File) => {
-    if (!isSupportedName(file.name, file.type)) {
-      toast.add({ title: t('imageTool.unsupported'), type: 'warning' });
-      return;
-    }
-    if (file.size > MAX_BYTES) {
-      toast.add({ title: t('imageTool.tooLarge'), type: 'warning' });
-      return;
-    }
-    const dataUrl = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result || ''));
-      reader.onerror = () => reject(new Error('read'));
-      reader.readAsDataURL(file);
-    }).catch(() => '');
-    if (!dataUrl) {
-      toast.add({ title: t('imageTool.loadFailed'), type: 'error' });
-      return;
-    }
-    await applyLoaded(dataUrl, file.name, file.type);
-  };
+  const loadFile = useCallback(
+    async (file: File) => {
+      if (!isSupportedName(file.name, file.type)) {
+        toast.add({ title: t('imageTool.unsupported'), type: 'warning' });
+        return;
+      }
+      if (file.size > MAX_BYTES) {
+        toast.add({ title: t('imageTool.tooLarge'), type: 'warning' });
+        return;
+      }
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = () => reject(new Error('read'));
+        reader.readAsDataURL(file);
+      }).catch(() => '');
+      if (!dataUrl) {
+        toast.add({ title: t('imageTool.loadFailed'), type: 'error' });
+        return;
+      }
+      await applyLoaded(dataUrl, file.name, file.type);
+    },
+    [applyLoaded, t],
+  );
+
+  useEffect(() => {
+    if (!active) return;
+    const dragover = (event: DragEvent) => {
+      const transfer = event.dataTransfer;
+      if (!transfer || !hasFileTransfer(transfer)) return;
+      event.preventDefault();
+      transfer.dropEffect = 'copy';
+    };
+    const drop = (event: DragEvent) => {
+      const transfer = event.dataTransfer;
+      if (!transfer || !hasFileTransfer(transfer)) return;
+      event.preventDefault();
+      fileDrag.clear();
+      const file = transfer.files[0];
+      if (file) void loadFile(file);
+    };
+    window.addEventListener('dragover', dragover);
+    window.addEventListener('drop', drop);
+    return () => {
+      window.removeEventListener('dragover', dragover);
+      window.removeEventListener('drop', drop);
+    };
+  }, [active, fileDrag.clear, loadFile]);
 
   const openNative = async () => {
     try {
@@ -1275,29 +1317,6 @@ export default function ImageTool({
     );
   };
 
-  const onDragEnter = (event: React.DragEvent) => {
-    event.preventDefault();
-    setOver(true);
-  };
-
-  const onDragOver = (event: React.DragEvent) => {
-    event.preventDefault();
-    event.dataTransfer.dropEffect = 'copy';
-  };
-
-  const onDragLeave = (event: React.DragEvent) => {
-    const next = event.relatedTarget;
-    if (next instanceof Node && event.currentTarget.contains(next)) return;
-    setOver(false);
-  };
-
-  const onDrop = (event: React.DragEvent) => {
-    event.preventDefault();
-    setOver(false);
-    const file = event.dataTransfer.files[0];
-    if (file) void loadFile(file);
-  };
-
   const cropStyle =
     source && cropEditing
       ? {
@@ -1358,45 +1377,26 @@ export default function ImageTool({
                 data-empty={source ? undefined : 'true'}
                 data-over={over ? 'true' : undefined}
                 data-dragging={pointer.dragging ? 'true' : undefined}
-                onDragEnter={onDragEnter}
-                onDragOver={onDragOver}
-                onDragLeave={onDragLeave}
-                onDrop={onDrop}
+                {...fileDrag.dragProps}
                 className="image-tool-stage relative min-h-0 flex-1 overflow-hidden"
               >
                 {over ? (
                   <span className="sr-only" role="status">
-                    {t('imageTool.drop')}
+                    {t('fileDrop.release')}
                   </span>
                 ) : null}
                 {!source ? (
-                  <div className="image-tool-empty">
-                    <button
-                      ref={emptyRef}
-                      type="button"
-                      onClick={() => void openNative()}
-                      className="image-tool-empty-action"
-                    >
-                      <strong className="image-tool-empty-title">
-                        {over ? t('imageTool.drop') : t('imageTool.emptyTitle')}
-                      </strong>
-                      <span className="image-tool-empty-hint">{t('imageTool.emptyHint')}</span>
-                    </button>
-                    <label className="image-tool-file">
-                      <span>{t('imageTool.chooseFile')}</span>
-                      <input
-                        type="file"
-                        accept={ACCEPT}
-                        className="sr-only"
-                        aria-label={t('imageTool.fileInput')}
-                        onChange={(event) => {
-                          const file = event.target.files?.[0];
-                          event.target.value = '';
-                          if (file) void loadFile(file);
-                        }}
-                      />
-                    </label>
-                  </div>
+                  <FileDropEmpty
+                    icon={ImageIcon}
+                    title={t('imageTool.emptyTitle')}
+                    desc={t('imageTool.emptyHint')}
+                    actionLabel={t('imageTool.chooseFile')}
+                    onChooseFile={() => void openNative()}
+                    actionRef={emptyRef}
+                    over={over}
+                    framed={false}
+                    announce={false}
+                  />
                 ) : (
                   <>
                     {sizeMode === 'expand' && canvasStyle ? (
