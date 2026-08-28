@@ -489,6 +489,7 @@
     "quality": "Quality",
     "qualityValue": "{{value}}%",
     "qualityPngHint": "Transparent expand exports as PNG; quality does not change the lossless file",
+    "outputPng": "PNG",
     "watermark": "Watermark",
     "watermarkText": "Text",
     "watermarkTextPlaceholder": "Enter watermark text",

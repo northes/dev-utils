@@ -489,6 +489,7 @@
     "quality": "质量",
     "qualityValue": "{{value}}%",
     "qualityPngHint": "透明扩充将导出为 PNG，质量不会改变无损结果",
+    "outputPng": "PNG",
     "watermark": "水印",
     "watermarkText": "文字",
     "watermarkTextPlaceholder": "输入水印文字",

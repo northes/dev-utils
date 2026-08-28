@@ -9,9 +9,9 @@ import {
 import { Dialogs } from '@wailsio/runtime';
 import {
   ArrowsOut,
+  CaretRight,
   Crop,
   DownloadSimple,
-  Image as ImageIcon,
   Plus,
   Trash,
   UploadSimple,
@@ -489,6 +489,57 @@ function usePointerSession() {
   };
 }
 
+function ImageToolDisclosure({
+  id,
+  title,
+  meta,
+  open,
+  onOpenChange,
+  children,
+}: {
+  id: string;
+  title: string;
+  meta?: string;
+  open: boolean;
+  onOpenChange: (next: boolean) => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="flex flex-col border-t border-border pt-3">
+      <button
+        type="button"
+        id={`${id}-toggle`}
+        className="flex min-h-7 w-full cursor-pointer items-center gap-2 rounded-sm border-0 bg-transparent p-0 text-left font-mono text-[10px] font-medium uppercase tracking-[.04em] text-muted-foreground hover:text-foreground focus-visible:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+        aria-expanded={open}
+        aria-controls={id}
+        onClick={() => onOpenChange(!open)}
+      >
+        <CaretRight
+          size={10}
+          weight="bold"
+          className={`flex-none ${open ? 'rotate-90' : ''}`}
+          aria-hidden
+        />
+        <span className="min-w-0 flex-1">{title}</span>
+        {meta ? (
+          <span className="max-w-[46%] truncate font-sans text-[11px] font-normal normal-case tracking-normal">
+            {meta}
+          </span>
+        ) : null}
+      </button>
+      <div
+        id={id}
+        role="region"
+        aria-labelledby={`${id}-toggle`}
+        hidden={!open}
+        className={open ? 'flex flex-col gap-3 pt-3' : undefined}
+      >
+        {open ? children : null}
+      </div>
+    </section>
+  );
+}
+
 export default function ImageTool({
   active,
   record,
@@ -519,6 +570,9 @@ export default function ImageTool({
   const [sizeInput, setSizeInput] = useState({ w: '', h: '' });
   const [pane, setPane] = useState({ w: 0, h: 0 });
   const [over, setOver] = useState(false);
+  const [openFill, setOpenFill] = useState(false);
+  const [openQuality, setOpenQuality] = useState(false);
+  const [openWatermark, setOpenWatermark] = useState(false);
   const [jpegPreview, setJpegPreview] = useState<string | null>(null);
   const jpegPreviewRef = useRef<string | null>(null);
   const exportRef = useRef<() => Promise<void>>(async () => {});
@@ -576,12 +630,19 @@ export default function ImageTool({
     setImageSelected(false);
     setDraft(DEFAULT_DRAFT);
     setOver(false);
+    setOpenFill(false);
+    setOpenQuality(false);
+    setOpenWatermark(false);
   };
 
   const clearSelection = () => {
     setSelectedId('');
     setImageSelected(false);
   };
+
+  useEffect(() => {
+    if (selectedId) setOpenWatermark(true);
+  }, [selectedId]);
 
   const patchDraft = (patch: Partial<WatermarkDraft>) => {
     if (selectedWm) {
@@ -1083,16 +1144,8 @@ export default function ImageTool({
       <ToolLayout className="image-tool">
         <ToolLayoutHeader title={t('imageTool.title')} />
         <ToolLayoutContent>
-          <div className="grid h-full min-h-0 min-w-0 grid-cols-[minmax(0,1.2fr)_minmax(240px,0.8fr)] grid-rows-[minmax(0,1fr)] gap-4 max-[700px]:grid-cols-1 max-[700px]:grid-rows-[minmax(0,1fr)_minmax(0,1fr)]">
-            <div className="flex min-h-0 min-w-0 flex-col gap-2">
-              <div className="flex items-baseline justify-between gap-2 font-mono text-[10px] font-medium uppercase tracking-[.04em] text-muted-foreground">
-                <span>{t('imageTool.preview')}</span>
-                {source ? (
-                  <span className="normal-case tracking-normal">
-                    {t('imageTool.dimensions', { width: out.w, height: out.h })}
-                  </span>
-                ) : null}
-              </div>
+          <div className="grid h-full min-h-0 min-w-0 grid-cols-[minmax(0,1.2fr)_minmax(228px,0.72fr)] grid-rows-[minmax(0,1fr)] max-[700px]:grid-cols-1 max-[700px]:grid-rows-[minmax(0,1fr)_minmax(0,1fr)]">
+            <div className="flex min-h-0 min-w-0 flex-col">
               <div
                 ref={previewRef}
                 tabIndex={source ? 0 : -1}
@@ -1107,16 +1160,21 @@ export default function ImageTool({
                 }}
                 onDragLeave={() => setOver(false)}
                 onDrop={onDrop}
-                className={`image-tool-stage relative min-h-0 flex-1 overflow-hidden border border-dashed ${over ? 'border-primary' : 'border-border'}`}
+                className={`image-tool-stage relative min-h-0 flex-1 overflow-hidden ${
+                  over
+                    ? 'border border-dashed border-primary'
+                    : source
+                      ? ''
+                      : 'border border-dashed border-border'
+                }`}
               >
                 {!source ? (
-                  <div className="flex h-full min-h-0 flex-col items-center justify-center gap-3 px-6 text-center">
-                    <ImageIcon size={36} weight="duotone" className="text-muted-foreground" />
+                  <div className="flex h-full min-h-0 flex-col items-center justify-center gap-2 px-4 text-center">
                     <button
                       ref={emptyRef}
                       type="button"
                       onClick={() => void openNative()}
-                      className="flex max-w-[280px] flex-col items-center gap-1 text-muted-foreground"
+                      className="flex max-w-[240px] flex-col items-center gap-1 rounded-sm border-0 bg-transparent p-0 text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                     >
                       <strong className="text-xs text-foreground">
                         {over ? t('imageTool.drop') : t('imageTool.emptyTitle')}
@@ -1292,6 +1350,9 @@ export default function ImageTool({
                         </div>
                       );
                     })}
+                    <span className="pointer-events-none absolute bottom-2 left-2 z-[4] font-mono text-[10px] font-medium tracking-[.02em] text-muted-foreground">
+                      {t('imageTool.dimensions', { width: out.w, height: out.h })}
+                    </span>
                     <Button
                       variant="ghost"
                       size="icon-sm"
@@ -1305,9 +1366,9 @@ export default function ImageTool({
                 )}
               </div>
             </div>
-            <div className="flex min-h-0 min-w-0 flex-col overflow-x-hidden overflow-y-auto [padding-inline-end:var(--overlay-scrollbar-hit-size)]">
-              <div className="flex flex-col gap-5 pb-2">
-                <section className="flex flex-col gap-3 border-b border-border pb-5">
+            <div className="flex min-h-0 min-w-0 flex-col overflow-x-hidden overflow-y-auto border-border max-[700px]:border-t min-[701px]:border-l [padding-inline-end:var(--overlay-scrollbar-hit-size)]">
+              <div className="flex flex-col gap-3 py-3 pl-3">
+                <section className="flex flex-col gap-3">
                   <div className="flex items-center justify-between gap-2">
                     <h2 className="m-0 font-mono text-[10px] font-medium uppercase tracking-[.04em] text-muted-foreground">
                       {t('imageTool.size')}
@@ -1381,68 +1442,81 @@ export default function ImageTool({
                         }
                       />
                     </Label>
-                    <Button variant="outline" size="sm" disabled={!source} onClick={applySize}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-none"
+                      disabled={!source}
+                      onClick={applySize}
+                    >
                       {t('imageTool.applySize')}
                     </Button>
                   </div>
-                  {sizeMode === 'expand' ? (
-                    <div className="flex flex-col gap-2">
-                      <Label
-                        htmlFor="image-fill-transparent"
-                        className="justify-between text-[11px] text-muted-foreground"
-                      >
-                        <span>{t('imageTool.fillTransparent')}</span>
-                        <Switch
-                          id="image-fill-transparent"
-                          checked={fillTransparent}
-                          onCheckedChange={(checked) => setFillTransparent(checked === true)}
-                          size="sm"
-                        />
-                      </Label>
-                      {!fillTransparent ? (
-                        <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
-                          <span id="image-fill-color-label">{t('imageTool.fillColor')}</span>
-                          <ColorPicker
-                            value={fillColor}
-                            onValueChange={setFillColor}
-                            withoutAlpha
-                            defaultFormat="hex"
-                          >
-                            <ColorPickerTrigger aria-labelledby="image-fill-color-label">
-                              <ColorPickerSwatch />
-                            </ColorPickerTrigger>
-                            <ColorPickerContent>
-                              <ColorPickerArea />
-                              <ColorPickerHueSlider />
-                              <div className="flex items-center gap-2">
-                                <ColorPickerEyeDropper />
-                                <ColorPickerFormatSelect />
-                              </div>
-                              <ColorPickerInput withoutAlpha />
-                            </ColorPickerContent>
-                          </ColorPicker>
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : null}
                 </section>
-                <section className="flex flex-col gap-2 border-b border-border pb-5">
-                  <Label
-                    id="image-quality-label"
-                    className="justify-between font-mono text-[10px] font-medium uppercase tracking-[.04em] text-muted-foreground"
+                {sizeMode === 'expand' ? (
+                  <ImageToolDisclosure
+                    id="image-fill-panel"
+                    title={t('imageTool.fill')}
+                    meta={fillTransparent ? t('imageTool.fillTransparent') : fillColor}
+                    open={openFill}
+                    onOpenChange={setOpenFill}
                   >
-                    <span>{t('imageTool.quality')}</span>
-                    <span className="normal-case tracking-normal">
-                      {t('imageTool.qualityValue', { value: quality })}
-                    </span>
-                  </Label>
+                    <Label
+                      htmlFor="image-fill-transparent"
+                      className="justify-between text-[11px] text-muted-foreground"
+                    >
+                      <span>{t('imageTool.fillTransparent')}</span>
+                      <Switch
+                        id="image-fill-transparent"
+                        checked={fillTransparent}
+                        onCheckedChange={(checked) => setFillTransparent(checked === true)}
+                        size="sm"
+                      />
+                    </Label>
+                    {!fillTransparent ? (
+                      <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
+                        <span id="image-fill-color-label">{t('imageTool.fillColor')}</span>
+                        <ColorPicker
+                          value={fillColor}
+                          onValueChange={setFillColor}
+                          withoutAlpha
+                          defaultFormat="hex"
+                        >
+                          <ColorPickerTrigger aria-labelledby="image-fill-color-label">
+                            <ColorPickerSwatch />
+                          </ColorPickerTrigger>
+                          <ColorPickerContent>
+                            <ColorPickerArea />
+                            <ColorPickerHueSlider />
+                            <div className="flex items-center gap-2">
+                              <ColorPickerEyeDropper />
+                              <ColorPickerFormatSelect />
+                            </div>
+                            <ColorPickerInput withoutAlpha />
+                          </ColorPickerContent>
+                        </ColorPicker>
+                      </div>
+                    ) : null}
+                  </ImageToolDisclosure>
+                ) : null}
+                <ImageToolDisclosure
+                  id="image-quality-panel"
+                  title={t('imageTool.quality')}
+                  meta={
+                    pngExport
+                      ? t('imageTool.outputPng')
+                      : t('imageTool.qualityValue', { value: quality })
+                  }
+                  open={openQuality}
+                  onOpenChange={setOpenQuality}
+                >
                   <Slider
                     min={1}
                     max={100}
                     step={1}
                     value={[quality]}
                     disabled={!source}
-                    aria-labelledby="image-quality-label"
+                    aria-labelledby="image-quality-panel-toggle"
                     aria-describedby={pngExport ? 'image-quality-png-hint' : undefined}
                     onValueChange={(value) => {
                       const next = Array.isArray(value) ? value[0] : value;
@@ -1457,11 +1531,14 @@ export default function ImageTool({
                       {t('imageTool.qualityPngHint')}
                     </p>
                   ) : null}
-                </section>
-                <section className="flex flex-col gap-3">
-                  <h2 className="m-0 font-mono text-[10px] font-medium uppercase tracking-[.04em] text-muted-foreground">
-                    {t('imageTool.watermark')}
-                  </h2>
+                </ImageToolDisclosure>
+                <ImageToolDisclosure
+                  id="image-watermark-panel"
+                  title={t('imageTool.watermark')}
+                  meta={watermarks.length ? String(watermarks.length) : undefined}
+                  open={openWatermark}
+                  onOpenChange={setOpenWatermark}
+                >
                   <Label
                     htmlFor="image-wm-text"
                     className="flex-col items-stretch gap-1.5 text-[11px] text-muted-foreground"
@@ -1597,7 +1674,7 @@ export default function ImageTool({
                       {t('imageTool.removeWatermark')}
                     </Button>
                   </div>
-                </section>
+                </ImageToolDisclosure>
               </div>
             </div>
           </div>
