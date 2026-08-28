@@ -27,7 +27,7 @@ import { acceptCompletion } from '@codemirror/autocomplete';
 import { SaveText } from '../../bindings/changeme/fileservice';
 import { JSON_CONVERT_FORMATS, type JsonConvertFormat } from '../lib/json-converter';
 import { useDebouncedJsonConversion } from '../hooks/useDebouncedJsonConversion';
-import { quietEditorTheme } from './codeMirrorTheme';
+import { jsonFoldParseWarmup, quietEditorTheme } from './codeMirrorTheme';
 import {
   Copy,
   DownloadSimple,
@@ -353,7 +353,10 @@ function JsonEditorPane({
       }),
     [],
   );
-  const extensions = useMemo(() => [json5Language, foldExt, pasteExt], [foldExt, pasteExt]);
+  const extensions = useMemo(
+    () => [json5Language, foldExt, jsonFoldParseWarmup, pasteExt],
+    [foldExt, pasteExt],
+  );
   return (
     <div className="json-pane flex min-h-0 min-w-0 flex-1 flex-col gap-2">
       <span className="json-pane-label flex-none font-mono text-[10px] font-medium leading-none tracking-[.04em] text-muted-foreground uppercase">
@@ -604,7 +607,7 @@ export default function JsonTool({
     if (displayedConvert.format === 'yaml') return [yaml(), EditorView.lineWrapping];
     return [EditorView.lineWrapping];
   }, [displayedConvert.format]);
-  const schemaResultExt = useMemo(() => [json5Language, foldExt], [foldExt]);
+  const schemaResultExt = useMemo(() => [json5Language, foldExt, jsonFoldParseWarmup], [foldExt]);
   const convertErrorMessage =
     conversion.status === 'error'
       ? t(

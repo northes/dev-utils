@@ -3,13 +3,15 @@ import {
   foldable,
   foldEffect,
   foldedRanges,
+  forceParsing,
   getIndentUnit,
   HighlightStyle,
   syntaxHighlighting,
   syntaxTree,
+  syntaxTreeAvailable,
   unfoldEffect,
 } from '@codemirror/language';
-import { RangeSetBuilder, StateEffect, StateField } from '@codemirror/state';
+import { Facet, RangeSetBuilder, StateEffect, StateField, type Extension } from '@codemirror/state';
 import {
   Decoration,
   EditorView,
@@ -162,12 +164,13 @@ function pointerGuideTarget(view: EditorView, event: MouseEvent) {
   return { lineFrom: line.from, column, empty };
 }
 
-function pointerFoldTarget(view: EditorView, event: MouseEvent) {
-  const guide = pointerGuideTarget(view, event);
-  if (!guide) return null;
-  const range = foldRangeForGuide(view, guide.lineFrom, guide.column);
-  return range ? { range } : null;
-}
+const jsonFoldParseEnabled = Facet.define<boolean, boolean>({
+  combine: (values) => values.some(Boolean),
+});
+const jsonFoldParseClickMs = 40;
+const jsonFoldParseTimeoutBudgetMs = 4;
+const jsonFoldParseTimerDelayMs = 16;
+const jsonFoldParseTimerBudgetMs = 8;
 
 type IndentHover = { seedFrom: number; column: number };
 
@@ -367,11 +370,19 @@ const indentGuideFold = ViewPlugin.fromClass(
       },
       mousedown(event, view) {
         if (event.button !== 0) return false;
-        const hit = pointerFoldTarget(view, event);
-        if (!hit) return false;
-        const folded = matchingFold(view, hit.range);
+        const guide = pointerGuideTarget(view, event);
+        if (!guide) return false;
+        if (view.state.facet(jsonFoldParseEnabled)) {
+          const end = view.state.doc.length;
+          if (!syntaxTreeAvailable(view.state, end)) {
+            forceParsing(view, end, jsonFoldParseClickMs);
+          }
+        }
+        const range = foldRangeForGuide(view, guide.lineFrom, guide.column);
+        if (!range) return false;
+        const folded = matchingFold(view, range);
         view.dispatch({
-          effects: folded ? unfoldEffect.of(folded) : foldEffect.of(hit.range),
+          effects: folded ? unfoldEffect.of(folded) : foldEffect.of(range),
         });
         event.preventDefault();
         return true;
@@ -387,4 +398,70 @@ export const quietEditorTheme = [
   indentGuideFold,
   quietBase,
   syntaxHighlighting(quietSyntax),
+];
+
+function jsonFoldParseBudget(deadline?: IdleDeadline) {
+  if (!deadline) return jsonFoldParseTimerBudgetMs;
+  const remaining = deadline.timeRemaining();
+  if (deadline.didTimeout || remaining <= 0) return jsonFoldParseTimeoutBudgetMs;
+  return remaining;
+}
+
+function scheduleIdle(callback: (deadline?: IdleDeadline) => void) {
+  if (typeof requestIdleCallback === 'function') {
+    const id = requestIdleCallback((deadline) => callback(deadline), { timeout: 80 });
+    return () => cancelIdleCallback(id);
+  }
+  const id = setTimeout(() => callback(), jsonFoldParseTimerDelayMs);
+  return () => clearTimeout(id);
+}
+
+const jsonFoldParseWarmupPlugin = ViewPlugin.fromClass(
+  class {
+    private cancelScheduled: (() => void) | null = null;
+    private generation = 0;
+    private alive = true;
+
+    constructor(readonly view: EditorView) {
+      this.queue();
+    }
+
+    update(update: ViewUpdate) {
+      if (!update.docChanged) return;
+      this.stop();
+      this.queue();
+    }
+
+    destroy() {
+      this.alive = false;
+      this.stop();
+    }
+
+    private stop() {
+      this.generation++;
+      this.cancelScheduled?.();
+      this.cancelScheduled = null;
+    }
+
+    private queue() {
+      if (!this.alive || this.cancelScheduled) return;
+      if (syntaxTreeAvailable(this.view.state, this.view.state.doc.length)) return;
+      const generation = this.generation;
+      this.cancelScheduled = scheduleIdle((deadline) => {
+        this.cancelScheduled = null;
+        if (!this.alive || generation !== this.generation) return;
+        const end = this.view.state.doc.length;
+        if (syntaxTreeAvailable(this.view.state, end)) return;
+        forceParsing(this.view, end, jsonFoldParseBudget(deadline));
+        if (!this.alive || generation !== this.generation) return;
+        if (syntaxTreeAvailable(this.view.state, this.view.state.doc.length)) return;
+        this.queue();
+      });
+    }
+  },
+);
+
+export const jsonFoldParseWarmup: Extension = [
+  jsonFoldParseEnabled.of(true),
+  jsonFoldParseWarmupPlugin,
 ];
