@@ -8,6 +8,7 @@ import {
 } from 'react';
 import { Dialogs } from '@wailsio/runtime';
 import {
+  ArrowCounterClockwise,
   ArrowsOut,
   CaretRight,
   Crop,
@@ -58,6 +59,15 @@ type Fit = Rect & { scale: number };
 type EdgeHandle = 'n' | 's' | 'e' | 'w' | 'nw' | 'ne' | 'se' | 'sw';
 type CornerHandle = 'nw' | 'ne' | 'se' | 'sw';
 type ExpandCanvas = { width: number; height: number; imageX: number; imageY: number };
+type SizeSession =
+  | { mode: 'crop'; sizeMode: SizeMode; crop: Rect }
+  | {
+      mode: 'expand';
+      sizeMode: SizeMode;
+      expand: ExpandCanvas;
+      fillTransparent: boolean;
+      fillColor: string;
+    };
 type SourceImage = { name: string; mime: string; dataUrl: string; width: number; height: number };
 type WatermarkDraft = {
   text: string;
@@ -207,6 +217,15 @@ function resizeRect(
   if (handle.includes('n')) h = bottom - ry;
   return { x: rx, y: ry, w: Math.max(1, w), h: Math.max(1, h) };
 }
+function moveRect(rect: Rect, dx: number, dy: number, maxW: number, maxH: number): Rect {
+  return {
+    x: clamp(rect.x + dx, 0, Math.max(0, maxW - rect.w)),
+    y: clamp(rect.y + dy, 0, Math.max(0, maxH - rect.h)),
+    w: rect.w,
+    h: rect.h,
+  };
+}
+
 function outputSize(image: SourceImage, mode: SizeMode, crop: Rect, expand: ExpandCanvas) {
   if (mode === 'crop')
     return { w: Math.max(1, Math.round(crop.w)), h: Math.max(1, Math.round(crop.h)) };
@@ -434,59 +453,76 @@ type Session = {
 
 function usePointerSession() {
   const session = useRef<Session | null>(null);
-  const stop = useCallback((canceled: boolean) => {
-    const current = session.current;
-    if (!current) return;
-    session.current = null;
-    try {
-      if (current.target.hasPointerCapture(current.pointerId))
-        current.target.releasePointerCapture(current.pointerId);
-    } catch {
-      /* already released */
-    }
-    window.removeEventListener('pointermove', onMove);
-    window.removeEventListener('pointerup', onUp);
-    window.removeEventListener('pointercancel', onCancel);
-    window.removeEventListener('blur', onBlur);
-    document.removeEventListener('visibilitychange', onHidden);
-    current.onEnd(canceled);
-  }, []);
-  const onMove = (event: PointerEvent) => {
+  const stopRef = useRef<(canceled: boolean) => void>(() => {});
+  const [dragging, setDragging] = useState(false);
+  const handleMove = useRef((event: PointerEvent) => {
     const current = session.current;
     if (!current || event.pointerId !== current.pointerId) return;
     current.onMove(event);
-  };
-  const onUp = (event: PointerEvent) => {
-    if (session.current && event.pointerId === session.current.pointerId) stop(false);
-  };
-  const onCancel = (event: PointerEvent) => {
-    if (session.current && event.pointerId === session.current.pointerId) stop(true);
-  };
-  const onBlur = () => stop(true);
-  const onHidden = () => {
-    if (document.hidden) stop(true);
-  };
+  }).current;
+  const handleUp = useRef((event: PointerEvent) => {
+    if (session.current && event.pointerId === session.current.pointerId) stopRef.current(false);
+  }).current;
+  const handleCancel = useRef((event: PointerEvent) => {
+    if (session.current && event.pointerId === session.current.pointerId) stopRef.current(true);
+  }).current;
+  const handleBlur = useRef(() => stopRef.current(true)).current;
+  const handleHidden = useRef(() => {
+    if (document.hidden) stopRef.current(true);
+  }).current;
+
+  const stop = useCallback(
+    (canceled: boolean) => {
+      const current = session.current;
+      if (!current) return;
+      session.current = null;
+      setDragging(false);
+      try {
+        if (current.target.hasPointerCapture(current.pointerId))
+          current.target.releasePointerCapture(current.pointerId);
+      } catch {
+        /* already released */
+      }
+      window.removeEventListener('pointermove', handleMove);
+      window.removeEventListener('pointerup', handleUp);
+      window.removeEventListener('pointercancel', handleCancel);
+      window.removeEventListener('blur', handleBlur);
+      document.removeEventListener('visibilitychange', handleHidden);
+      current.onEnd(canceled);
+    },
+    [handleBlur, handleCancel, handleHidden, handleMove, handleUp],
+  );
+
+  stopRef.current = stop;
+
   useEffect(() => () => stop(true), [stop]);
-  return (
-    event: ReactPointerEvent,
-    onMoveFn: (e: PointerEvent) => void,
-    onEnd: (canceled: boolean) => void,
-  ) => {
-    stop(true);
-    event.preventDefault();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    session.current = {
-      pointerId: event.pointerId,
-      target: event.currentTarget,
-      onMove: onMoveFn,
-      onEnd,
-    };
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
-    window.addEventListener('pointercancel', onCancel);
-    window.addEventListener('blur', onBlur);
-    document.addEventListener('visibilitychange', onHidden);
-  };
+
+  const start = useCallback(
+    (
+      event: ReactPointerEvent,
+      onMoveFn: (e: PointerEvent) => void,
+      onEnd: (canceled: boolean) => void,
+    ) => {
+      stop(true);
+      event.preventDefault();
+      event.currentTarget.setPointerCapture(event.pointerId);
+      session.current = {
+        pointerId: event.pointerId,
+        target: event.currentTarget,
+        onMove: onMoveFn,
+        onEnd,
+      };
+      setDragging(true);
+      window.addEventListener('pointermove', handleMove);
+      window.addEventListener('pointerup', handleUp);
+      window.addEventListener('pointercancel', handleCancel);
+      window.addEventListener('blur', handleBlur);
+      document.addEventListener('visibilitychange', handleHidden);
+    },
+    [handleBlur, handleCancel, handleHidden, handleMove, handleUp, stop],
+  );
+
+  return { start, stop, dragging };
 }
 
 function ImageToolDisclosure({
@@ -555,7 +591,7 @@ export default function ImageTool({
   const consumed = useRef<PendingAction | null>(null);
   const previewRef = useRef<HTMLDivElement>(null);
   const emptyRef = useRef<HTMLButtonElement>(null);
-  const startPointer = usePointerSession();
+  const pointer = usePointerSession();
   const [source, setSource] = useState<SourceImage | null>(null);
   const [sizeMode, setSizeMode] = useState<SizeMode>('crop');
   const [crop, setCrop] = useState<Rect>({ x: 0, y: 0, w: 1, h: 1 });
@@ -573,10 +609,14 @@ export default function ImageTool({
   const [openFill, setOpenFill] = useState(false);
   const [openQuality, setOpenQuality] = useState(false);
   const [openWatermark, setOpenWatermark] = useState(false);
-  const [jpegPreview, setJpegPreview] = useState<string | null>(null);
+  const [sizeSession, setSizeSession] = useState<SizeSession | null>(null);
+  const [jpegPreview, setJpegPreview] = useState<{ url: string; key: string } | null>(null);
   const jpegPreviewRef = useRef<string | null>(null);
+  const jpegTaskRef = useRef(0);
   const exportRef = useRef<() => Promise<void>>(async () => {});
   const pngExport = sizeMode === 'expand' && fillTransparent;
+  const cropEditing = sizeSession?.mode === 'crop';
+  const expandEditing = sizeSession?.mode === 'expand';
   const selectedWm = watermarks.find((item) => item.id === selectedId);
   const form = selectedWm
     ? {
@@ -609,14 +649,62 @@ export default function ImageTool({
   const fit = useMemo(
     () =>
       source
-        ? sizeMode === 'crop'
+        ? sizeMode === 'crop' && cropEditing
           ? fitContain(source.width, source.height, pane.w, pane.h)
           : fitContain(out.w, out.h, pane.w, pane.h)
         : { x: 0, y: 0, w: 0, h: 0, scale: 1 },
-    [source, sizeMode, pane.w, pane.h, out.w, out.h],
+    [source, sizeMode, cropEditing, pane.w, pane.h, out.w, out.h],
   );
 
+  const previewKey = source
+    ? [
+        source.dataUrl,
+        sizeMode,
+        crop.x,
+        crop.y,
+        crop.w,
+        crop.h,
+        expand.width,
+        expand.height,
+        expand.imageX,
+        expand.imageY,
+        fillTransparent ? '1' : '0',
+        fillColor,
+        quality,
+        watermarks
+          .map(
+            (item) =>
+              `${item.id}:${item.x}:${item.y}:${item.width}:${item.height}:${item.rotation}:${item.text}:${item.color}:${item.font}:${item.fontSize}:${item.letterSpacing}:${item.lineSpacing}`,
+          )
+          .join(';'),
+      ].join('|')
+    : '';
+
+  const replaceJpegPreview = (next: { url: string; key: string } | null) => {
+    const nextUrl = next?.url ?? null;
+    if (jpegPreviewRef.current && jpegPreviewRef.current !== nextUrl)
+      URL.revokeObjectURL(jpegPreviewRef.current);
+    jpegPreviewRef.current = nextUrl;
+    setJpegPreview(next);
+  };
+
+  const invalidateJpegPreview = () => {
+    jpegTaskRef.current += 1;
+    replaceJpegPreview(null);
+  };
+
+  const startGeometry = (
+    event: ReactPointerEvent,
+    onMoveFn: (e: PointerEvent) => void,
+    onEnd: (canceled: boolean) => void,
+  ) => {
+    invalidateJpegPreview();
+    pointer.start(event, onMoveFn, onEnd);
+  };
+
   const resetImage = (next: SourceImage | null) => {
+    pointer.stop(true);
+    invalidateJpegPreview();
     setSource(next);
     setSizeMode('crop');
     setCrop(next ? { x: 0, y: 0, w: next.width, h: next.height } : { x: 0, y: 0, w: 1, h: 1 });
@@ -625,6 +713,9 @@ export default function ImageTool({
         ? { width: next.width, height: next.height, imageX: 0, imageY: 0 }
         : { width: 1, height: 1, imageX: 0, imageY: 0 },
     );
+    setFillTransparent(true);
+    setFillColor('#ffffff');
+    setQuality(92);
     setWatermarks([]);
     setSelectedId('');
     setImageSelected(false);
@@ -633,6 +724,7 @@ export default function ImageTool({
     setOpenFill(false);
     setOpenQuality(false);
     setOpenWatermark(false);
+    setSizeSession(null);
   };
 
   const clearSelection = () => {
@@ -720,54 +812,59 @@ export default function ImageTool({
     }
   };
 
-  const replaceJpegPreview = (next: string | null) => {
-    if (jpegPreviewRef.current && jpegPreviewRef.current !== next)
-      URL.revokeObjectURL(jpegPreviewRef.current);
-    jpegPreviewRef.current = next;
-    setJpegPreview(next);
-  };
-
   useEffect(() => {
     if (!source || pngExport) {
       replaceJpegPreview(null);
       return;
     }
+    if (sizeSession || pointer.dragging) return;
+    const task = ++jpegTaskRef.current;
+    const key = previewKey;
     let cancelled = false;
-    let raf = 0;
-    raf = window.requestAnimationFrame(() => {
-      void (async () => {
-        try {
-          const canvas = await renderComposite({
-            source,
-            sizeMode,
-            crop,
-            expand,
-            fillTransparent,
-            fillColor,
-            watermarks,
-          });
-          if (cancelled) return;
-          const url = await encodeJpegUrl(canvas, quality);
-          if (cancelled) {
-            URL.revokeObjectURL(url);
-            return;
-          }
-          await loadHtmlImage(url);
-          if (cancelled) {
-            URL.revokeObjectURL(url);
-            return;
-          }
-          replaceJpegPreview(url);
-        } catch {
-          if (!cancelled) replaceJpegPreview(null);
+    void (async () => {
+      try {
+        const canvas = await renderComposite({
+          source,
+          sizeMode,
+          crop,
+          expand,
+          fillTransparent,
+          fillColor,
+          watermarks,
+        });
+        if (cancelled || task !== jpegTaskRef.current) return;
+        const url = await encodeJpegUrl(canvas, quality);
+        if (cancelled || task !== jpegTaskRef.current) {
+          URL.revokeObjectURL(url);
+          return;
         }
-      })();
-    });
+        await loadHtmlImage(url);
+        if (cancelled || task !== jpegTaskRef.current) {
+          URL.revokeObjectURL(url);
+          return;
+        }
+        replaceJpegPreview({ url, key });
+      } catch {
+        if (!cancelled && task === jpegTaskRef.current) replaceJpegPreview(null);
+      }
+    })();
     return () => {
       cancelled = true;
-      window.cancelAnimationFrame(raf);
     };
-  }, [source, pngExport, sizeMode, crop, expand, fillTransparent, fillColor, watermarks, quality]);
+  }, [
+    source,
+    pngExport,
+    sizeSession,
+    pointer.dragging,
+    previewKey,
+    sizeMode,
+    crop,
+    expand,
+    fillTransparent,
+    fillColor,
+    watermarks,
+    quality,
+  ]);
 
   useEffect(
     () => () => {
@@ -777,6 +874,7 @@ export default function ImageTool({
   );
 
   const exportImage = async () => {
+    if (sizeSession || pointer.dragging) return;
     if (!source) {
       toast.add({ title: t('imageTool.noImage'), type: 'warning' });
       return;
@@ -865,6 +963,66 @@ export default function ImageTool({
     );
   };
 
+  const beginSizeEdit = (mode: SizeMode) => {
+    if (!source) return;
+    if (sizeSession?.mode === mode) return;
+    pointer.stop(true);
+    invalidateJpegPreview();
+
+    let prevSizeMode = sizeMode;
+    let prevCrop = crop;
+    let prevExpand = expand;
+    let prevFillTransparent = fillTransparent;
+    let prevFillColor = fillColor;
+    if (sizeSession?.mode === 'crop') {
+      prevSizeMode = sizeSession.sizeMode;
+      prevCrop = sizeSession.crop;
+      setCrop(sizeSession.crop);
+    } else if (sizeSession?.mode === 'expand') {
+      prevSizeMode = sizeSession.sizeMode;
+      prevExpand = sizeSession.expand;
+      prevFillTransparent = sizeSession.fillTransparent;
+      prevFillColor = sizeSession.fillColor;
+      setExpand(sizeSession.expand);
+      setFillTransparent(sizeSession.fillTransparent);
+      setFillColor(sizeSession.fillColor);
+    }
+
+    setSizeMode(mode);
+    setImageSelected(false);
+    if (mode === 'crop') {
+      setSizeSession({ mode: 'crop', sizeMode: prevSizeMode, crop: { ...prevCrop } });
+      return;
+    }
+    setSizeSession({
+      mode: 'expand',
+      sizeMode: prevSizeMode,
+      expand: { ...prevExpand },
+      fillTransparent: prevFillTransparent,
+      fillColor: prevFillColor,
+    });
+  };
+
+  const commitSizeEdit = () => {
+    pointer.stop(false);
+    setSizeSession(null);
+    setImageSelected(false);
+  };
+
+  const cancelSizeEdit = () => {
+    if (!sizeSession) return;
+    pointer.stop(true);
+    setSizeMode(sizeSession.sizeMode);
+    if (sizeSession.mode === 'crop') setCrop(sizeSession.crop);
+    else {
+      setExpand(sizeSession.expand);
+      setFillTransparent(sizeSession.fillTransparent);
+      setFillColor(sizeSession.fillColor);
+    }
+    setSizeSession(null);
+    setImageSelected(false);
+  };
+
   const addWatermark = () => {
     if (!source) return;
     const text = form.text.trim();
@@ -900,14 +1058,14 @@ export default function ImageTool({
     pointInFit(event.clientX, event.clientY, origin, snapped);
 
   const beginCropDraw = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (!source || sizeMode !== 'crop') return;
+    if (!source || !cropEditing) return;
     const origin = event.currentTarget.getBoundingClientRect();
     const snapped = { ...fit };
     const start = stagePoint(event.nativeEvent, origin, snapped);
     const prev = crop;
     const live = { ...prev };
     clearSelection();
-    startPointer(
+    startGeometry(
       event,
       (move) => {
         const p = stagePoint(move, origin, snapped);
@@ -921,14 +1079,35 @@ export default function ImageTool({
     );
   };
 
+  const beginCropMove = (event: ReactPointerEvent) => {
+    if (!source || !cropEditing) return;
+    event.stopPropagation();
+    const origin = previewRef.current?.getBoundingClientRect();
+    if (!origin) return;
+    const snapped = { ...fit };
+    const start = stagePoint(event.nativeEvent, origin, snapped);
+    const prev = crop;
+    clearSelection();
+    startGeometry(
+      event,
+      (move) => {
+        const p = stagePoint(move, origin, snapped);
+        setCrop(moveRect(prev, p.x - start.x, p.y - start.y, source.width, source.height));
+      },
+      (canceled) => {
+        if (canceled) setCrop(prev);
+      },
+    );
+  };
+
   const beginCropResize = (event: ReactPointerEvent, handle: EdgeHandle) => {
-    if (!source) return;
+    if (!source || !cropEditing) return;
     event.stopPropagation();
     const origin = previewRef.current?.getBoundingClientRect();
     if (!origin) return;
     const snapped = { ...fit };
     const prev = crop;
-    startPointer(
+    startGeometry(
       event,
       (move) => {
         const p = stagePoint(move, origin, snapped);
@@ -941,13 +1120,13 @@ export default function ImageTool({
   };
 
   const beginExpand = (event: ReactPointerEvent, handle: EdgeHandle) => {
-    if (!source) return;
+    if (!source || !expandEditing) return;
     event.stopPropagation();
     const origin = previewRef.current?.getBoundingClientRect();
     if (!origin) return;
     const snapped = { ...fit };
     const prev = expand;
-    startPointer(
+    startGeometry(
       event,
       (move) => {
         const p = stagePoint(move, origin, snapped);
@@ -971,7 +1150,7 @@ export default function ImageTool({
   };
 
   const beginImageMove = (event: ReactPointerEvent) => {
-    if (!source || sizeMode !== 'expand') return;
+    if (!source || !expandEditing) return;
     event.stopPropagation();
     const origin = previewRef.current?.getBoundingClientRect();
     if (!origin) return;
@@ -980,7 +1159,7 @@ export default function ImageTool({
     const prev = expand;
     setSelectedId('');
     setImageSelected(true);
-    startPointer(
+    startGeometry(
       event,
       (move) => {
         const p = stagePoint(move, origin, snapped);
@@ -1012,7 +1191,7 @@ export default function ImageTool({
     const start = stagePoint(event.nativeEvent, origin, snapped);
     const prev = watermarks;
     setSelectedId(id);
-    startPointer(
+    startGeometry(
       event,
       (move) => {
         const p = stagePoint(move, origin, snapped);
@@ -1046,12 +1225,13 @@ export default function ImageTool({
     const prev = watermarks;
     const cropAt = crop;
     const mode = sizeMode;
+    const cropSpace = cropEditing;
     setSelectedId(id);
-    startPointer(
+    startGeometry(
       event,
       (move) => {
         const raw = stagePoint(move, origin, snapped);
-        const p = mode === 'crop' ? { x: raw.x - cropAt.x, y: raw.y - cropAt.y } : raw;
+        const p = mode === 'crop' && cropSpace ? { x: raw.x - cropAt.x, y: raw.y - cropAt.y } : raw;
         const local = toLocal(p.x, p.y, wm);
         setWatermarks((list) =>
           list.map((item) =>
@@ -1075,14 +1255,15 @@ export default function ImageTool({
     const prev = watermarks;
     const cropAt = crop;
     const mode = sizeMode;
+    const cropSpace = cropEditing;
     const cx = wm.x + wm.width / 2;
     const cy = wm.y + wm.height / 2;
     setSelectedId(id);
-    startPointer(
+    startGeometry(
       event,
       (move) => {
         const raw = stagePoint(move, origin, snapped);
-        const p = mode === 'crop' ? { x: raw.x - cropAt.x, y: raw.y - cropAt.y } : raw;
+        const p = mode === 'crop' && cropSpace ? { x: raw.x - cropAt.x, y: raw.y - cropAt.y } : raw;
         const rotation = (Math.atan2(p.y - cy, p.x - cx) * 180) / Math.PI + 90;
         setWatermarks((list) =>
           list.map((item) => (item.id === id ? { ...item, rotation } : item)),
@@ -1102,7 +1283,7 @@ export default function ImageTool({
   };
 
   const cropStyle =
-    source && sizeMode === 'crop'
+    source && cropEditing
       ? {
           left: fit.x + crop.x * fit.scale,
           top: fit.y + crop.y * fit.scale,
@@ -1111,7 +1292,7 @@ export default function ImageTool({
         }
       : null;
   const canvasStyle =
-    source && sizeMode === 'expand'
+    source && (sizeMode === 'expand' || (sizeMode === 'crop' && !cropEditing))
       ? { left: fit.x, top: fit.y, width: fit.w, height: fit.h }
       : null;
   const imageStyle =
@@ -1122,22 +1303,30 @@ export default function ImageTool({
           width: source.width * fit.scale,
           height: source.height * fit.scale,
         }
-      : source && sizeMode === 'crop'
+      : source && cropEditing
         ? { left: fit.x, top: fit.y, width: fit.w, height: fit.h }
-        : null;
+        : source && sizeMode === 'crop'
+          ? {
+              left: -crop.x * fit.scale,
+              top: -crop.y * fit.scale,
+              width: source.width * fit.scale,
+              height: source.height * fit.scale,
+            }
+          : null;
 
   const watermarkOffset =
-    source && sizeMode === 'crop'
-      ? { x: fit.x - crop.x * fit.scale, y: fit.y - crop.y * fit.scale, scale: fit.scale }
+    source && cropEditing
+      ? { x: fit.x + crop.x * fit.scale, y: fit.y + crop.y * fit.scale, scale: fit.scale }
       : { x: fit.x, y: fit.y, scale: fit.scale };
-  const jpegPreviewStyle =
-    jpegPreview && source
-      ? sizeMode === 'crop' && cropStyle
-        ? cropStyle
-        : sizeMode === 'expand' && canvasStyle
-          ? canvasStyle
-          : null
-      : null;
+  const outputClip = cropEditing ? cropStyle : canvasStyle;
+  const showFinalPreview = Boolean(
+    source &&
+    jpegPreview &&
+    jpegPreview.key === previewKey &&
+    !pngExport &&
+    !sizeSession &&
+    !pointer.dragging,
+  );
 
   return (
     <Reveal index={0} fill active={active}>
@@ -1215,15 +1404,15 @@ export default function ImageTool({
                               src={source.dataUrl}
                               alt={source.name}
                               draggable={false}
-                              aria-label={t('imageTool.moveImage')}
-                              className={`absolute max-h-none max-w-none cursor-move select-none ${imageSelected ? 'outline outline-1 outline-primary' : ''} ${jpegPreview ? 'opacity-0' : ''}`}
+                              aria-label={expandEditing ? t('imageTool.moveImage') : undefined}
+                              className={`absolute max-h-none max-w-none select-none ${expandEditing ? 'cursor-move' : ''} ${imageSelected ? 'outline outline-1 outline-primary' : ''} ${showFinalPreview ? 'opacity-0' : ''}`}
                               style={imageStyle}
-                              onPointerDown={beginImageMove}
+                              onPointerDown={expandEditing ? beginImageMove : undefined}
                             />
                           ) : null}
-                          {jpegPreview ? (
+                          {showFinalPreview && jpegPreview ? (
                             <img
-                              src={jpegPreview}
+                              src={jpegPreview.url}
                               alt=""
                               aria-hidden
                               draggable={false}
@@ -1231,21 +1420,45 @@ export default function ImageTool({
                             />
                           ) : null}
                         </div>
-                        {EDGE_HANDLES.map((handle) => (
-                          <button
-                            key={handle}
-                            type="button"
-                            className="image-tool-handle"
-                            style={{ ...HANDLE_POS[handle], cursor: HANDLE_CURSOR[handle] }}
-                            aria-label={t('imageTool.expandHandle', {
-                              handle: t(HANDLE_KEY[handle]),
-                            })}
-                            onPointerDown={(event) => beginExpand(event, handle)}
-                          />
-                        ))}
+                        {expandEditing
+                          ? EDGE_HANDLES.map((handle) => (
+                              <button
+                                key={handle}
+                                type="button"
+                                className="image-tool-handle"
+                                style={{ ...HANDLE_POS[handle], cursor: HANDLE_CURSOR[handle] }}
+                                aria-label={t('imageTool.expandHandle', {
+                                  handle: t(HANDLE_KEY[handle]),
+                                })}
+                                onPointerDown={(event) => beginExpand(event, handle)}
+                              />
+                            ))
+                          : null}
                       </div>
                     ) : null}
-                    {sizeMode === 'crop' && imageStyle ? (
+                    {sizeMode === 'crop' && !cropEditing && canvasStyle ? (
+                      <div className="absolute z-[1] overflow-hidden" style={canvasStyle}>
+                        {imageStyle ? (
+                          <img
+                            src={source.dataUrl}
+                            alt={source.name}
+                            draggable={false}
+                            className={`absolute max-h-none max-w-none select-none ${showFinalPreview ? 'opacity-0' : ''}`}
+                            style={imageStyle}
+                          />
+                        ) : null}
+                        {showFinalPreview && jpegPreview ? (
+                          <img
+                            src={jpegPreview.url}
+                            alt=""
+                            aria-hidden
+                            draggable={false}
+                            className="pointer-events-none absolute inset-0 max-h-none max-w-none size-full"
+                          />
+                        ) : null}
+                      </div>
+                    ) : null}
+                    {cropEditing && imageStyle ? (
                       <img
                         src={source.dataUrl}
                         alt={source.name}
@@ -1254,17 +1467,7 @@ export default function ImageTool({
                         style={imageStyle}
                       />
                     ) : null}
-                    {sizeMode === 'crop' && jpegPreviewStyle ? (
-                      <img
-                        src={jpegPreview ?? undefined}
-                        alt=""
-                        aria-hidden
-                        draggable={false}
-                        className="pointer-events-none absolute z-[1] max-h-none max-w-none"
-                        style={jpegPreviewStyle}
-                      />
-                    ) : null}
-                    {sizeMode === 'crop' ? (
+                    {cropEditing ? (
                       <div
                         className="absolute inset-0 z-[1] cursor-crosshair"
                         onPointerDown={beginCropDraw}
@@ -1272,8 +1475,11 @@ export default function ImageTool({
                     ) : null}
                     {cropStyle ? (
                       <div
-                        className="image-tool-crop absolute z-[2] border border-primary"
+                        role="group"
+                        aria-label={t('imageTool.moveCrop')}
+                        className="image-tool-crop absolute z-[2] cursor-move border border-primary"
                         style={cropStyle}
+                        onPointerDown={beginCropMove}
                       >
                         {EDGE_HANDLES.map((handle) => (
                           <button
@@ -1287,6 +1493,43 @@ export default function ImageTool({
                             onPointerDown={(event) => beginCropResize(event, handle)}
                           />
                         ))}
+                      </div>
+                    ) : null}
+                    {outputClip && !showFinalPreview ? (
+                      <div
+                        className="pointer-events-none absolute z-[3] overflow-hidden"
+                        style={outputClip}
+                      >
+                        {watermarks.map((wm) => {
+                          const width = wm.width * watermarkOffset.scale;
+                          const height = wm.height * watermarkOffset.scale;
+                          return (
+                            <div
+                              key={`${wm.id}-text`}
+                              className="absolute flex items-center justify-center"
+                              style={{
+                                left:
+                                  watermarkOffset.x +
+                                  wm.x * watermarkOffset.scale -
+                                  outputClip.left,
+                                top:
+                                  watermarkOffset.y + wm.y * watermarkOffset.scale - outputClip.top,
+                                width,
+                                height,
+                                transform: `rotate(${wm.rotation}deg)`,
+                                color: wm.color,
+                                fontFamily: wm.font,
+                                fontSize: Math.max(8, wm.fontSize * watermarkOffset.scale),
+                                letterSpacing: wm.letterSpacing * watermarkOffset.scale,
+                                lineHeight: `${(wm.fontSize + wm.lineSpacing) * watermarkOffset.scale}px`,
+                                whiteSpace: 'pre',
+                                textAlign: 'center',
+                              }}
+                            >
+                              <span className="max-h-full max-w-full px-1">{wm.text}</span>
+                            </div>
+                          );
+                        })}
                       </div>
                     ) : null}
                     {watermarks.map((wm) => {
@@ -1307,24 +1550,13 @@ export default function ImageTool({
                             width,
                             height,
                             transform: `rotate(${wm.rotation}deg)`,
-                            color: wm.color,
-                            fontFamily: wm.font,
-                            fontSize: Math.max(8, wm.fontSize * watermarkOffset.scale),
-                            letterSpacing: wm.letterSpacing * watermarkOffset.scale,
-                            lineHeight: `${(wm.fontSize + wm.lineSpacing) * watermarkOffset.scale}px`,
-                            whiteSpace: 'pre',
-                            textAlign: 'center',
                           }}
                           onPointerDown={(event) => {
                             setImageSelected(false);
                             beginWmMove(event, wm.id);
                           }}
                         >
-                          <span
-                            className={`pointer-events-none max-h-full max-w-full overflow-hidden px-1 ${jpegPreview ? 'opacity-0' : ''}`}
-                          >
-                            {wm.text}
-                          </span>
+                          <span className="pointer-events-none sr-only">{wm.text}</span>
                           {selected ? (
                             <>
                               <button
@@ -1376,13 +1608,10 @@ export default function ImageTool({
                     <div className="flex gap-1">
                       <Toggle
                         size="sm"
-                        pressed={sizeMode === 'crop'}
-                        onPressedChange={(pressed) => {
-                          if (pressed) {
-                            setSizeMode('crop');
-                            setImageSelected(false);
-                          }
-                        }}
+                        pressed={sizeSession?.mode === 'crop'}
+                        disabled={!source}
+                        onClick={() => beginSizeEdit('crop')}
+                        onPressedChange={() => beginSizeEdit('crop')}
                         aria-label={t('imageTool.crop')}
                       >
                         <Crop data-icon="inline-start" />
@@ -1390,13 +1619,10 @@ export default function ImageTool({
                       </Toggle>
                       <Toggle
                         size="sm"
-                        pressed={sizeMode === 'expand'}
-                        onPressedChange={(pressed) => {
-                          if (pressed) {
-                            setSizeMode('expand');
-                            setImageSelected(false);
-                          }
-                        }}
+                        pressed={sizeSession?.mode === 'expand'}
+                        disabled={!source}
+                        onClick={() => beginSizeEdit('expand')}
+                        onPressedChange={() => beginSizeEdit('expand')}
                         aria-label={t('imageTool.expand')}
                       >
                         <ArrowsOut data-icon="inline-start" />
@@ -1404,9 +1630,13 @@ export default function ImageTool({
                       </Toggle>
                     </div>
                   </div>
-                  <p className="m-0 text-[11px] leading-5 text-muted-foreground">
-                    {sizeMode === 'crop' ? t('imageTool.cropHint') : t('imageTool.expandHint')}
-                  </p>
+                  {sizeSession ? (
+                    <p className="m-0 text-[11px] leading-5 text-muted-foreground">
+                      {sizeSession.mode === 'crop'
+                        ? t('imageTool.cropHint')
+                        : t('imageTool.expandHint')}
+                    </p>
+                  ) : null}
                   <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-end gap-2">
                     <Label
                       htmlFor="image-size-width"
@@ -1452,6 +1682,26 @@ export default function ImageTool({
                       {t('imageTool.applySize')}
                     </Button>
                   </div>
+                  {sizeSession ? (
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="flex-none"
+                        onClick={cancelSizeEdit}
+                      >
+                        {t('imageTool.editCancel')}
+                      </Button>
+                      <Button
+                        variant="default"
+                        size="sm"
+                        className="flex-none"
+                        onClick={commitSizeEdit}
+                      >
+                        {t('imageTool.editDone')}
+                      </Button>
+                    </div>
+                  ) : null}
                 </section>
                 {sizeMode === 'expand' ? (
                   <ImageToolDisclosure
@@ -1692,11 +1942,21 @@ export default function ImageTool({
                 onPress: () => resetImage(null),
               },
               {
+                key: 'restore',
+                label: t('imageTool.restore'),
+                icon: ArrowCounterClockwise,
+                variant: 'tertiary',
+                disabled: !source,
+                onPress: () => {
+                  if (source) resetImage(source);
+                },
+              },
+              {
                 key: 'export',
                 label: t('imageTool.export'),
                 icon: DownloadSimple,
                 variant: 'primary',
-                disabled: !source,
+                disabled: !source || Boolean(sizeSession) || pointer.dragging,
                 onPress: () => void exportImage(),
               },
             ]}

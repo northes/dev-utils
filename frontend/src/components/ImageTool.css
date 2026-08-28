@@ -43,7 +43,7 @@
 }
 
 .image-tool-crop {
-  pointer-events: none;
+  pointer-events: auto;
   box-shadow: 0 0 0 9999px color-mix(in srgb, var(--background) 58%, transparent);
 }
 
