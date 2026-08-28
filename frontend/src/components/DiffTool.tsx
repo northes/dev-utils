@@ -126,7 +126,7 @@ const zigHighlight = ViewPlugin.fromClass(
       this.decorations = zigSyntax(view);
     }
     update(update) {
-      if (update.docChanged || update.viewportChanged) this.decorations = zigSyntax(update.view);
+      if (update.docChanged) this.decorations = zigSyntax(update.view);
     }
   },
   { decorations: (value) => value.decorations },
@@ -307,13 +307,30 @@ function DiffMerge({
     merge.b.contentDOM.setAttribute('aria-label', bLabel);
     const scrollA = merge.a.scrollDOM,
       scrollB = merge.b.scrollDOM;
-    const sync = (source: HTMLElement, target: HTMLElement) => {
-      if (target.scrollTop === source.scrollTop && target.scrollLeft === source.scrollLeft) return;
-      target.scrollTop = source.scrollTop;
-      target.scrollLeft = source.scrollLeft;
+    let syncSource: 'a' | 'b' | null = null;
+    let rafId: number | null = null;
+    let disposed = false;
+    const scheduleSync = (source: 'a' | 'b') => {
+      syncSource = source;
+      if (rafId !== null) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        if (disposed || !syncSource) return;
+        const currentSource = syncSource;
+        syncSource = null;
+        const sourceScroll = currentSource === 'a' ? scrollA : scrollB;
+        const targetScroll = currentSource === 'a' ? scrollB : scrollA;
+        if (
+          targetScroll.scrollTop === sourceScroll.scrollTop &&
+          targetScroll.scrollLeft === sourceScroll.scrollLeft
+        )
+          return;
+        targetScroll.scrollTop = sourceScroll.scrollTop;
+        targetScroll.scrollLeft = sourceScroll.scrollLeft;
+      });
     };
-    const onScrollA = () => sync(scrollA, scrollB);
-    const onScrollB = () => sync(scrollB, scrollA);
+    const onScrollA = () => scheduleSync('a');
+    const onScrollB = () => scheduleSync('b');
     scrollA.addEventListener('scroll', onScrollA, { passive: true });
     scrollB.addEventListener('scroll', onScrollB, { passive: true });
     const onPaneDown = (view: EditorView) => (event: MouseEvent) => {
@@ -332,6 +349,10 @@ function DiffMerge({
       scrollB.removeEventListener('scroll', onScrollB);
       merge.a.dom.removeEventListener('mousedown', onDownA);
       merge.b.dom.removeEventListener('mousedown', onDownB);
+      disposed = true;
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      rafId = null;
+      syncSource = null;
       mergeRef.current = null;
       merge.destroy();
     };
