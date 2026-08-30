@@ -49,9 +49,9 @@ const quietBase = EditorView.theme({
   },
   '.cm-activeLine': { backgroundColor: 'color-mix(in srgb,var(--primary) 5%,transparent)' },
   '.cm-gutters': {
-    backgroundColor: 'var(--muted)',
+    backgroundColor: 'var(--card)',
     color: 'var(--muted-foreground)',
-    borderColor: 'var(--border)',
+    borderRight: 'none',
   },
   '.cm-activeLineGutter': { backgroundColor: 'color-mix(in srgb,var(--primary) 8%,transparent)' },
   '.cm-foldPlaceholder': {

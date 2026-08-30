@@ -13,8 +13,8 @@
   background: var(--card) !important;
 }
 .cm-gutters {
-  background: var(--muted) !important;
-  border-color: var(--border) !important;
+  background: var(--card) !important;
+  border-right: none !important;
   color: var(--muted-foreground) !important;
 }
 .cm-activeLine,

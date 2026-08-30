@@ -2,7 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import { minimalSetup } from 'codemirror';
 import { MergeView, type Chunk } from '@codemirror/merge';
 import { RangeSetBuilder, type Extension } from '@codemirror/state';
-import { Decoration, EditorView, type DecorationSet, ViewPlugin } from '@codemirror/view';
+import {
+  Decoration,
+  EditorView,
+  lineNumbers,
+  type DecorationSet,
+  ViewPlugin,
+} from '@codemirror/view';
 import { StreamLanguage } from '@codemirror/language';
 import { json } from '@codemirror/lang-json';
 import { quietEditorTheme } from './codeMirrorTheme';
@@ -42,7 +48,7 @@ const diffTheme = EditorView.theme({
   '.cm-line': { padding: '0 12px 0 8px' },
   '.cm-indent-markers::before': { left: '8px' },
   '.cm-gutters': {
-    backgroundColor: 'var(--muted)',
+    backgroundColor: 'var(--card)',
     border: 0,
     color: 'var(--muted-foreground)',
   },
@@ -291,11 +297,25 @@ function DiffMerge({
       parent: host.current,
       a: {
         doc: before,
-        extensions: [minimalSetup, quietEditorTheme, diffTheme, ...languageExtensions, update('a')],
+        extensions: [
+          minimalSetup,
+          lineNumbers(),
+          quietEditorTheme,
+          diffTheme,
+          ...languageExtensions,
+          update('a'),
+        ],
       },
       b: {
         doc: after,
-        extensions: [minimalSetup, quietEditorTheme, diffTheme, ...languageExtensions, update('b')],
+        extensions: [
+          minimalSetup,
+          lineNumbers(),
+          quietEditorTheme,
+          diffTheme,
+          ...languageExtensions,
+          update('b'),
+        ],
       },
       highlightChanges: true,
       gutter: true,

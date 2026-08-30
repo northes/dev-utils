@@ -51,14 +51,14 @@
 .diff-merge-host .cm-gutters {
   display: flex;
   border: 0;
-  background: var(--muted);
+  background: var(--card);
 }
 .diff-merge-host .cm-changeGutter {
   display: block !important;
   width: 7px;
   min-width: 7px;
   padding: 0;
-  background: var(--muted);
+  background: var(--card);
 }
 .diff-merge-host .cm-changeGutter .cm-gutterElement {
   width: 5px;
