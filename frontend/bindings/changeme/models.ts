@@ -65,3 +65,12 @@ export interface SidebarToolConfig {
     "id": string;
     "enabled": boolean;
 }
+
+/**
+ * SystemInfo 描述运行 DevUtils 的操作系统环境。
+ */
+export interface SystemInfo {
+    "os": string;
+    "version": string;
+    "arch": string;
+}

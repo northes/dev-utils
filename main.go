@@ -90,6 +90,7 @@ func main() {
 
 	cfgService := NewConfigService()
 	logService := NewLogService()
+	systemInfoService := NewSystemInfoService()
 	updateService := NewUpdateService(currentVersion)
 	fileService := NewFileService()
 	dockService := dock.New()
@@ -103,6 +104,7 @@ func main() {
 		Services: []application.Service{
 			application.NewService(cfgService),
 			application.NewService(logService),
+			application.NewService(systemInfoService),
 			application.NewService(updateService),
 			application.NewService(fileService),
 			application.NewService(dockService),

@@ -2,6 +2,8 @@ import React from 'react';
 import { ArrowsClockwise, Bug, Check, Copy, GithubLogo } from '@phosphor-icons/react';
 import { Browser, Window } from '@wailsio/runtime';
 import { useTranslation } from 'react-i18next';
+import type { SystemInfo } from '../../bindings/changeme/models';
+import { GetSystemInfo } from '../../bindings/changeme/systeminfoservice';
 import { GetCurrentVersion } from '../../bindings/changeme/updateservice';
 import { GITHUB_REPO_URL } from '../repositoryUrl';
 import { Button } from './ui/button';
@@ -20,32 +22,13 @@ function reload(force: boolean) {
   void request.catch(() => window.location.reload());
 }
 
-function readNavigatorString(value: unknown): string {
-  return typeof value === 'string' ? value.trim() : '';
-}
-
-function detectOsVersion(userAgent: string): string {
-  const match =
-    userAgent.match(/Mac OS X (\d+[._]\d+(?:[._]\d+)?)/) ||
-    userAgent.match(/Windows NT (\d+\.\d+)/) ||
-    userAgent.match(/Android (\d+(?:\.\d+)*)/) ||
-    userAgent.match(/CPU (?:iPhone )?OS (\d+[._]\d+(?:[._]\d+)?)/);
-  return match?.[1]?.replace(/_/g, '.') ?? '';
-}
-
-function getSystemTypeAndVersion(unknownLabel: string): string {
-  try {
-    const uaData = (navigator as Navigator & { userAgentData?: { platform?: unknown } })
-      .userAgentData;
-    const type =
-      readNavigatorString(uaData?.platform) ||
-      readNavigatorString(navigator.platform) ||
-      unknownLabel;
-    const version = detectOsVersion(readNavigatorString(navigator.userAgent)) || unknownLabel;
-    return `${type} ${version}`;
-  } catch {
-    return unknownLabel;
-  }
+function formatSystemInfo(systemInfo: SystemInfo | null, unknownLabel: string): string {
+  if (!systemInfo) return unknownLabel;
+  const os = systemInfo.os.trim();
+  const version = systemInfo.version.trim();
+  const arch = systemInfo.arch.trim();
+  if (!os || !arch) return unknownLabel;
+  return [os, version, arch].filter(Boolean).join(' ');
 }
 
 function formatErrorDetails(error: Error): string {
@@ -59,13 +42,24 @@ function CrashScreen({ error, onReload }: { error: Error; onReload: () => void }
   const { t } = useTranslation();
   const [copied, setCopied] = React.useState(false);
   const [version, setVersion] = React.useState<string | null>(null);
+  const [systemInfo, setSystemInfo] = React.useState<SystemInfo | null>(null);
   const unknownLabel = t('crash.unknown');
   const versionLabel = version ? `v${version}` : version === null ? '' : unknownLabel;
-  const systemLabel = React.useMemo(() => getSystemTypeAndVersion(unknownLabel), [unknownLabel]);
+  const systemLabel = React.useMemo(
+    () => formatSystemInfo(systemInfo, unknownLabel),
+    [systemInfo, unknownLabel],
+  );
   const errorText = formatErrorDetails(error);
 
   React.useEffect(() => {
     let cancelled = false;
+    void GetSystemInfo()
+      .then((value) => {
+        if (!cancelled) setSystemInfo(value);
+      })
+      .catch(() => {
+        if (!cancelled) setSystemInfo(null);
+      });
     void GetCurrentVersion()
       .then((value) => {
         if (!cancelled) setVersion(typeof value === 'string' ? value.trim() : '');
