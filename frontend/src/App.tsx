@@ -232,8 +232,7 @@ const tools: ToolDefinition[] = [
     nameKey: 'tools.image.name',
     descriptionKey: 'tools.image.description',
     icon: ImageIcon,
-    keywords:
-      'image picture crop expand watermark quality png jpg jpeg svg webp 图片 裁剪 扩充 水印 质量 导出',
+    keywords: 'image picture crop expand quality png jpg jpeg svg webp 图片 裁剪 扩充 质量 导出',
   },
 ];
 const paletteItems: PaletteItem[] = [
@@ -314,7 +313,7 @@ const paletteItems: PaletteItem[] = [
     labelKey: 'commands.openImage',
     groupKey: 'groups.tools',
     icon: ImageIcon,
-    keywords: 'image picture crop expand watermark 图片 裁剪 扩充 水印 打开工具',
+    keywords: 'image picture crop expand 图片 裁剪 扩充 打开工具',
     page: 'image',
   },
   {

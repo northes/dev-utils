@@ -10,21 +10,27 @@ import { Dialogs } from '@wailsio/runtime';
 import {
   ArrowCounterClockwise,
   ArrowsOut,
-  CaretRight,
   Crop,
   DownloadSimple,
   Image as ImageIcon,
-  Plus,
   Trash,
   UploadSimple,
 } from '@phosphor-icons/react';
 import { useTranslation } from 'react-i18next';
 import { ReadImageFile } from '../../bindings/changeme/fileservice';
 import { SaveBase64File } from '../../bindings/changeme/configservice';
+import {
+  IMAGE_OUTPUT_FORMATS,
+  ImageOutputError,
+  blobToDataUrl,
+  canvasToBlob,
+  canvasToIco,
+  formatBytes,
+  type ImageOutputFormat,
+} from '../lib/image-output';
 import { Button } from './ui/button';
 import {
   ColorPicker,
-  ColorPickerAlphaSlider,
   ColorPickerArea,
   ColorPickerContent,
   ColorPickerEyeDropper,
@@ -59,7 +65,6 @@ type SizeMode = 'crop' | 'expand';
 type Rect = { x: number; y: number; w: number; h: number };
 type Fit = Rect & { scale: number };
 type EdgeHandle = 'n' | 's' | 'e' | 'w' | 'nw' | 'ne' | 'se' | 'sw';
-type CornerHandle = 'nw' | 'ne' | 'se' | 'sw';
 type ExpandCanvas = { width: number; height: number; imageX: number; imageY: number };
 type SizeSession =
   | { mode: 'crop'; sizeMode: SizeMode; crop: Rect }
@@ -71,29 +76,27 @@ type SizeSession =
       fillColor: string;
     };
 type SourceImage = { name: string; mime: string; dataUrl: string; width: number; height: number };
-type WatermarkDraft = {
-  text: string;
-  color: string;
-  font: string;
-  fontSize: number;
-  letterSpacing: number;
-  lineSpacing: number;
-};
-type Watermark = WatermarkDraft & {
-  id: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  rotation: number;
-};
 
 const MAX_BYTES = 10 * 1024 * 1024;
 const MAX_OUTPUT = 8192;
 const MIN_CROP = 8;
 const OPEN_PATTERN = '*.png;*.jpg;*.jpeg;*.svg;*.webp';
+const OUTPUT_FORMATS: ImageOutputFormat[] = ['jpg', 'png', 'webp', 'ico', 'svg'];
+const FORMAT_LABEL_KEY: Record<ImageOutputFormat, string> = {
+  jpg: 'imageTool.formatJpg',
+  png: 'imageTool.formatPng',
+  webp: 'imageTool.formatWebp',
+  ico: 'imageTool.formatIco',
+  svg: 'imageTool.formatSvg',
+};
+const FORMAT_FILTER_KEY: Record<ImageOutputFormat, string> = {
+  jpg: 'imageTool.filterJpg',
+  png: 'imageTool.filterPng',
+  webp: 'imageTool.filterWebp',
+  ico: 'imageTool.filterIco',
+  svg: 'imageTool.filterSvg',
+};
 const EDGE_HANDLES: EdgeHandle[] = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
-const CORNER_HANDLES: CornerHandle[] = ['nw', 'ne', 'se', 'sw'];
 const HANDLE_CURSOR: Record<EdgeHandle, string> = {
   n: 'ns-resize',
   s: 'ns-resize',
@@ -124,19 +127,6 @@ const HANDLE_KEY: Record<EdgeHandle, string> = {
   sw: 'imageTool.handleSw',
   w: 'imageTool.handleW',
 };
-const FONTS = [
-  { value: 'system-ui, "Segoe UI", sans-serif', key: 'imageTool.fontSans' },
-  { value: 'Georgia, "Times New Roman", serif', key: 'imageTool.fontSerif' },
-  { value: 'ui-monospace, SFMono-Regular, Menlo, monospace', key: 'imageTool.fontMono' },
-] as const;
-const DEFAULT_DRAFT: WatermarkDraft = {
-  text: '',
-  color: '#ffffff',
-  font: FONTS[0].value,
-  fontSize: 32,
-  letterSpacing: 0,
-  lineSpacing: 0,
-};
 
 function clamp(n: number, min: number, max: number) {
   return Math.min(max, Math.max(min, n));
@@ -155,6 +145,72 @@ function mimeFromName(name: string) {
 function isSupportedName(name: string, mime = '') {
   return Boolean(
     mimeFromName(name) || /^(image\/png|image\/jpeg|image\/svg\+xml|image\/webp)$/.test(mime),
+  );
+}
+function isSvgSource(image: SourceImage) {
+  return image.mime === 'image/svg+xml' || mimeFromName(image.name) === 'image/svg+xml';
+}
+function sourceFormatOf(image: SourceImage): Exclude<ImageOutputFormat, 'ico'> | '' {
+  const mime = image.mime || mimeFromName(image.name);
+  if (mime === 'image/jpeg') return 'jpg';
+  if (mime === 'image/png') return 'png';
+  if (mime === 'image/webp') return 'webp';
+  if (mime === 'image/svg+xml') return 'svg';
+  return '';
+}
+function defaultOutputFormat(image: SourceImage): ImageOutputFormat {
+  const format = sourceFormatOf(image);
+  return format || 'png';
+}
+function isUneditedGeometry(image: SourceImage, crop: Rect, expand: ExpandCanvas) {
+  return (
+    crop.x === 0 &&
+    crop.y === 0 &&
+    Math.round(crop.w) === image.width &&
+    Math.round(crop.h) === image.height &&
+    expand.width === image.width &&
+    expand.height === image.height &&
+    expand.imageX === 0 &&
+    expand.imageY === 0
+  );
+}
+function dataUrlToBytes(dataUrl: string): Uint8Array {
+  const comma = dataUrl.indexOf(',');
+  if (comma < 0) return new Uint8Array();
+  const header = dataUrl.slice(0, comma);
+  const payload = dataUrl.slice(comma + 1);
+  if (/;base64/i.test(header)) {
+    const binary = atob(payload.replace(/\s/g, ''));
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+  }
+  try {
+    return new TextEncoder().encode(decodeURIComponent(payload));
+  } catch {
+    return new TextEncoder().encode(payload);
+  }
+}
+function flattenCanvas(source: HTMLCanvasElement, color: string) {
+  const canvas = document.createElement('canvas');
+  canvas.width = source.width;
+  canvas.height = source.height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('ctx');
+  ctx.fillStyle = color;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(source, 0, 0);
+  return canvas;
+}
+function blobQuality(quality: number) {
+  return clamp(quality, 1, 100) / 100;
+}
+function isWebpUnsupported(error: unknown) {
+  return (
+    error instanceof ImageOutputError &&
+    (error.code === 'invalidBlobType' ||
+      error.code === 'encodingFailed' ||
+      error.code === 'unsupportedFormat')
   );
 }
 
@@ -243,74 +299,6 @@ function clampExpand(next: ExpandCanvas, imgW: number, imgH: number): ExpandCanv
     imageY: clamp(Math.round(next.imageY), 0, height - imgH),
   };
 }
-function estimateLineWidth(line: string, fontSize: number, letterSpacing: number) {
-  const chars = Math.max(1, [...line].length);
-  return fontSize * 0.62 * chars + Math.max(0, chars - 1) * letterSpacing;
-}
-function measureWatermark(
-  text: string,
-  font: string,
-  fontSize: number,
-  letterSpacing: number,
-  lineSpacing: number,
-) {
-  const lines = (text || ' ').split('\n');
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
-  let maxW = 0;
-  if (ctx) ctx.font = `${Math.max(8, fontSize)}px ${font}`;
-  for (const line of lines) {
-    const measured = ctx?.measureText(line).width ?? 0;
-    const spaced =
-      (measured > 1 ? measured : 0) + Math.max(0, [...line].length - 1) * letterSpacing;
-    maxW = Math.max(maxW, spaced, estimateLineWidth(line, fontSize, letterSpacing));
-  }
-  const lineHeight = Math.max(8, fontSize) + lineSpacing;
-  return {
-    width: Math.max(32, Math.ceil(maxW + 16)),
-    height: Math.max(Math.max(8, fontSize) + 8, Math.ceil(lineHeight * lines.length + 8)),
-  };
-}
-function fillSpacedText(
-  ctx: CanvasRenderingContext2D,
-  text: string,
-  x: number,
-  y: number,
-  letterSpacing: number,
-) {
-  if (!letterSpacing || !text) {
-    ctx.fillText(text, x, y);
-    return;
-  }
-
-  const supportsLetterSpacing = 'letterSpacing' in (ctx as unknown as Record<string, unknown>);
-  if (supportsLetterSpacing) {
-    ctx.letterSpacing = `${letterSpacing}px`;
-    ctx.fillText(text, x, y);
-    ctx.letterSpacing = '0px';
-    return;
-  }
-
-  const characters = Array.from(text);
-  const widths = characters.map((character) => ctx.measureText(character).width);
-  const width = widths.reduce((total, characterWidth) => total + characterWidth, 0);
-  const spacedWidth = width + letterSpacing * (characters.length - 1);
-  const startX =
-    ctx.textAlign === 'center'
-      ? x - spacedWidth / 2
-      : ctx.textAlign === 'right' || ctx.textAlign === 'end'
-        ? x - spacedWidth
-        : x;
-
-  const textAlign = ctx.textAlign;
-  ctx.textAlign = 'left';
-  let cursor = startX;
-  characters.forEach((character, index) => {
-    ctx.fillText(character, cursor, y);
-    cursor += widths[index] + (index < characters.length - 1 ? letterSpacing : 0);
-  });
-  ctx.textAlign = textAlign;
-}
 async function renderComposite(args: {
   source: SourceImage;
   sizeMode: SizeMode;
@@ -318,7 +306,6 @@ async function renderComposite(args: {
   expand: ExpandCanvas;
   fillTransparent: boolean;
   fillColor: string;
-  watermarks: Watermark[];
 }) {
   const img = await loadHtmlImage(args.source.dataUrl);
   const cropRect =
@@ -367,83 +354,20 @@ async function renderComposite(args: {
       cropRect.h,
     );
   }
-  args.watermarks.forEach((wm) => drawWatermark(ctx, wm));
   return canvas;
 }
 
-function encodeJpegUrl(canvas: HTMLCanvasElement, quality: number) {
-  return new Promise<string>((resolve, reject) => {
-    canvas.toBlob(
-      (blob) => {
-        if (!blob) {
-          reject(new Error('jpeg'));
-          return;
-        }
-        resolve(URL.createObjectURL(blob));
-      },
-      'image/jpeg',
-      clamp(quality, 1, 100) / 100,
-    );
-  });
-}
-
-function drawWatermark(ctx: CanvasRenderingContext2D, wm: Watermark) {
-  const lines = wm.text.split('\n');
-  const lineHeight = wm.fontSize + wm.lineSpacing;
-  ctx.save();
-  ctx.translate(wm.x + wm.width / 2, wm.y + wm.height / 2);
-  ctx.rotate((wm.rotation * Math.PI) / 180);
-  ctx.fillStyle = wm.color;
-  ctx.font = `${wm.fontSize}px ${wm.font}`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  const startY = -((lines.length - 1) * lineHeight) / 2;
-  lines.forEach((line, i) =>
-    fillSpacedText(ctx, line, 0, startY + i * lineHeight, wm.letterSpacing),
-  );
-  ctx.restore();
-}
-function toLocal(x: number, y: number, wm: Watermark) {
-  const cx = wm.x + wm.width / 2;
-  const cy = wm.y + wm.height / 2;
-  const dx = x - cx;
-  const dy = y - cy;
-  const rad = (-wm.rotation * Math.PI) / 180;
-  return {
-    x: dx * Math.cos(rad) - dy * Math.sin(rad) + wm.width / 2,
-    y: dx * Math.sin(rad) + dy * Math.cos(rad) + wm.height / 2,
-  };
-}
-function resizeWatermark(
-  wm: Watermark,
-  handle: CornerHandle,
-  localX: number,
-  localY: number,
-): Watermark {
-  const min = 16;
-  let width = wm.width;
-  let height = wm.height;
-  let dx = 0;
-  let dy = 0;
-  if (handle.includes('e')) width = Math.max(min, localX);
-  else {
-    width = Math.max(min, wm.width - localX);
-    dx = wm.width - width;
+async function encodeRasterBlob(
+  canvas: HTMLCanvasElement,
+  format: Exclude<ImageOutputFormat, 'svg'>,
+  quality: number,
+  flattenColor: string,
+) {
+  if (format === 'ico') return canvasToIco(canvas);
+  if (format === 'jpg') {
+    return canvasToBlob(flattenCanvas(canvas, flattenColor), 'jpg', blobQuality(quality));
   }
-  if (handle.includes('s')) height = Math.max(min, localY);
-  else {
-    height = Math.max(min, wm.height - localY);
-    dy = wm.height - height;
-  }
-  const rad = (wm.rotation * Math.PI) / 180;
-  return {
-    ...wm,
-    x: wm.x + dx * Math.cos(rad) - dy * Math.sin(rad),
-    y: wm.y + dx * Math.sin(rad) + dy * Math.cos(rad),
-    width,
-    height,
-    fontSize: clamp(wm.fontSize * (height / Math.max(1, wm.height)), 8, 400),
-  };
+  return canvasToBlob(canvas, format, blobQuality(quality));
 }
 
 type Session = {
@@ -527,57 +451,6 @@ function usePointerSession() {
   return { start, stop, dragging };
 }
 
-function ImageToolDisclosure({
-  id,
-  title,
-  meta,
-  open,
-  onOpenChange,
-  children,
-}: {
-  id: string;
-  title: string;
-  meta?: string;
-  open: boolean;
-  onOpenChange: (next: boolean) => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="flex min-w-0 flex-col border-t border-border pt-3">
-      <button
-        type="button"
-        id={`${id}-toggle`}
-        className="flex min-h-7 w-full cursor-pointer items-center gap-2 rounded-sm border-0 bg-transparent p-0 text-left font-mono text-[10px] font-medium uppercase tracking-[.04em] text-muted-foreground hover:text-foreground focus-visible:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-        aria-expanded={open}
-        aria-controls={id}
-        onClick={() => onOpenChange(!open)}
-      >
-        <CaretRight
-          size={10}
-          weight="bold"
-          className={`flex-none ${open ? 'rotate-90' : ''}`}
-          aria-hidden
-        />
-        <span className="min-w-0 flex-1">{title}</span>
-        {meta ? (
-          <span className="max-w-[46%] truncate font-sans text-[11px] font-normal normal-case tracking-normal">
-            {meta}
-          </span>
-        ) : null}
-      </button>
-      <div
-        id={id}
-        role="region"
-        aria-labelledby={`${id}-toggle`}
-        hidden={!open}
-        className={open ? 'flex flex-col gap-3 pt-3' : undefined}
-      >
-        {open ? children : null}
-      </div>
-    </section>
-  );
-}
-
 export default function ImageTool({
   active,
   record,
@@ -601,36 +474,35 @@ export default function ImageTool({
   const [fillTransparent, setFillTransparent] = useState(true);
   const [fillColor, setFillColor] = useState('#ffffff');
   const [quality, setQuality] = useState(92);
-  const [draft, setDraft] = useState<WatermarkDraft>(DEFAULT_DRAFT);
-  const [watermarks, setWatermarks] = useState<Watermark[]>([]);
-  const [selectedId, setSelectedId] = useState('');
+  const [outputFormat, setOutputFormat] = useState<ImageOutputFormat>('png');
   const [imageSelected, setImageSelected] = useState(false);
   const [sizeInput, setSizeInput] = useState({ w: '', h: '' });
+  const sizeInputFocus = useRef<'w' | 'h' | null>(null);
   const [pane, setPane] = useState({ w: 0, h: 0 });
   const fileDrag = useFileDragOver();
   const over = fileDrag.over;
-  const [openFill, setOpenFill] = useState(false);
-  const [openQuality, setOpenQuality] = useState(false);
-  const [openWatermark, setOpenWatermark] = useState(false);
   const [sizeSession, setSizeSession] = useState<SizeSession | null>(null);
-  const [jpegPreview, setJpegPreview] = useState<{ url: string; key: string } | null>(null);
-  const jpegPreviewRef = useRef<string | null>(null);
-  const jpegTaskRef = useRef(0);
+  const [encodedOutput, setEncodedOutput] = useState<{
+    key: string;
+    bytes: number;
+    url: string | null;
+    error: 'webp' | 'failed' | null;
+  } | null>(null);
+  const encodedUrlRef = useRef<string | null>(null);
+  const encodeTaskRef = useRef(0);
   const exportRef = useRef<() => Promise<void>>(async () => {});
-  const pngExport = sizeMode === 'expand' && fillTransparent;
   const cropEditing = sizeSession?.mode === 'crop';
   const expandEditing = sizeSession?.mode === 'expand';
-  const selectedWm = watermarks.find((item) => item.id === selectedId);
-  const form = selectedWm
-    ? {
-        text: selectedWm.text,
-        color: selectedWm.color,
-        font: selectedWm.font,
-        fontSize: selectedWm.fontSize,
-        letterSpacing: selectedWm.letterSpacing,
-        lineSpacing: selectedWm.lineSpacing,
-      }
-    : draft;
+  const svgAllowed = Boolean(
+    source && isSvgSource(source) && isUneditedGeometry(source, crop, expand),
+  );
+  const sourceBytes = useMemo(
+    () => (source ? dataUrlToBytes(source.dataUrl).byteLength : 0),
+    [source],
+  );
+  const sourceFormat = source ? sourceFormatOf(source) : '';
+  const jpgFlattenColor = sizeMode === 'expand' && !fillTransparent ? fillColor : '#ffffff';
+  const showQuality = outputFormat === 'jpg' || outputFormat === 'webp';
 
   useFocusOnActivate(active, () => {
     if (source) previewRef.current?.focus();
@@ -659,7 +531,7 @@ export default function ImageTool({
     [source, sizeMode, cropEditing, pane.w, pane.h, out.w, out.h],
   );
 
-  const previewKey = source
+  const outputKey = source
     ? [
         source.dataUrl,
         sizeMode,
@@ -674,41 +546,47 @@ export default function ImageTool({
         fillTransparent ? '1' : '0',
         fillColor,
         quality,
-        watermarks
-          .map(
-            (item) =>
-              `${item.id}:${item.x}:${item.y}:${item.width}:${item.height}:${item.rotation}:${item.text}:${item.color}:${item.font}:${item.fontSize}:${item.letterSpacing}:${item.lineSpacing}`,
-          )
-          .join(';'),
+        outputFormat,
+        jpgFlattenColor,
       ].join('|')
     : '';
 
-  const replaceJpegPreview = useCallback((next: { url: string; key: string } | null) => {
-    const nextUrl = next?.url ?? null;
-    if (jpegPreviewRef.current && jpegPreviewRef.current !== nextUrl)
-      URL.revokeObjectURL(jpegPreviewRef.current);
-    jpegPreviewRef.current = nextUrl;
-    setJpegPreview(next);
-  }, []);
+  const replaceEncodedOutput = useCallback(
+    (
+      next: {
+        key: string;
+        bytes: number;
+        url: string | null;
+        error: 'webp' | 'failed' | null;
+      } | null,
+    ) => {
+      const nextUrl = next?.url ?? null;
+      if (encodedUrlRef.current && encodedUrlRef.current !== nextUrl)
+        URL.revokeObjectURL(encodedUrlRef.current);
+      encodedUrlRef.current = nextUrl;
+      setEncodedOutput(next);
+    },
+    [],
+  );
 
-  const invalidateJpegPreview = useCallback(() => {
-    jpegTaskRef.current += 1;
-    replaceJpegPreview(null);
-  }, [replaceJpegPreview]);
+  const invalidateEncodedOutput = useCallback(() => {
+    encodeTaskRef.current += 1;
+    replaceEncodedOutput(null);
+  }, [replaceEncodedOutput]);
 
   const startGeometry = (
     event: ReactPointerEvent,
     onMoveFn: (e: PointerEvent) => void,
     onEnd: (canceled: boolean) => void,
   ) => {
-    invalidateJpegPreview();
+    invalidateEncodedOutput();
     pointer.start(event, onMoveFn, onEnd);
   };
 
   const resetImage = useCallback(
     (next: SourceImage | null) => {
       pointer.stop(true);
-      invalidateJpegPreview();
+      invalidateEncodedOutput();
       setSource(next);
       setSizeMode('crop');
       setCrop(next ? { x: 0, y: 0, w: next.width, h: next.height } : { x: 0, y: 0, w: 1, h: 1 });
@@ -720,47 +598,16 @@ export default function ImageTool({
       setFillTransparent(true);
       setFillColor('#ffffff');
       setQuality(92);
-      setWatermarks([]);
-      setSelectedId('');
+      setOutputFormat(next ? defaultOutputFormat(next) : 'png');
       setImageSelected(false);
-      setDraft(DEFAULT_DRAFT);
       fileDrag.clear();
-      setOpenFill(false);
-      setOpenQuality(false);
-      setOpenWatermark(false);
       setSizeSession(null);
     },
-    [fileDrag.clear, invalidateJpegPreview, pointer.stop],
+    [fileDrag.clear, invalidateEncodedOutput, pointer.stop],
   );
 
   const clearSelection = () => {
-    setSelectedId('');
     setImageSelected(false);
-  };
-
-  useEffect(() => {
-    if (selectedId) setOpenWatermark(true);
-  }, [selectedId]);
-
-  const patchDraft = (patch: Partial<WatermarkDraft>) => {
-    if (selectedWm) {
-      setWatermarks((list) =>
-        list.map((item) => {
-          if (item.id !== selectedWm.id) return item;
-          const next = { ...item, ...patch };
-          const size = measureWatermark(
-            next.text,
-            next.font,
-            next.fontSize,
-            next.letterSpacing,
-            next.lineSpacing,
-          );
-          return { ...next, width: size.width, height: size.height };
-        }),
-      );
-      return;
-    }
-    setDraft((current) => ({ ...current, ...patch }));
   };
 
   const applyLoaded = useCallback(
@@ -855,16 +702,26 @@ export default function ImageTool({
   };
 
   useEffect(() => {
-    if (!source || pngExport) {
-      replaceJpegPreview(null);
+    if (outputFormat === 'svg' && !svgAllowed) setOutputFormat('png');
+  }, [outputFormat, svgAllowed]);
+
+  useEffect(() => {
+    if (!source) {
+      replaceEncodedOutput(null);
       return;
     }
-    if (sizeSession || pointer.dragging) return;
-    const task = ++jpegTaskRef.current;
-    const key = previewKey;
+    if (pointer.dragging) return;
+    const task = ++encodeTaskRef.current;
+    const key = outputKey;
     let cancelled = false;
     void (async () => {
       try {
+        if (outputFormat === 'svg') {
+          if (!svgAllowed) throw new ImageOutputError('unsupportedFormat');
+          if (cancelled || task !== encodeTaskRef.current) return;
+          replaceEncodedOutput({ key, bytes: sourceBytes, url: null, error: null });
+          return;
+        }
         const canvas = await renderComposite({
           source,
           sizeMode,
@@ -872,22 +729,28 @@ export default function ImageTool({
           expand,
           fillTransparent,
           fillColor,
-          watermarks,
         });
-        if (cancelled || task !== jpegTaskRef.current) return;
-        const url = await encodeJpegUrl(canvas, quality);
-        if (cancelled || task !== jpegTaskRef.current) {
-          URL.revokeObjectURL(url);
-          return;
+        if (cancelled || task !== encodeTaskRef.current) return;
+        const blob = await encodeRasterBlob(canvas, outputFormat, quality, jpgFlattenColor);
+        if (cancelled || task !== encodeTaskRef.current) return;
+        let url: string | null = null;
+        if (outputFormat === 'jpg' || outputFormat === 'webp') {
+          url = URL.createObjectURL(blob);
+          await loadHtmlImage(url);
+          if (cancelled || task !== encodeTaskRef.current) {
+            URL.revokeObjectURL(url);
+            return;
+          }
         }
-        await loadHtmlImage(url);
-        if (cancelled || task !== jpegTaskRef.current) {
-          URL.revokeObjectURL(url);
-          return;
-        }
-        replaceJpegPreview({ url, key });
-      } catch {
-        if (!cancelled && task === jpegTaskRef.current) replaceJpegPreview(null);
+        replaceEncodedOutput({ key, bytes: blob.size, url, error: null });
+      } catch (error) {
+        if (cancelled || task !== encodeTaskRef.current) return;
+        replaceEncodedOutput({
+          key,
+          bytes: 0,
+          url: null,
+          error: outputFormat === 'webp' && isWebpUnsupported(error) ? 'webp' : 'failed',
+        });
       }
     })();
     return () => {
@@ -895,22 +758,24 @@ export default function ImageTool({
     };
   }, [
     source,
-    pngExport,
-    sizeSession,
     pointer.dragging,
-    previewKey,
+    outputKey,
+    outputFormat,
+    svgAllowed,
+    sourceBytes,
     sizeMode,
     crop,
     expand,
     fillTransparent,
     fillColor,
-    watermarks,
     quality,
+    jpgFlattenColor,
+    replaceEncodedOutput,
   ]);
 
   useEffect(
     () => () => {
-      if (jpegPreviewRef.current) URL.revokeObjectURL(jpegPreviewRef.current);
+      if (encodedUrlRef.current) URL.revokeObjectURL(encodedUrlRef.current);
     },
     [],
   );
@@ -921,44 +786,58 @@ export default function ImageTool({
       toast.add({ title: t('imageTool.noImage'), type: 'warning' });
       return;
     }
+    const format = outputFormat === 'svg' && !svgAllowed ? 'png' : outputFormat;
     try {
-      const canvas = await renderComposite({
-        source,
-        sizeMode,
-        crop,
-        expand,
-        fillTransparent,
-        fillColor,
-        watermarks,
-      });
-      const width = canvas.width;
-      const height = canvas.height;
-      const needAlpha = pngExport;
-      const mime = needAlpha ? 'image/png' : 'image/jpeg';
-      const dataUrl = needAlpha
-        ? canvas.toDataURL(mime)
-        : canvas.toDataURL(mime, clamp(quality, 1, 100) / 100);
-      const ext = needAlpha ? 'png' : 'jpg';
-      const filename = `${source.name.replace(/\.[^.]+$/, '') || 'image'}-edited.${ext}`;
+      let dataUrl: string;
+      let width = out.w;
+      let height = out.h;
+      if (format === 'svg') {
+        const bytes = dataUrlToBytes(source.dataUrl);
+        const buffer = new ArrayBuffer(bytes.byteLength);
+        new Uint8Array(buffer).set(bytes);
+        const blob = new Blob([buffer], { type: IMAGE_OUTPUT_FORMATS.svg.mime });
+        dataUrl = await blobToDataUrl(blob);
+        width = source.width;
+        height = source.height;
+      } else {
+        const canvas = await renderComposite({
+          source,
+          sizeMode,
+          crop,
+          expand,
+          fillTransparent,
+          fillColor,
+        });
+        width = canvas.width;
+        height = canvas.height;
+        const blob = await encodeRasterBlob(canvas, format, quality, jpgFlattenColor);
+        dataUrl = await blobToDataUrl(blob);
+      }
+      const info = IMAGE_OUTPUT_FORMATS[format];
+      const base = source.name.replace(/\.[^.]+$/, '') || 'image';
+      const filename =
+        format === 'svg' ? `${base}.${info.extension}` : `${base}-edited.${info.extension}`;
+      const pattern = format === 'jpg' ? '*.jpg;*.jpeg' : `*.${info.extension}`;
       const path = await Dialogs.SaveFile({
         Title: t('imageTool.exportTitle'),
         Filename: filename,
         ButtonText: t('imageTool.save'),
         CanCreateDirectories: true,
-        Filters: [
-          {
-            DisplayName: t('imageTool.filterImages'),
-            Pattern: needAlpha ? '*.png' : '*.jpg;*.jpeg',
-          },
-        ],
+        Filters: [{ DisplayName: t(FORMAT_FILTER_KEY[format]), Pattern: pattern }],
       });
       if (!path) return;
       await SaveBase64File(path, dataUrl);
       const detail = t('imageTool.dimensions', { width, height });
       record('image', t('imageTool.export'), detail, source.name, filename);
       toast.add({ title: t('imageTool.exported') });
-    } catch {
-      toast.add({ title: t('imageTool.exportFailed'), type: 'error' });
+    } catch (error) {
+      toast.add({
+        title:
+          format === 'webp' && isWebpUnsupported(error)
+            ? t('imageTool.webpUnsupported')
+            : t('imageTool.exportFailed'),
+        type: 'error',
+      });
     }
   };
   exportRef.current = exportImage;
@@ -978,14 +857,17 @@ export default function ImageTool({
 
   useEffect(() => {
     if (!out.w || !out.h) return;
-    setSizeInput({ w: String(out.w), h: String(out.h) });
+    setSizeInput((current) => ({
+      w: sizeInputFocus.current === 'w' ? current.w : String(out.w),
+      h: sizeInputFocus.current === 'h' ? current.h : String(out.h),
+    }));
   }, [out.w, out.h]);
 
   const applySize = () => {
-    if (!source) return;
+    if (!source || !sizeSession) return;
     const nextW = clamp(Math.round(Number(sizeInput.w) || 0), MIN_CROP, MAX_OUTPUT);
     const nextH = clamp(Math.round(Number(sizeInput.h) || 0), MIN_CROP, MAX_OUTPUT);
-    if (sizeMode === 'crop') {
+    if (sizeSession.mode === 'crop') {
       const w = clamp(nextW, MIN_CROP, source.width);
       const h = clamp(nextH, MIN_CROP, source.height);
       setCrop({
@@ -994,22 +876,32 @@ export default function ImageTool({
         w,
         h,
       });
+      setSizeInput({ w: String(w), h: String(h) });
       return;
     }
-    setExpand(
-      clampExpand(
-        { ...expand, width: Math.max(nextW, source.width), height: Math.max(nextH, source.height) },
-        source.width,
-        source.height,
-      ),
+    const next = clampExpand(
+      { ...expand, width: Math.max(nextW, source.width), height: Math.max(nextH, source.height) },
+      source.width,
+      source.height,
     );
+    setExpand(next);
+    setSizeInput({ w: String(next.width), h: String(next.height) });
+  };
+
+  const focusSizeInput = (field: 'w' | 'h') => {
+    sizeInputFocus.current = field;
+  };
+
+  const blurSizeInput = () => {
+    sizeInputFocus.current = null;
+    applySize();
   };
 
   const beginSizeEdit = (mode: SizeMode) => {
     if (!source) return;
     if (sizeSession?.mode === mode) return;
     pointer.stop(true);
-    invalidateJpegPreview();
+    invalidateEncodedOutput();
 
     let prevSizeMode = sizeMode;
     let prevCrop = crop;
@@ -1062,37 +954,6 @@ export default function ImageTool({
       setFillColor(sizeSession.fillColor);
     }
     setSizeSession(null);
-    setImageSelected(false);
-  };
-
-  const addWatermark = () => {
-    if (!source) return;
-    const text = form.text.trim();
-    if (!text) return;
-    const size = measureWatermark(
-      text,
-      form.font,
-      form.fontSize,
-      form.letterSpacing,
-      form.lineSpacing,
-    );
-    const id = `wm-${Date.now()}`;
-    const next: Watermark = {
-      id,
-      text,
-      color: form.color,
-      font: form.font,
-      fontSize: form.fontSize,
-      letterSpacing: form.letterSpacing,
-      lineSpacing: form.lineSpacing,
-      width: size.width,
-      height: size.height,
-      x: Math.max(0, (out.w - size.width) / 2),
-      y: Math.max(0, (out.h - size.height) / 2),
-      rotation: 0,
-    };
-    setWatermarks((list) => [...list, next]);
-    setSelectedId(id);
     setImageSelected(false);
   };
 
@@ -1199,7 +1060,6 @@ export default function ImageTool({
     const snapped = { ...fit };
     const start = stagePoint(event.nativeEvent, origin, snapped);
     const prev = expand;
-    setSelectedId('');
     setImageSelected(true);
     startGeometry(
       event,
@@ -1219,100 +1079,6 @@ export default function ImageTool({
       },
       (canceled) => {
         if (canceled) setExpand(prev);
-      },
-    );
-  };
-
-  const beginWmMove = (event: ReactPointerEvent, id: string) => {
-    event.stopPropagation();
-    const origin = previewRef.current?.getBoundingClientRect();
-    if (!origin) return;
-    const snapped = { ...fit };
-    const wm = watermarks.find((item) => item.id === id);
-    if (!wm) return;
-    const start = stagePoint(event.nativeEvent, origin, snapped);
-    const prev = watermarks;
-    setSelectedId(id);
-    startGeometry(
-      event,
-      (move) => {
-        const p = stagePoint(move, origin, snapped);
-        const dx = p.x - start.x;
-        const dy = p.y - start.y;
-        setWatermarks((list) =>
-          list.map((item) =>
-            item.id === id
-              ? {
-                  ...item,
-                  x: clamp(wm.x + dx, -item.width + 8, out.w - 8),
-                  y: clamp(wm.y + dy, -item.height + 8, out.h - 8),
-                }
-              : item,
-          ),
-        );
-      },
-      (canceled) => {
-        if (canceled) setWatermarks(prev);
-      },
-    );
-  };
-
-  const beginWmResize = (event: ReactPointerEvent, id: string, handle: CornerHandle) => {
-    event.stopPropagation();
-    const origin = previewRef.current?.getBoundingClientRect();
-    if (!origin) return;
-    const snapped = { ...fit };
-    const wm = watermarks.find((item) => item.id === id);
-    if (!wm) return;
-    const prev = watermarks;
-    const cropAt = crop;
-    const mode = sizeMode;
-    const cropSpace = cropEditing;
-    setSelectedId(id);
-    startGeometry(
-      event,
-      (move) => {
-        const raw = stagePoint(move, origin, snapped);
-        const p = mode === 'crop' && cropSpace ? { x: raw.x - cropAt.x, y: raw.y - cropAt.y } : raw;
-        const local = toLocal(p.x, p.y, wm);
-        setWatermarks((list) =>
-          list.map((item) =>
-            item.id === id ? resizeWatermark(wm, handle, local.x, local.y) : item,
-          ),
-        );
-      },
-      (canceled) => {
-        if (canceled) setWatermarks(prev);
-      },
-    );
-  };
-
-  const beginWmRotate = (event: ReactPointerEvent, id: string) => {
-    event.stopPropagation();
-    const origin = previewRef.current?.getBoundingClientRect();
-    if (!origin) return;
-    const snapped = { ...fit };
-    const wm = watermarks.find((item) => item.id === id);
-    if (!wm) return;
-    const prev = watermarks;
-    const cropAt = crop;
-    const mode = sizeMode;
-    const cropSpace = cropEditing;
-    const cx = wm.x + wm.width / 2;
-    const cy = wm.y + wm.height / 2;
-    setSelectedId(id);
-    startGeometry(
-      event,
-      (move) => {
-        const raw = stagePoint(move, origin, snapped);
-        const p = mode === 'crop' && cropSpace ? { x: raw.x - cropAt.x, y: raw.y - cropAt.y } : raw;
-        const rotation = (Math.atan2(p.y - cy, p.x - cx) * 180) / Math.PI + 90;
-        setWatermarks((list) =>
-          list.map((item) => (item.id === id ? { ...item, rotation } : item)),
-        );
-      },
-      (canceled) => {
-        if (canceled) setWatermarks(prev);
       },
     );
   };
@@ -1349,19 +1115,30 @@ export default function ImageTool({
             }
           : null;
 
-  const watermarkOffset =
-    source && cropEditing
-      ? { x: fit.x + crop.x * fit.scale, y: fit.y + crop.y * fit.scale, scale: fit.scale }
-      : { x: fit.x, y: fit.y, scale: fit.scale };
-  const outputClip = cropEditing ? cropStyle : canvasStyle;
-  const showFinalPreview = Boolean(
+  const showEncodedPreview = Boolean(
     source &&
-    jpegPreview &&
-    jpegPreview.key === previewKey &&
-    !pngExport &&
+    encodedOutput &&
+    encodedOutput.url &&
+    encodedOutput.key === outputKey &&
+    (outputFormat === 'jpg' || outputFormat === 'webp') &&
     !sizeSession &&
     !pointer.dragging,
   );
+
+  const formatItems = OUTPUT_FORMATS.map((format) => ({
+    value: format,
+    label: t(FORMAT_LABEL_KEY[format]),
+  }));
+
+  const outputSizeText = !source
+    ? t('imageTool.infoEmpty')
+    : encodedOutput?.key !== outputKey
+      ? t('imageTool.outputSizePending')
+      : encodedOutput.error === 'webp'
+        ? t('imageTool.webpUnsupported')
+        : encodedOutput.error
+          ? t('imageTool.outputSizeUnavailable')
+          : formatBytes(encodedOutput.bytes);
 
   return (
     <Reveal index={0} fill active={active}>
@@ -1418,14 +1195,14 @@ export default function ImageTool({
                               draggable={false}
                               aria-label={expandEditing ? t('imageTool.moveImage') : undefined}
                               data-selected={imageSelected ? 'true' : undefined}
-                              className={`image-tool-photo absolute max-h-none max-w-none select-none ${expandEditing ? 'cursor-move' : ''} ${showFinalPreview ? 'opacity-0' : ''}`}
+                              className={`image-tool-photo absolute max-h-none max-w-none select-none ${expandEditing ? 'cursor-move' : ''} ${showEncodedPreview ? 'opacity-0' : ''}`}
                               style={imageStyle}
                               onPointerDown={expandEditing ? beginImageMove : undefined}
                             />
                           ) : null}
-                          {showFinalPreview && jpegPreview ? (
+                          {showEncodedPreview && encodedOutput?.url ? (
                             <img
-                              src={jpegPreview.url}
+                              src={encodedOutput.url}
                               alt=""
                               aria-hidden
                               draggable={false}
@@ -1456,13 +1233,13 @@ export default function ImageTool({
                             src={source.dataUrl}
                             alt={source.name}
                             draggable={false}
-                            className={`absolute max-h-none max-w-none select-none ${showFinalPreview ? 'opacity-0' : ''}`}
+                            className={`absolute max-h-none max-w-none select-none ${showEncodedPreview ? 'opacity-0' : ''}`}
                             style={imageStyle}
                           />
                         ) : null}
-                        {showFinalPreview && jpegPreview ? (
+                        {showEncodedPreview && encodedOutput?.url ? (
                           <img
-                            src={jpegPreview.url}
+                            src={encodedOutput.url}
                             alt=""
                             aria-hidden
                             draggable={false}
@@ -1508,98 +1285,6 @@ export default function ImageTool({
                         ))}
                       </div>
                     ) : null}
-                    {outputClip && !showFinalPreview ? (
-                      <div
-                        className="pointer-events-none absolute z-[3] overflow-hidden"
-                        style={outputClip}
-                      >
-                        {watermarks.map((wm) => {
-                          const width = wm.width * watermarkOffset.scale;
-                          const height = wm.height * watermarkOffset.scale;
-                          return (
-                            <div
-                              key={`${wm.id}-text`}
-                              className="absolute flex items-center justify-center"
-                              style={{
-                                left:
-                                  watermarkOffset.x +
-                                  wm.x * watermarkOffset.scale -
-                                  outputClip.left,
-                                top:
-                                  watermarkOffset.y + wm.y * watermarkOffset.scale - outputClip.top,
-                                width,
-                                height,
-                                transform: `rotate(${wm.rotation}deg)`,
-                                color: wm.color,
-                                fontFamily: wm.font,
-                                fontSize: Math.max(8, wm.fontSize * watermarkOffset.scale),
-                                letterSpacing: wm.letterSpacing * watermarkOffset.scale,
-                                lineHeight: `${(wm.fontSize + wm.lineSpacing) * watermarkOffset.scale}px`,
-                                whiteSpace: 'pre',
-                                textAlign: 'center',
-                              }}
-                            >
-                              <span className="max-h-full max-w-full px-1">{wm.text}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ) : null}
-                    {watermarks.map((wm) => {
-                      const left = watermarkOffset.x + wm.x * watermarkOffset.scale;
-                      const top = watermarkOffset.y + wm.y * watermarkOffset.scale;
-                      const width = wm.width * watermarkOffset.scale;
-                      const height = wm.height * watermarkOffset.scale;
-                      const selected = wm.id === selectedId;
-                      return (
-                        <div
-                          key={wm.id}
-                          role="group"
-                          aria-label={t('imageTool.watermarkLayer', { text: wm.text })}
-                          aria-roledescription={t('imageTool.watermarkMove')}
-                          data-selected={selected ? 'true' : undefined}
-                          className="image-tool-layer absolute z-[3] flex cursor-move items-center justify-center overflow-visible"
-                          style={{
-                            left,
-                            top,
-                            width,
-                            height,
-                            transform: `rotate(${wm.rotation}deg)`,
-                          }}
-                          onPointerDown={(event) => {
-                            setImageSelected(false);
-                            beginWmMove(event, wm.id);
-                          }}
-                        >
-                          <span className="pointer-events-none sr-only">{wm.text}</span>
-                          {selected ? (
-                            <>
-                              <button
-                                type="button"
-                                className="image-tool-rotate"
-                                aria-label={t('imageTool.watermarkRotate')}
-                                onPointerDown={(event) => beginWmRotate(event, wm.id)}
-                              />
-                              {CORNER_HANDLES.map((handle) => (
-                                <button
-                                  key={handle}
-                                  type="button"
-                                  className="image-tool-handle"
-                                  style={{ ...HANDLE_POS[handle], cursor: HANDLE_CURSOR[handle] }}
-                                  aria-label={t('imageTool.watermarkResize', {
-                                    handle: t(HANDLE_KEY[handle]),
-                                  })}
-                                  onPointerDown={(event) => beginWmResize(event, wm.id, handle)}
-                                />
-                              ))}
-                            </>
-                          ) : null}
-                        </div>
-                      );
-                    })}
-                    <span className="image-tool-hud pointer-events-none absolute bottom-2 left-2 font-mono text-[10px] font-medium tracking-[.02em]">
-                      {t('imageTool.dimensions', { width: out.w, height: out.h })}
-                    </span>
                     <Button
                       variant="ghost"
                       size="icon-sm"
@@ -1616,6 +1301,30 @@ export default function ImageTool({
             <div className="image-tool-controls flex h-full min-h-0 min-w-0 flex-col overflow-x-hidden overflow-y-auto border-border max-[700px]:border-t min-[701px]:border-l [padding-inline-end:var(--overlay-scrollbar-hit-size)]">
               <div className="flex flex-col gap-3 py-3 pl-3 max-[700px]:pl-0">
                 <section className="flex flex-col gap-3">
+                  <h2 className="m-0 font-mono text-[10px] font-medium uppercase tracking-[.04em] text-muted-foreground">
+                    {t('imageTool.info')}
+                  </h2>
+                  <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-[11px]">
+                    <dt className="text-muted-foreground">{t('imageTool.infoDimensions')}</dt>
+                    <dd className="m-0 min-w-0 truncate text-right">
+                      {source
+                        ? t('imageTool.dimensions', {
+                            width: source.width,
+                            height: source.height,
+                          })
+                        : t('imageTool.infoEmpty')}
+                    </dd>
+                    <dt className="text-muted-foreground">{t('imageTool.infoFormat')}</dt>
+                    <dd className="m-0 min-w-0 truncate text-right">
+                      {sourceFormat ? t(FORMAT_LABEL_KEY[sourceFormat]) : t('imageTool.infoEmpty')}
+                    </dd>
+                    <dt className="text-muted-foreground">{t('imageTool.infoSize')}</dt>
+                    <dd className="m-0 min-w-0 truncate text-right">
+                      {source ? formatBytes(sourceBytes) : t('imageTool.infoEmpty')}
+                    </dd>
+                  </dl>
+                </section>
+                <section className="flex flex-col gap-3 border-t border-border pt-3">
                   <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-2 gap-y-1">
                     <h2 className="m-0 min-w-0 font-mono text-[10px] font-medium uppercase tracking-[.04em] text-muted-foreground">
                       {t('imageTool.size')}
@@ -1648,300 +1357,205 @@ export default function ImageTool({
                     </div>
                   </div>
                   {sizeSession ? (
-                    <p className="m-0 text-[11px] leading-5 text-muted-foreground" role="status">
-                      {sizeSession.mode === 'crop'
-                        ? t('imageTool.cropHint')
-                        : t('imageTool.expandHint')}
-                    </p>
-                  ) : null}
-                  <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-end gap-2 min-[701px]:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-                    <Label
-                      htmlFor="image-size-width"
-                      className="flex-col items-stretch gap-1.5 text-[11px] text-muted-foreground"
-                    >
-                      {t('imageTool.width')}
-                      <Input
-                        id="image-size-width"
-                        type="number"
-                        min={1}
-                        max={MAX_OUTPUT}
-                        value={sizeInput.w}
-                        disabled={!source}
-                        onChange={(event) =>
-                          setSizeInput((current) => ({ ...current, w: event.target.value }))
-                        }
-                      />
-                    </Label>
-                    <Label
-                      htmlFor="image-size-height"
-                      className="flex-col items-stretch gap-1.5 text-[11px] text-muted-foreground"
-                    >
-                      {t('imageTool.height')}
-                      <Input
-                        id="image-size-height"
-                        type="number"
-                        min={1}
-                        max={MAX_OUTPUT}
-                        value={sizeInput.h}
-                        disabled={!source}
-                        onChange={(event) =>
-                          setSizeInput((current) => ({ ...current, h: event.target.value }))
-                        }
-                      />
-                    </Label>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-8 flex-none min-[701px]:col-span-2"
-                      disabled={!source}
-                      onClick={applySize}
-                    >
-                      {t('imageTool.applySize')}
-                    </Button>
-                  </div>
-                  {sizeSession ? (
-                    <div className="flex flex-wrap justify-end gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="flex-none"
-                        onClick={cancelSizeEdit}
-                      >
-                        {t('imageTool.editCancel')}
-                      </Button>
-                      <Button
-                        variant="default"
-                        size="sm"
-                        className="flex-none"
-                        onClick={commitSizeEdit}
-                      >
-                        {t('imageTool.editDone')}
-                      </Button>
-                    </div>
+                    <>
+                      <p className="m-0 text-[11px] leading-5 text-muted-foreground" role="status">
+                        {sizeSession.mode === 'crop'
+                          ? t('imageTool.cropHint')
+                          : t('imageTool.expandHint')}
+                      </p>
+                      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-end gap-2">
+                        <Label
+                          htmlFor="image-size-width"
+                          className="flex-col items-stretch gap-1.5 text-[11px] text-muted-foreground"
+                        >
+                          {t('imageTool.width')}
+                          <Input
+                            id="image-size-width"
+                            type="number"
+                            min={1}
+                            max={MAX_OUTPUT}
+                            value={sizeInput.w}
+                            onFocus={() => focusSizeInput('w')}
+                            onBlur={blurSizeInput}
+                            onChange={(event) =>
+                              setSizeInput((current) => ({ ...current, w: event.target.value }))
+                            }
+                          />
+                        </Label>
+                        <Label
+                          htmlFor="image-size-height"
+                          className="flex-col items-stretch gap-1.5 text-[11px] text-muted-foreground"
+                        >
+                          {t('imageTool.height')}
+                          <Input
+                            id="image-size-height"
+                            type="number"
+                            min={1}
+                            max={MAX_OUTPUT}
+                            value={sizeInput.h}
+                            onFocus={() => focusSizeInput('h')}
+                            onBlur={blurSizeInput}
+                            onChange={(event) =>
+                              setSizeInput((current) => ({ ...current, h: event.target.value }))
+                            }
+                          />
+                        </Label>
+                      </div>
+                      {sizeSession.mode === 'expand' ? (
+                        <div className="flex flex-col gap-3">
+                          <h3 className="m-0 font-mono text-[10px] font-medium uppercase tracking-[.04em] text-muted-foreground">
+                            {t('imageTool.fill')}
+                          </h3>
+                          <Label
+                            htmlFor="image-fill-transparent"
+                            className="justify-between text-[11px] text-muted-foreground"
+                          >
+                            <span>{t('imageTool.fillTransparent')}</span>
+                            <Switch
+                              id="image-fill-transparent"
+                              checked={fillTransparent}
+                              onCheckedChange={(checked) => setFillTransparent(checked === true)}
+                              size="sm"
+                            />
+                          </Label>
+                          {!fillTransparent ? (
+                            <div className="image-tool-fill-color-row flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
+                              <span id="image-fill-color-label">{t('imageTool.fillColor')}</span>
+                              <ColorPicker
+                                value={fillColor}
+                                onValueChange={setFillColor}
+                                withoutAlpha
+                                defaultFormat="hex"
+                              >
+                                <ColorPickerTrigger
+                                  className="image-tool-fill-color"
+                                  aria-labelledby="image-fill-color-label"
+                                >
+                                  <ColorPickerSwatch className="image-tool-fill-color-swatch" />
+                                  <span className="image-tool-fill-color-value">{fillColor}</span>
+                                </ColorPickerTrigger>
+                                <ColorPickerContent>
+                                  <ColorPickerArea />
+                                  <ColorPickerHueSlider />
+                                  <div className="flex items-center gap-2">
+                                    <ColorPickerEyeDropper />
+                                    <ColorPickerFormatSelect />
+                                  </div>
+                                  <ColorPickerInput withoutAlpha />
+                                </ColorPickerContent>
+                              </ColorPicker>
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
+                      <div className="flex flex-wrap justify-end gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="flex-none"
+                          onClick={cancelSizeEdit}
+                        >
+                          {t('imageTool.editCancel')}
+                        </Button>
+                        <Button
+                          variant="default"
+                          size="sm"
+                          className="flex-none"
+                          onClick={commitSizeEdit}
+                        >
+                          {t('imageTool.editDone')}
+                        </Button>
+                      </div>
+                    </>
                   ) : null}
                 </section>
-                {sizeMode === 'expand' ? (
-                  <ImageToolDisclosure
-                    id="image-fill-panel"
-                    title={t('imageTool.fill')}
-                    meta={fillTransparent ? t('imageTool.fillTransparent') : fillColor}
-                    open={openFill}
-                    onOpenChange={setOpenFill}
-                  >
-                    <Label
-                      htmlFor="image-fill-transparent"
-                      className="justify-between text-[11px] text-muted-foreground"
-                    >
-                      <span>{t('imageTool.fillTransparent')}</span>
-                      <Switch
-                        id="image-fill-transparent"
-                        checked={fillTransparent}
-                        onCheckedChange={(checked) => setFillTransparent(checked === true)}
-                        size="sm"
-                      />
-                    </Label>
-                    {!fillTransparent ? (
-                      <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
-                        <span id="image-fill-color-label">{t('imageTool.fillColor')}</span>
-                        <ColorPicker
-                          value={fillColor}
-                          onValueChange={setFillColor}
-                          withoutAlpha
-                          defaultFormat="hex"
-                        >
-                          <ColorPickerTrigger aria-labelledby="image-fill-color-label">
-                            <ColorPickerSwatch />
-                          </ColorPickerTrigger>
-                          <ColorPickerContent>
-                            <ColorPickerArea />
-                            <ColorPickerHueSlider />
-                            <div className="flex items-center gap-2">
-                              <ColorPickerEyeDropper />
-                              <ColorPickerFormatSelect />
-                            </div>
-                            <ColorPickerInput withoutAlpha />
-                          </ColorPickerContent>
-                        </ColorPicker>
-                      </div>
-                    ) : null}
-                  </ImageToolDisclosure>
-                ) : null}
-                <ImageToolDisclosure
-                  id="image-quality-panel"
-                  title={t('imageTool.quality')}
-                  meta={
-                    pngExport
-                      ? t('imageTool.outputPng')
-                      : t('imageTool.qualityValue', { value: quality })
-                  }
-                  open={openQuality}
-                  onOpenChange={setOpenQuality}
-                >
-                  <Slider
-                    min={1}
-                    max={100}
-                    step={1}
-                    value={[quality]}
-                    disabled={!source}
-                    aria-labelledby="image-quality-panel-toggle"
-                    aria-describedby={pngExport ? 'image-quality-png-hint' : undefined}
-                    onValueChange={(value) => {
-                      const next = Array.isArray(value) ? value[0] : value;
-                      if (typeof next === 'number' && Number.isFinite(next)) setQuality(next);
-                    }}
-                  />
-                  {pngExport ? (
-                    <p
-                      id="image-quality-png-hint"
-                      className="m-0 text-[11px] leading-5 text-muted-foreground"
-                    >
-                      {t('imageTool.qualityPngHint')}
-                    </p>
-                  ) : null}
-                </ImageToolDisclosure>
-                <ImageToolDisclosure
-                  id="image-watermark-panel"
-                  title={t('imageTool.watermark')}
-                  meta={watermarks.length ? String(watermarks.length) : undefined}
-                  open={openWatermark}
-                  onOpenChange={setOpenWatermark}
-                >
+                <section className="flex flex-col gap-3 border-t border-border pt-3">
+                  <h2 className="m-0 font-mono text-[10px] font-medium uppercase tracking-[.04em] text-muted-foreground">
+                    {t('imageTool.output')}
+                  </h2>
                   <Label
-                    htmlFor="image-wm-text"
+                    htmlFor="image-output-format"
                     className="flex-col items-stretch gap-1.5 text-[11px] text-muted-foreground"
                   >
-                    {t('imageTool.watermarkText')}
-                    <Input
-                      id="image-wm-text"
-                      value={form.text}
-                      placeholder={t('imageTool.watermarkTextPlaceholder')}
-                      onChange={(event) => patchDraft({ text: event.target.value })}
-                    />
-                  </Label>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
-                      <span id="image-wm-color-label">{t('imageTool.watermarkColor')}</span>
-                      <ColorPicker
-                        value={form.color}
-                        onValueChange={(value) => patchDraft({ color: value })}
-                      >
-                        <ColorPickerTrigger aria-labelledby="image-wm-color-label">
-                          <ColorPickerSwatch />
-                        </ColorPickerTrigger>
-                        <ColorPickerContent>
-                          <ColorPickerArea />
-                          <ColorPickerHueSlider />
-                          <ColorPickerAlphaSlider />
-                          <div className="flex items-center gap-2">
-                            <ColorPickerEyeDropper />
-                            <ColorPickerFormatSelect />
-                          </div>
-                          <ColorPickerInput />
-                        </ColorPickerContent>
-                      </ColorPicker>
-                    </div>
-                    <div className="flex min-w-0 flex-col gap-1.5 text-[11px] text-muted-foreground">
-                      <span id="image-wm-font-label">{t('imageTool.watermarkFont')}</span>
-                      <Select
-                        value={form.font}
-                        items={FONTS.map((font) => ({ value: font.value, label: t(font.key) }))}
-                        onValueChange={(value) => {
-                          if (value) patchDraft({ font: value });
-                        }}
-                      >
-                        <SelectTrigger
-                          className="h-8 w-full min-w-0 text-[11px]"
-                          aria-labelledby="image-wm-font-label"
-                        >
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {FONTS.map((font) => (
-                            <SelectItem key={font.key} value={font.value}>
-                              {t(font.key)}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <Label
-                      htmlFor="image-wm-size"
-                      className="flex-col items-stretch gap-1.5 text-[11px] text-muted-foreground"
-                    >
-                      {t('imageTool.fontSize')}
-                      <Input
-                        id="image-wm-size"
-                        type="number"
-                        min={8}
-                        max={400}
-                        value={form.fontSize}
-                        onChange={(event) =>
-                          patchDraft({ fontSize: clamp(Number(event.target.value) || 8, 8, 400) })
+                    {t('imageTool.format')}
+                    <Select
+                      items={formatItems}
+                      value={outputFormat}
+                      disabled={!source}
+                      onValueChange={(value) => {
+                        if (
+                          value === 'jpg' ||
+                          value === 'png' ||
+                          value === 'webp' ||
+                          value === 'ico' ||
+                          value === 'svg'
+                        ) {
+                          if (value === 'svg' && !svgAllowed) return;
+                          setOutputFormat(value);
                         }
-                      />
-                    </Label>
-                    <Label
-                      htmlFor="image-wm-letter"
-                      className="flex-col items-stretch gap-1.5 text-[11px] text-muted-foreground"
-                    >
-                      {t('imageTool.letterSpacing')}
-                      <Input
-                        id="image-wm-letter"
-                        type="number"
-                        min={-20}
-                        max={80}
-                        value={form.letterSpacing}
-                        onChange={(event) =>
-                          patchDraft({
-                            letterSpacing: clamp(Number(event.target.value) || 0, -20, 80),
-                          })
-                        }
-                      />
-                    </Label>
-                    <Label
-                      htmlFor="image-wm-line"
-                      className="flex-col items-stretch gap-1.5 text-[11px] text-muted-foreground"
-                    >
-                      {t('imageTool.lineSpacing')}
-                      <Input
-                        id="image-wm-line"
-                        type="number"
-                        min={-20}
-                        max={80}
-                        value={form.lineSpacing}
-                        onChange={(event) =>
-                          patchDraft({
-                            lineSpacing: clamp(Number(event.target.value) || 0, -20, 80),
-                          })
-                        }
-                      />
-                    </Label>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={!source || !form.text.trim()}
-                      onClick={addWatermark}
-                    >
-                      <Plus data-icon="inline-start" />
-                      {t('imageTool.addWatermark')}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      disabled={!selectedId}
-                      aria-label={t('imageTool.removeWatermark')}
-                      onClick={() => {
-                        setWatermarks((list) => list.filter((item) => item.id !== selectedId));
-                        clearSelection();
                       }}
                     >
-                      <Trash data-icon="inline-start" />
-                      {t('imageTool.removeWatermark')}
-                    </Button>
+                      <SelectTrigger
+                        id="image-output-format"
+                        size="sm"
+                        className="h-7 w-full min-w-0 text-[11px]"
+                        aria-label={t('imageTool.format')}
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {OUTPUT_FORMATS.map((format) => (
+                          <SelectItem
+                            key={format}
+                            value={format}
+                            disabled={format === 'svg' && !svgAllowed}
+                          >
+                            {t(FORMAT_LABEL_KEY[format])}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </Label>
+                  {source && isSvgSource(source) && !svgAllowed ? (
+                    <p className="m-0 text-[11px] leading-5 text-muted-foreground">
+                      {t('imageTool.svgEditedHint')}
+                    </p>
+                  ) : null}
+                  {showQuality ? (
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
+                        <span id="image-quality-label">{t('imageTool.quality')}</span>
+                        <span>{t('imageTool.qualityValue', { value: quality })}</span>
+                      </div>
+                      <Slider
+                        min={1}
+                        max={100}
+                        step={1}
+                        value={[quality]}
+                        disabled={!source}
+                        aria-labelledby="image-quality-label"
+                        onValueChange={(value) => {
+                          const next = Array.isArray(value) ? value[0] : value;
+                          if (typeof next === 'number' && Number.isFinite(next)) setQuality(next);
+                        }}
+                      />
+                    </div>
+                  ) : null}
+                  <div className="flex items-start justify-between gap-2 text-[11px] text-muted-foreground">
+                    <span>{t('imageTool.outputDimensions')}</span>
+                    <span className="min-w-0 text-right">
+                      {source
+                        ? t('imageTool.dimensions', { width: out.w, height: out.h })
+                        : t('imageTool.infoEmpty')}
+                    </span>
                   </div>
-                </ImageToolDisclosure>
+                  <div className="flex items-start justify-between gap-2 text-[11px] text-muted-foreground">
+                    <span>{t('imageTool.outputSize')}</span>
+                    <span className="min-w-0 text-right" role="status" aria-live="polite">
+                      {outputSizeText}
+                    </span>
+                  </div>
+                </section>
               </div>
             </div>
           </div>
