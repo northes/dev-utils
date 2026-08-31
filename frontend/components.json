@@ -17,5 +17,8 @@
     "lib": "@/lib",
     "hooks": "@/hooks"
   },
-  "iconLibrary": "phosphor"
+  "iconLibrary": "phosphor",
+  "registries": {
+    "@diceui": "https://diceui.com/r/{style}/{name}.json"
+  }
 }
