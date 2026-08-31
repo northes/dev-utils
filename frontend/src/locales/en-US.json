@@ -6,9 +6,14 @@
     "title": "The interface ran into a problem",
     "description": "The application interface did not load correctly. Reloading will usually restore it.",
     "reload": "Reload",
+    "openRepository": "GitHub repository",
     "details": "View error details",
     "copy": "Copy error details",
-    "copied": "Error details copied"
+    "copied": "Error details copied",
+    "version": "App version",
+    "system": "System type and version",
+    "error": "Error details",
+    "unknown": "Unknown"
   },
   "titlebar": {
     "history": "History",
@@ -614,7 +619,6 @@
     "about": "About",
     "aboutSubtitle": "Project home and support.",
     "projectLink": "Project link",
-    "projectUrl": "https://github.com/northes/dev-utils",
     "openProject": "Open",
     "application": "Application",
     "applicationSubtitle": "Control the application state.",

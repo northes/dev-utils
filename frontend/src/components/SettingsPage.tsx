@@ -18,6 +18,7 @@ import { ClearHistoryDialog } from './HistoryPage';
 import { Reveal, ToolLayout, ToolLayoutHeader, ToolLayoutScrollableContent } from './shared';
 import { toast } from './ui/toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { GITHUB_REPO_URL } from '../repositoryUrl';
 import { THEME_MODE_OPTIONS, THEME_OPTIONS, type ThemeMode } from '../theme';
 
 export type ToolDefinition = {
@@ -468,11 +469,11 @@ export default function SettingsPage({
             subtitle={t('settings.aboutSubtitle')}
             flushSettingsSave={flushSettingsSave}
           >
-            <Setting label={t('settings.projectLink')} description={t('settings.projectUrl')}>
+            <Setting label={t('settings.projectLink')} description={GITHUB_REPO_URL}>
               <Button
                 variant="outline"
                 className="text-[11px]"
-                onClick={() => void Browser.OpenURL(t('settings.projectUrl'))}
+                onClick={() => void Browser.OpenURL(GITHUB_REPO_URL)}
               >
                 <ArrowSquareOut data-icon="inline-start" weight="duotone" />
                 {t('settings.openProject')}

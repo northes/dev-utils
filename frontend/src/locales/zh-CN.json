@@ -6,9 +6,14 @@
     "title": "界面遇到问题",
     "description": "应用界面没有正常加载。重新加载通常可以恢复使用。",
     "reload": "重新加载",
+    "openRepository": "GitHub 仓库",
     "details": "查看错误详情",
     "copy": "复制错误详情",
-    "copied": "已复制错误详情"
+    "copied": "已复制错误详情",
+    "version": "应用版本",
+    "system": "系统类型及版本",
+    "error": "详细错误",
+    "unknown": "未知"
   },
   "titlebar": {
     "history": "历史记录",
@@ -614,7 +619,6 @@
     "about": "关于",
     "aboutSubtitle": "项目主页与支持渠道。",
     "projectLink": "项目链接",
-    "projectUrl": "https://github.com/northes/dev-utils",
     "openProject": "打开",
     "application": "应用",
     "applicationSubtitle": "控制应用运行状态。",

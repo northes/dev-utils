@@ -1,7 +1,9 @@
 import React from 'react';
-import { ArrowsClockwise, Bug, Check, Copy } from '@phosphor-icons/react';
-import { Window } from '@wailsio/runtime';
+import { ArrowsClockwise, Bug, Check, Copy, GithubLogo } from '@phosphor-icons/react';
+import { Browser, Window } from '@wailsio/runtime';
 import { useTranslation } from 'react-i18next';
+import { GetCurrentVersion } from '../../bindings/changeme/updateservice';
+import { GITHUB_REPO_URL } from '../repositoryUrl';
 import { Button } from './ui/button';
 
 type FatalErrorBoundaryProps = { children: React.ReactNode };
@@ -18,14 +20,74 @@ function reload(force: boolean) {
   void request.catch(() => window.location.reload());
 }
 
+function readNavigatorString(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function detectOsVersion(userAgent: string): string {
+  const match =
+    userAgent.match(/Mac OS X (\d+[._]\d+(?:[._]\d+)?)/) ||
+    userAgent.match(/Windows NT (\d+\.\d+)/) ||
+    userAgent.match(/Android (\d+(?:\.\d+)*)/) ||
+    userAgent.match(/CPU (?:iPhone )?OS (\d+[._]\d+(?:[._]\d+)?)/);
+  return match?.[1]?.replace(/_/g, '.') ?? '';
+}
+
+function getSystemTypeAndVersion(unknownLabel: string): string {
+  try {
+    const uaData = (navigator as Navigator & { userAgentData?: { platform?: unknown } })
+      .userAgentData;
+    const type =
+      readNavigatorString(uaData?.platform) ||
+      readNavigatorString(navigator.platform) ||
+      unknownLabel;
+    const version = detectOsVersion(readNavigatorString(navigator.userAgent)) || unknownLabel;
+    return `${type} ${version}`;
+  } catch {
+    return unknownLabel;
+  }
+}
+
+function formatErrorDetails(error: Error): string {
+  const stack = error.stack?.trim();
+  if (stack) return stack;
+  const message = error.message?.trim();
+  return message || String(error);
+}
+
 function CrashScreen({ error, onReload }: { error: Error; onReload: () => void }) {
   const { t } = useTranslation();
   const [copied, setCopied] = React.useState(false);
+  const [version, setVersion] = React.useState<string | null>(null);
+  const unknownLabel = t('crash.unknown');
+  const versionLabel = version ? `v${version}` : version === null ? '' : unknownLabel;
+  const systemLabel = React.useMemo(() => getSystemTypeAndVersion(unknownLabel), [unknownLabel]);
+  const errorText = formatErrorDetails(error);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    void GetCurrentVersion()
+      .then((value) => {
+        if (!cancelled) setVersion(typeof value === 'string' ? value.trim() : '');
+      })
+      .catch(() => {
+        if (!cancelled) setVersion('');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const copyErrorDetails = async () => {
     if (!navigator.clipboard) return;
     try {
-      await navigator.clipboard.writeText(error.message);
+      const report = [
+        `${t('crash.version')}: ${versionLabel}`,
+        `${t('crash.system')}: ${systemLabel}`,
+        `${t('crash.error')}:`,
+        errorText,
+      ].join('\n');
+      await navigator.clipboard.writeText(report);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1600);
     } catch {
@@ -39,27 +101,54 @@ function CrashScreen({ error, onReload }: { error: Error; onReload: () => void }
         <Bug size={34} weight="duotone" className="mb-4 text-destructive" />
         <h1 className="text-base font-semibold">{t('crash.title')}</h1>
         <p className="mt-2 text-xs leading-5 text-muted-foreground">{t('crash.description')}</p>
-        <Button className="mt-6" onClick={onReload}>
-          <ArrowsClockwise data-icon="inline-start" size={15} weight="duotone" />
-          {t('crash.reload')}
-        </Button>
+        <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
+          <Button type="button" onClick={onReload}>
+            <ArrowsClockwise data-icon="inline-start" size={15} weight="duotone" />
+            {t('crash.reload')}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => void Browser.OpenURL(GITHUB_REPO_URL)}
+          >
+            <GithubLogo data-icon="inline-start" size={15} weight="duotone" />
+            {t('crash.openRepository')}
+          </Button>
+        </div>
         <details className="mt-6 w-full text-left text-[10px] text-muted-foreground">
           <summary className="cursor-pointer text-center">{t('crash.details')}</summary>
-          <div className="mt-2 flex items-start gap-2 rounded-lg border border-border bg-muted/30 p-3">
-            <pre className="min-w-0 flex-1 max-h-32 overflow-auto whitespace-pre-wrap">
-              {error.message}
-            </pre>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label={t(copied ? 'crash.copied' : 'crash.copy')}
-              title={t(copied ? 'crash.copied' : 'crash.copy')}
-              onClick={() => void copyErrorDetails()}
-            >
-              {copied ? <Check size={14} weight="duotone" /> : <Copy size={14} weight="duotone" />}
-            </Button>
-          </div>
+          <dl className="mt-2 flex flex-col gap-3 rounded-lg border border-border bg-muted/30 p-3">
+            <div>
+              <dt className="font-medium text-foreground">{t('crash.version')}</dt>
+              <dd className="mt-1 break-all">{versionLabel}</dd>
+            </div>
+            <div>
+              <dt className="font-medium text-foreground">{t('crash.system')}</dt>
+              <dd className="mt-1 break-all">{systemLabel}</dd>
+            </div>
+            <div>
+              <dt className="font-medium text-foreground">{t('crash.error')}</dt>
+              <dd className="mt-1 flex items-start gap-2">
+                <pre className="min-w-0 flex-1 max-h-32 overflow-auto whitespace-pre-wrap">
+                  {errorText}
+                </pre>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={t(copied ? 'crash.copied' : 'crash.copy')}
+                  title={t(copied ? 'crash.copied' : 'crash.copy')}
+                  onClick={() => void copyErrorDetails()}
+                >
+                  {copied ? (
+                    <Check size={14} weight="duotone" />
+                  ) : (
+                    <Copy size={14} weight="duotone" />
+                  )}
+                </Button>
+              </dd>
+            </div>
+          </dl>
         </details>
       </section>
     </main>
