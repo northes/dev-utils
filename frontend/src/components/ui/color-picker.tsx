@@ -6,7 +6,7 @@ import { mergeProps } from "@base-ui/react/merge-props";
 import { Slider as SliderPrimitive } from "@base-ui/react/slider";
 import { useRender } from "@base-ui/react/use-render";
 import { cva, type VariantProps } from "class-variance-authority";
-import { PipetteIcon } from "lucide-react";
+import { Eyedropper } from "@phosphor-icons/react";
 import * as React from "react";
 
 import { cn } from "@/lib/utils";
@@ -1147,7 +1147,7 @@ function ColorPickerEyeDropper(props: React.ComponentProps<typeof Button>) {
       onClick={onEyeDropper}
       disabled={isDisabled}
     >
-      {children ?? <PipetteIcon />}
+      {children ?? <Eyedropper />}
     </Button>
   );
 }
