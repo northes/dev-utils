@@ -296,12 +296,13 @@ export function Reveal({
   );
 }
 
-export function ToolLayoutHeader({ title }: { title: string }) {
+export function ToolLayoutHeader({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
     <header className="row-start-1 mt-[5px] mb-3.5 min-w-0 text-muted-foreground">
       <h1 className="m-0 text-[19px] leading-tight font-semibold tracking-[-.01em] text-foreground">
         {title}
       </h1>
+      {subtitle ? <p className="mt-1 mb-0 text-[10px] leading-[1.5]">{subtitle}</p> : null}
     </header>
   );
 }

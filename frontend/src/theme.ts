@@ -1,20 +1,9 @@
 export type ThemeMode = 'light' | 'dark' | 'system';
-export type ThemeId =
-  'default-light' | 'default-dark' | 'modern-minimal-light' | 'modern-minimal-dark';
+export type ThemeId = 'default-light' | 'default-dark';
 
 export const THEME_OPTIONS = [
   { id: 'default-light', tone: 'light', labelKey: 'settings.themeDefault' },
   { id: 'default-dark', tone: 'dark', labelKey: 'settings.themeDefault' },
-  {
-    id: 'modern-minimal-light',
-    tone: 'light',
-    labelKey: 'settings.themeModernMinimal',
-  },
-  {
-    id: 'modern-minimal-dark',
-    tone: 'dark',
-    labelKey: 'settings.themeModernMinimal',
-  },
 ] as const satisfies ReadonlyArray<{ id: ThemeId; tone: 'light' | 'dark'; labelKey: string }>;
 
 export const THEME_MODE_OPTIONS = [

@@ -83,6 +83,29 @@ type historyStored struct {
 func defaultConfig() Config {
 	return Config{TrayMatchEnabled: true, TrayMatchTools: []string{"json", "time", "text", "base64", "diff", "jwt", "url"}, AutoOverwrite: true, AutoCheckUpdates: true, Language: "zh-CN", SidebarMode: "full", SidebarTools: defaultSidebarTools(), ThemeMode: "dark", LightTheme: "default-light", DarkTheme: "default-dark", DiffClipboardTargetMode: "alternate", CodeEditorFontSize: 16, TimeResultOrder: []string{"local", "dateTime", "dateOnly", "timeOnly", "zonedIso8601", "rfc3339", "utc", "compact", "underscore", "unixSeconds", "unixMilliseconds", "unixNanoseconds"}, JsonAutoFormatOnFill: true, JsonAutoFormatOnFillMigrated: true}
 }
+
+func normalizeThemeID(theme string, defaultID string, legacyID string) string {
+	if theme == legacyID {
+		return defaultID
+	}
+	if theme != defaultID {
+		return defaultID
+	}
+	return theme
+}
+
+func stringSlicesEqual(a []string, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
 func normalizeConfig(cfg Config) Config {
 	validSidebarTool := make(map[string]bool, len(defaultSidebarToolIDs))
 	for _, id := range defaultSidebarToolIDs {
@@ -122,6 +145,9 @@ func normalizeConfig(cfg Config) Config {
 				seen[id] = true
 			}
 		}
+		if len(matched) == 0 {
+			matched = append([]string(nil), trayTools...)
+		}
 		cfg.TrayMatchTools = matched
 	}
 	if !cfg.URLTrayMatchMigrated {
@@ -142,18 +168,16 @@ func normalizeConfig(cfg Config) Config {
 	default:
 		cfg.ThemeMode = "dark"
 	}
-	if cfg.LightTheme != "default-light" && cfg.LightTheme != "modern-minimal-light" {
-		cfg.LightTheme = "default-light"
-	}
-	if cfg.DarkTheme != "default-dark" && cfg.DarkTheme != "modern-minimal-dark" {
-		cfg.DarkTheme = "default-dark"
-	}
+	cfg.LightTheme = normalizeThemeID(cfg.LightTheme, "default-light", "modern-minimal-light")
+	cfg.DarkTheme = normalizeThemeID(cfg.DarkTheme, "default-dark", "modern-minimal-dark")
 	switch cfg.DiffClipboardTargetMode {
 	case "alternate", "before", "after":
 	default:
 		cfg.DiffClipboardTargetMode = "alternate"
 	}
-	if cfg.CodeEditorFontSize < 10 || cfg.CodeEditorFontSize > 24 {
+	switch cfg.CodeEditorFontSize {
+	case 12, 14, 16, 18:
+	default:
 		cfg.CodeEditorFontSize = 16
 	}
 	timeResults := []string{"local", "dateTime", "dateOnly", "timeOnly", "zonedIso8601", "rfc3339", "utc", "compact", "underscore", "unixSeconds", "unixMilliseconds", "unixNanoseconds"}
@@ -206,6 +230,12 @@ func migrateLegacyTheme(cfg Config, legacyTheme string, hasThemeMode bool) Confi
 	case "default-dark":
 		cfg.ThemeMode = "dark"
 		cfg.DarkTheme = "default-dark"
+	case "modern-minimal-light":
+		cfg.ThemeMode = "light"
+		cfg.LightTheme = "default-light"
+	case "modern-minimal-dark":
+		cfg.ThemeMode = "dark"
+		cfg.DarkTheme = "default-dark"
 	}
 	return cfg
 }
@@ -233,15 +263,25 @@ func NewConfigService() *ConfigService {
 	cfg := defaultConfig()
 	path := configPath()
 	if b, err := os.ReadFile(path); err == nil {
-		_ = json.Unmarshal(b, &cfg)
-		var raw map[string]json.RawMessage
-		_ = json.Unmarshal(b, &raw)
-		var legacy struct {
-			Theme string `json:"theme"`
+		if err := json.Unmarshal(b, &cfg); err == nil {
+			beforeNormalize := cfg
+			var raw map[string]json.RawMessage
+			_ = json.Unmarshal(b, &raw)
+			var legacy struct {
+				Theme string `json:"theme"`
+			}
+			_ = json.Unmarshal(b, &legacy)
+			_, hasThemeMode := raw["themeMode"]
+			_, hasLegacyTheme := raw["theme"]
+			cfg = migrateLegacyTheme(cfg, legacy.Theme, hasThemeMode)
+
+			cfg = normalizeConfig(cfg)
+			if hasLegacyTheme || beforeNormalize.ThemeMode != cfg.ThemeMode || beforeNormalize.LightTheme != cfg.LightTheme || beforeNormalize.DarkTheme != cfg.DarkTheme || !stringSlicesEqual(beforeNormalize.TrayMatchTools, cfg.TrayMatchTools) || beforeNormalize.CodeEditorFontSize != cfg.CodeEditorFontSize {
+				if normalized, marshalErr := json.Marshal(cfg); marshalErr == nil {
+					_ = writeConfigAtomically(path, normalized)
+				}
+			}
 		}
-		_ = json.Unmarshal(b, &legacy)
-		_, hasThemeMode := raw["themeMode"]
-		cfg = migrateLegacyTheme(cfg, legacy.Theme, hasThemeMode)
 	}
 	cfg = normalizeConfig(cfg)
 	s := &ConfigService{path: path, historyPath: historyPath(), historyDir: historyDataDir(), cfg: cfg}

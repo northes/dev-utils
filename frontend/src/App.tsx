@@ -100,6 +100,10 @@ import { useLocation, useNavigate, useNavigationType } from 'react-router';
 import { resolveTheme } from './theme';
 
 type Page = 'settings' | 'history' | ToolId;
+type SaveWaiter = {
+  resolve: () => void;
+  reject: (reason?: unknown) => void;
+};
 type SidebarMode = 'full' | 'icon' | 'hidden';
 type PaletteContext = string;
 type PaletteItem = {
@@ -978,8 +982,13 @@ function AppShell() {
   const settingsReady = useRef(false);
   const saveInFlight = useRef(false);
   const saveQueued = useRef(false);
-  const saveWaiters = useRef<Array<() => void>>([]);
+  const saveWaiters = useRef<SaveWaiter[]>([]);
   const persistLatestRef = useRef<() => Promise<void>>(async () => {});
+  const startPersistLatest = () => {
+    void persistLatestRef.current().catch((error) => {
+      console.error('[settings] persist failed', error);
+    });
+  };
   const manageEntered = useRef(false);
   const manageFocusRestoreRef = useRef<HTMLElement | null>(null);
   const lastFocusedRef = useRef<Element | null>(null);
@@ -1135,6 +1144,8 @@ function AppShell() {
   persistLatestRef.current = async () => {
     if (saveInFlight.current) return;
     saveInFlight.current = true;
+    let latestSaveFailed = false;
+    let latestSaveError: unknown;
     try {
       while (saveQueued.current) {
         saveQueued.current = false;
@@ -1147,34 +1158,41 @@ function AppShell() {
           }
           void SetAutoCheckEnabled(cfg.autoCheckUpdates);
           setHistoryRevision((current) => current + 1);
-        } catch {
+          latestSaveFailed = false;
+          latestSaveError = undefined;
+        } catch (error) {
           toast.add({ title: t('toast.settingsFailed'), type: 'error' });
+          latestSaveFailed = true;
+          latestSaveError = error;
           if (settingsRef.current !== cfg) saveQueued.current = true;
         }
       }
     } finally {
       saveInFlight.current = false;
-      if (saveQueued.current) void persistLatestRef.current();
+      if (saveQueued.current) startPersistLatest();
       else {
         const waiters = saveWaiters.current;
         saveWaiters.current = [];
-        for (const resolve of waiters) resolve();
+        for (const waiter of waiters) {
+          if (latestSaveFailed) waiter.reject(latestSaveError);
+          else waiter.resolve();
+        }
       }
     }
   };
   const flushSettingsSave = () => {
     if (!settingsReady.current) return Promise.resolve();
     saveQueued.current = true;
-    const pending = new Promise<void>((resolve) => {
-      saveWaiters.current.push(resolve);
+    const pending = new Promise<void>((resolve, reject) => {
+      saveWaiters.current.push({ resolve, reject });
     });
-    void persistLatestRef.current();
+    startPersistLatest();
     return pending;
   };
   useEffect(() => {
     if (!settingsReady.current) return;
     saveQueued.current = true;
-    void persistLatestRef.current();
+    startPersistLatest();
   }, [settings]);
   useEffect(() => {
     localStorage.setItem('devutils.lastPage', JSON.stringify(page));
