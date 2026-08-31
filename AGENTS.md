@@ -30,6 +30,7 @@
 - `frontend/bindings/` 是 Wails 生成文件，永远不要手工编辑；Go 导出类型变化后必须重新生成 bindings。
 - 所有项目开发、构建、打包和运行任务以根目录 `Taskfile.yml` 为准，通过 `wails3 task <name>` 执行。`main.go` 嵌入 `frontend/dist`，Go 构建前必须有前端产物。
 - 不使用 Playwright、`playwright-cli`、Computer Use 或任何浏览器自动化进行测试和验证。
+- 使用 shadcn/Base UI 组件时，优先直接使用组件提供的官方默认样式；局部视觉调整优先使用现有 Tailwind utility class。不得为单个控件新增局部 CSS 覆盖、专用选择器或单独样式文件，也不要通过局部 class 改写官方组件的默认外观，除非需求明确要求且无法用现有组件能力实现。
 
 ## 工程质量
 

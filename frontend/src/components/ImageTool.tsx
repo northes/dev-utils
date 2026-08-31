@@ -1419,20 +1419,17 @@ export default function ImageTool({
                             />
                           </Label>
                           {!fillTransparent ? (
-                            <div className="image-tool-fill-color-row flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
-                              <span id="image-fill-color-label">{t('imageTool.fillColor')}</span>
+                            <div className="flex min-w-0 items-center justify-between gap-2 text-[11px] text-muted-foreground">
+                              <span id="image-fill-color-label" className="min-w-0 truncate">
+                                {t('imageTool.fillColor')}
+                              </span>
                               <ColorPicker
                                 value={fillColor}
                                 onValueChange={setFillColor}
-                                withoutAlpha
                                 defaultFormat="hex"
                               >
-                                <ColorPickerTrigger
-                                  className="image-tool-fill-color"
-                                  aria-labelledby="image-fill-color-label"
-                                >
-                                  <ColorPickerSwatch className="image-tool-fill-color-swatch" />
-                                  <span className="image-tool-fill-color-value">{fillColor}</span>
+                                <ColorPickerTrigger aria-labelledby="image-fill-color-label">
+                                  <ColorPickerSwatch />
                                 </ColorPickerTrigger>
                                 <ColorPickerContent>
                                   <ColorPickerArea />
