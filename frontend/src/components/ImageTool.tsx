@@ -1319,35 +1319,52 @@ export default function ImageTool({
                         </div>
                         <div
                             className="image-tool-controls flex h-full min-h-0 min-w-0 flex-col overflow-x-hidden overflow-y-auto border-border max-[700px]:border-t min-[701px]:border-l [padding-inline-end:var(--overlay-scrollbar-hit-size)]">
-                            <div className="flex flex-col gap-3 py-3 pl-3 max-[700px]:pl-0">
-                                <section className="flex flex-col gap-3">
-                                    <h2 className="m-0 font-mono text-[10px] font-medium uppercase tracking-[.04em] text-muted-foreground">
-                                        {t('imageTool.info')}
-                                    </h2>
-                                    <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-[11px]">
-                                        <dt className="text-muted-foreground">{t('imageTool.infoDimensions')}</dt>
-                                        <dd className="m-0 min-w-0 truncate text-right">
-                                            {source
-                                                ? t('imageTool.dimensions', {
-                                                    width: source.width,
-                                                    height: source.height,
-                                                })
-                                                : t('imageTool.infoEmpty')}
-                                        </dd>
-                                        <dt className="text-muted-foreground">{t('imageTool.infoFormat')}</dt>
-                                        <dd className="m-0 min-w-0 truncate text-right">
-                                            {sourceFormat ? t(FORMAT_LABEL_KEY[sourceFormat]) : t('imageTool.infoEmpty')}
-                                        </dd>
-                                        <dt className="text-muted-foreground">{t('imageTool.infoSize')}</dt>
-                                        <dd className="m-0 min-w-0 truncate text-right">
-                                            {source ? formatBytes(sourceBytes) : t('imageTool.infoEmpty')}
-                                        </dd>
-                                    </dl>
-                                </section>
-                                <section className="flex flex-col gap-3 border-t border-border pt-3">
+                            <div className="flex flex-col gap-2 py-2.5 pl-3 max-[700px]:pl-0">
+                                <dl
+                                    className="image-tool-meta m-0 flex min-w-0 flex-wrap items-baseline gap-y-0.5 text-[11px] leading-4 text-muted-foreground"
+                                    aria-label={t('imageTool.info')}
+                                >
+                                    {source ? (
+                                        <>
+                                            <div className="flex min-w-0 items-baseline gap-1">
+                                                <dt className="sr-only">{t('imageTool.infoDimensions')}</dt>
+                                                <dd className="m-0 min-w-0 truncate tabular-nums">
+                                                    {t('imageTool.dimensions', {
+                                                        width: source.width,
+                                                        height: source.height,
+                                                    })}
+                                                </dd>
+                                            </div>
+                                            <div className="flex min-w-0 items-baseline gap-1">
+                                                <dt className="sr-only">{t('imageTool.infoFormat')}</dt>
+                                                <dd className="m-0 min-w-0 truncate">
+                                                    {sourceFormat ? t(FORMAT_LABEL_KEY[sourceFormat]) : t('imageTool.infoEmpty')}
+                                                </dd>
+                                            </div>
+                                            <div className="flex min-w-0 items-baseline gap-1">
+                                                <dt className="sr-only">{t('imageTool.infoSize')}</dt>
+                                                <dd className="m-0 min-w-0 truncate tabular-nums">
+                                                    {formatBytes(sourceBytes)}
+                                                </dd>
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <div className="flex min-w-0 items-baseline gap-1">
+                                            <dt className="sr-only">{t('imageTool.info')}</dt>
+                                            <dd className="m-0">{t('imageTool.infoEmpty')}</dd>
+                                        </div>
+                                    )}
+                                </dl>
+                                <section
+                                    className="flex flex-col gap-2 border-t border-border pt-2.5"
+                                    aria-labelledby="image-size-heading"
+                                >
                                     <div
                                         className="flex min-w-0 flex-wrap items-center justify-between gap-x-2 gap-y-1">
-                                        <h2 className="m-0 min-w-0 font-mono text-[10px] font-medium uppercase tracking-[.04em] text-muted-foreground">
+                                        <h2
+                                            id="image-size-heading"
+                                            className="m-0 min-w-0 font-mono text-[10px] font-medium uppercase tracking-[.04em] text-muted-foreground"
+                                        >
                                             {t('imageTool.size')}
                                         </h2>
                                         <div className="image-tool-size-actions">
@@ -1431,10 +1448,11 @@ export default function ImageTool({
                                                 </Label>
                                             </div>
                                             {sizeSession.mode === 'expand' ? (
-                                                <div className="flex flex-col gap-3">
-                                                    <h3 className="m-0 font-mono text-[10px] font-medium uppercase tracking-[.04em] text-muted-foreground">
-                                                        {t('imageTool.fill')}
-                                                    </h3>
+                                                <div
+                                                    className="flex flex-col gap-2"
+                                                    role="group"
+                                                    aria-label={t('imageTool.fill')}
+                                                >
                                                     <Label
                                                         htmlFor="image-fill-transparent"
                                                         className="justify-between text-[11px] text-muted-foreground"
@@ -1452,18 +1470,19 @@ export default function ImageTool({
                                                             htmlFor="image-fill-color-label"
                                                             className="justify-between text-[11px] text-muted-foreground"
                                                         >
-     <span id="image-fill-color-label" className="min-w-0 truncate">
-                                {t('imageTool.fillColor')}
-                              </span>
-
+                                                            <span id="image-fill-color-label" className="min-w-0 truncate">
+                                                                {t('imageTool.fillColor')}
+                                                            </span>
                                                             <ColorPicker
                                                                 value={fillColor}
                                                                 onValueChange={setFillColor}
                                                                 defaultFormat="hex"
                                                             >
-                                                                <ColorPickerTrigger asChild className="px-0 py-0" aria-labelledby="image-fill-color-label">
-                                                                    <ColorPickerSwatch/>
-                                                                </ColorPickerTrigger>
+                                                                <ColorPickerTrigger
+                                                                    className="px-0 py-0"
+                                                                    aria-labelledby="image-fill-color-label"
+                                                                    render={<ColorPickerSwatch/>}
+                                                                />
                                                                 <ColorPickerContent>
                                                                     <ColorPickerArea/>
                                                                     <div className="flex items-center gap-2">
@@ -1504,8 +1523,14 @@ export default function ImageTool({
                                         </>
                                     ) : null}
                                 </section>
-                                <section className="flex flex-col gap-3 border-t border-border pt-3">
-                                    <h2 className="m-0 font-mono text-[10px] font-medium uppercase tracking-[.04em] text-muted-foreground">
+                                <section
+                                    className="flex flex-col gap-2 border-t border-border pt-2.5"
+                                    aria-labelledby="image-output-heading"
+                                >
+                                    <h2
+                                        id="image-output-heading"
+                                        className="m-0 font-mono text-[10px] font-medium uppercase tracking-[.04em] text-muted-foreground"
+                                    >
                                         {t('imageTool.output')}
                                     </h2>
                                     <Label
@@ -1557,11 +1582,11 @@ export default function ImageTool({
                                         </p>
                                     ) : null}
                                     {showQuality ? (
-                                        <div className="flex flex-col gap-2">
+                                        <div className="flex flex-col gap-1.5">
                                             <div
                                                 className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
                                                 <span id="image-quality-label">{t('imageTool.quality')}</span>
-                                                <span>{t('imageTool.qualityValue', {value: quality})}</span>
+                                                <span className="tabular-nums">{t('imageTool.qualityValue', {value: quality})}</span>
                                             </div>
                                             <Slider
                                                 min={1}
@@ -1577,22 +1602,18 @@ export default function ImageTool({
                                             />
                                         </div>
                                     ) : null}
-                                    <div
-                                        className="flex items-start justify-between gap-2 text-[11px] text-muted-foreground">
-                                        <span>{t('imageTool.outputDimensions')}</span>
-                                        <span className="min-w-0 text-right">
-                      {source
-                          ? t('imageTool.dimensions', {width: out.w, height: out.h})
-                          : t('imageTool.infoEmpty')}
-                    </span>
-                                    </div>
-                                    <div
-                                        className="flex items-start justify-between gap-2 text-[11px] text-muted-foreground">
-                                        <span>{t('imageTool.outputSize')}</span>
-                                        <span className="min-w-0 text-right" role="status" aria-live="polite">
-                      {outputSizeText}
-                    </span>
-                                    </div>
+                                    <dl className="m-0 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+                                        <dt>{t('imageTool.outputDimensions')}</dt>
+                                        <dd className="m-0 min-w-0 truncate text-right tabular-nums">
+                                            {source
+                                                ? t('imageTool.dimensions', {width: out.w, height: out.h})
+                                                : t('imageTool.infoEmpty')}
+                                        </dd>
+                                        <dt>{t('imageTool.outputSize')}</dt>
+                                        <dd className="m-0 min-w-0 truncate text-right tabular-nums" role="status" aria-live="polite">
+                                            {outputSizeText}
+                                        </dd>
+                                    </dl>
                                 </section>
                             </div>
                         </div>

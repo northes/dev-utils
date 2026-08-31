@@ -135,6 +135,15 @@
   overscroll-behavior: contain;
 }
 
+.image-tool-meta {
+  min-width: 0;
+}
+
+.image-tool-meta > * + * {
+  padding-inline-start: 10px;
+  border-inline-start: 1px solid var(--border);
+}
+
 .image-tool-size-actions {
   display: flex;
   flex: none;
