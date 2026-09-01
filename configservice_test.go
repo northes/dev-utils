@@ -452,3 +452,16 @@ func TestConfigServiceSavePropagatesWriteError(t *testing.T) {
 		t.Fatal("保存到目录时应返回错误")
 	}
 }
+
+func TestNormalizeImageSourceKeepsHistoricalIDs(t *testing.T) {
+	cfg := normalizeConfig(Config{ImageSources: []ImageSource{
+		{ID: "ssh:build-box", Name: "构建机", Kind: "ssh", SSHHost: "build-box"},
+		{ID: "registry:550e8400-e29b-41d4-a716-446655440000", Name: "仓库", Kind: "registry", RegistryURL: "https://registry.example"},
+	}})
+	if len(cfg.ImageSources) != 3 {
+		t.Fatalf("历史来源 ID 被丢弃: %#v", cfg.ImageSources)
+	}
+	if cfg.ImageSources[1].ID != "ssh:build-box" || cfg.ImageSources[2].ID != "registry:550e8400-e29b-41d4-a716-446655440000" {
+		t.Fatalf("历史来源 ID 未保持原值: %#v", cfg.ImageSources)
+	}
+}

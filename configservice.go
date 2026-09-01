@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -44,10 +45,19 @@ type SidebarToolConfig struct {
 var defaultSidebarToolIDs = []string{"json", "time", "text", "base64", "diff", "jwt", "url", "image-manager"}
 
 type ImageSource struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	Kind    string `json:"kind"`
-	SSHHost string `json:"sshHost"`
+	ID                string `json:"id"`
+	Name              string `json:"name"`
+	Kind              string `json:"kind"`
+	SSHHost           string `json:"sshHost"`
+	SSHPort           int    `json:"sshPort"`
+	SSHUsername       string `json:"sshUsername"`
+	SSHPassword       string `json:"sshPassword"`
+	SSHPrivateKey     string `json:"sshPrivateKey"`
+	SSHPrivateKeyPath string `json:"sshPrivateKeyPath"`
+	SSHKeyPassphrase  string `json:"sshKeyPassphrase"`
+	RegistryURL       string `json:"registryURL"`
+	RegistryUsername  string `json:"registryUsername"`
+	RegistryPassword  string `json:"registryPassword"`
 }
 
 const localImageSourceID = "local"
@@ -169,6 +179,62 @@ func validTextValue(value string, maxLength int) bool {
 	return true
 }
 
+func validSecretValue(value string, maxLength int) bool {
+	if len(value) > maxLength {
+		return false
+	}
+	return !strings.ContainsRune(value, '\x00')
+}
+
+func normalizeRegistryURL(value string) (string, bool) {
+	value = strings.TrimSpace(value)
+	u, err := url.Parse(value)
+	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+		return "", false
+	}
+	if u.Path != "" && u.Path != "/" {
+		return "", false
+	}
+	u.Path = ""
+	u.RawPath = ""
+	return "https://" + strings.ToLower(u.Host), true
+}
+
+func validImageSourceID(value string) bool {
+	if prefix, suffix, ok := strings.Cut(value, ":"); ok {
+		if suffix == "" || (prefix != "ssh" && prefix != "registry") {
+			return false
+		}
+		if prefix == "ssh" {
+			return validSSHHost(suffix)
+		}
+		return validLegacySourceSuffix(suffix)
+	}
+	if !validConfigValue(value, 64) {
+		return false
+	}
+	for _, r := range value {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' || r == '.' {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func validLegacySourceSuffix(value string) bool {
+	if !validConfigValue(value, 60) {
+		return false
+	}
+	for _, r := range value {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || strings.ContainsRune("-_.", r) {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
 func normalizeImageSources(sources []ImageSource) []ImageSource {
 	result := make([]ImageSource, 0, len(sources)+1)
 	seen := make(map[string]bool, len(sources)+1)
@@ -178,6 +244,9 @@ func normalizeImageSources(sources []ImageSource) []ImageSource {
 		source.Name = strings.TrimSpace(source.Name)
 		source.Kind = strings.TrimSpace(strings.ToLower(source.Kind))
 		source.SSHHost = strings.TrimSpace(source.SSHHost)
+		source.SSHUsername = strings.TrimSpace(source.SSHUsername)
+		source.RegistryURL = strings.TrimSpace(source.RegistryURL)
+		source.RegistryUsername = strings.TrimSpace(source.RegistryUsername)
 		if source.Kind == "" && (source.ID == "" || source.ID == localImageSourceID) {
 			source.Kind = "local"
 		}
@@ -193,10 +262,22 @@ func normalizeImageSources(sources []ImageSource) []ImageSource {
 				continue
 			}
 			source.SSHHost = ""
+			source.SSHPort = 0
+			source.SSHUsername = ""
+			source.SSHPassword = ""
+			source.SSHPrivateKey = ""
+			source.SSHPrivateKeyPath = ""
+			source.SSHKeyPassphrase = ""
+			source.RegistryURL = ""
+			source.RegistryUsername = ""
+			source.RegistryPassword = ""
 			hasLocal = true
 		case "ssh":
-			if source.ID == localImageSourceID || !validConfigValue(source.ID, 64) || seen[source.ID] || !validSSHHost(source.SSHHost) {
+			if source.ID == localImageSourceID || !validImageSourceID(source.ID) || seen[source.ID] || !validSSHHost(source.SSHHost) || source.SSHPort < 0 || source.SSHPort > 65535 || (source.SSHUsername != "" && (!validConfigValue(source.SSHUsername, 256) || strings.HasPrefix(source.SSHUsername, "-"))) || !validSecretValue(source.SSHPassword, 4096) || !validSecretValue(source.SSHPrivateKey, 128<<10) || (source.SSHPrivateKeyPath != "" && (!validPathValue(source.SSHPrivateKeyPath, 4096) || strings.HasPrefix(source.SSHPrivateKeyPath, "-"))) || !validSecretValue(source.SSHKeyPassphrase, 4096) || (source.SSHKeyPassphrase != "" && source.SSHPrivateKey == "" && source.SSHPrivateKeyPath == "") {
 				continue
+			}
+			if source.SSHPort == 0 {
+				source.SSHPort = 22
 			}
 			if source.Name == "" {
 				source.Name = source.SSHHost
@@ -204,6 +285,31 @@ func normalizeImageSources(sources []ImageSource) []ImageSource {
 			if !validTextValue(source.Name, 128) {
 				continue
 			}
+			source.RegistryURL = ""
+			source.RegistryUsername = ""
+			source.RegistryPassword = ""
+		case "registry":
+			var ok bool
+			if source.ID == localImageSourceID || !validImageSourceID(source.ID) || seen[source.ID] {
+				continue
+			}
+			source.RegistryURL, ok = normalizeRegistryURL(source.RegistryURL)
+			if !ok || !validSecretValue(source.RegistryPassword, 4096) || (source.RegistryPassword != "" && source.RegistryUsername == "") || (source.RegistryUsername != "" && !validTextValue(source.RegistryUsername, 256)) {
+				continue
+			}
+			if source.Name == "" {
+				source.Name = source.RegistryURL
+			}
+			if !validTextValue(source.Name, 128) {
+				continue
+			}
+			source.SSHHost = ""
+			source.SSHPort = 0
+			source.SSHUsername = ""
+			source.SSHPassword = ""
+			source.SSHPrivateKey = ""
+			source.SSHPrivateKeyPath = ""
+			source.SSHKeyPassphrase = ""
 		default:
 			continue
 		}

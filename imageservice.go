@@ -3,27 +3,52 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"math"
+	"net"
+	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
+
+	"github.com/google/go-containerregistry/pkg/authn"
+	"github.com/google/go-containerregistry/pkg/name"
+	"github.com/google/go-containerregistry/pkg/v1"
+	"github.com/google/go-containerregistry/pkg/v1/remote"
+	"github.com/google/go-containerregistry/pkg/v1/types"
+	"golang.org/x/crypto/ssh"
+	"golang.org/x/crypto/ssh/knownhosts"
 )
 
 const (
-	imageCommandTimeout   = 15 * time.Second
-	imagePushTimeout      = 5 * time.Minute
-	maxImageCommandOutput = 8 << 20
-	maxDockerDeleteImages = 100
-	maxSSHConfigFileSize  = 1 << 20
-	maxSSHConfigFiles     = 128
-	maxSSHConfigDepth     = 8
+	imageCommandTimeout     = 15 * time.Second
+	imagePushTimeout        = 5 * time.Minute
+	maxImageCommandOutput   = 8 << 20
+	maxDockerDeleteImages   = 100
+	maxSSHConfigFileSize    = 1 << 20
+	maxSSHConfigFiles       = 128
+	maxSSHConfigDepth       = 8
+	maxRegistryRepositories = 10000
+	maxRegistryTags         = 10000
+	maxRegistryBodySize     = 8 << 20
+	maxImageCacheEntries    = 512
+	maxImageCacheBytes      = 128 << 20
+	maxImageCacheEntryBytes = 2 << 20
+	registryConcurrency     = 4
+	imageDetailConcurrency  = 4
+	prewarmQueueSize        = 128
+	registryListTimeout     = 30 * time.Second
 )
 
 // SSHConfigHost 是 ~/.ssh/config 中可以直接交给系统 ssh 的 Host 别名。
@@ -39,11 +64,16 @@ type DockerStatus struct {
 }
 
 type DockerImage struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	Size      string `json:"size"`
-	SizeBytes int64  `json:"sizeBytes"`
-	CreatedAt string `json:"createdAt"`
+	ID         string   `json:"id"`
+	Name       string   `json:"name"`
+	Tags       []string `json:"tags"`
+	Repository string   `json:"repository"`
+	Digest     string   `json:"digest"`
+	MediaType  string   `json:"mediaType"`
+	SizeType   string   `json:"sizeType"`
+	Size       string   `json:"size"`
+	SizeBytes  int64    `json:"sizeBytes"`
+	CreatedAt  string   `json:"createdAt"`
 }
 
 type DockerImageDetail struct {
@@ -57,6 +87,38 @@ type DockerImageDetail struct {
 	Labels       map[string]string `json:"labels"`
 	Command      []string          `json:"command"`
 	Entrypoint   []string          `json:"entrypoint"`
+	Repository   string            `json:"repository"`
+	Digest       string            `json:"digest"`
+	MediaType    string            `json:"mediaType"`
+	SizeType     string            `json:"sizeType"`
+	Manifest     *RegistryManifest `json:"manifest"`
+	Index        *RegistryIndex    `json:"index"`
+}
+
+type RegistryDescriptor struct {
+	MediaType string            `json:"mediaType"`
+	Digest    string            `json:"digest"`
+	Size      int64             `json:"size"`
+	Platform  *RegistryPlatform `json:"platform"`
+}
+
+type RegistryPlatform struct {
+	Architecture string `json:"architecture"`
+	OS           string `json:"os"`
+	Variant      string `json:"variant"`
+}
+
+type RegistryManifest struct {
+	SchemaVersion int                  `json:"schemaVersion"`
+	MediaType     string               `json:"mediaType"`
+	Config        RegistryDescriptor   `json:"config"`
+	Layers        []RegistryDescriptor `json:"layers"`
+}
+
+type RegistryIndex struct {
+	SchemaVersion int                  `json:"schemaVersion"`
+	MediaType     string               `json:"mediaType"`
+	Manifests     []RegistryDescriptor `json:"manifests"`
 }
 
 type DockerOperationResult struct {
@@ -80,12 +142,59 @@ type imageCommandRunner func(context.Context, string, ...string) ([]byte, error)
 
 // ImageService 通过本机 docker CLI 和系统 ssh 管理镜像。
 type ImageService struct {
-	config *ConfigService
-	runner imageCommandRunner
+	config                *ConfigService
+	runner                imageCommandRunner
+	ctx                   context.Context
+	cancel                context.CancelFunc
+	mu                    sync.Mutex
+	cacheCalls            map[string]*imageCacheCall
+	cacheDir              string
+	registryTransport     http.RoundTripper
+	registrySem           chan struct{}
+	detailSem             chan struct{}
+	inventory             map[string]imageInventory
+	prewarmOnce           sync.Once
+	prewarmQueue          chan prewarmJob
+	prewarmWG             sync.WaitGroup
+	prewarmGenerations    map[string]*prewarmGeneration
+	activeSourceID        string
+	requestToken          uint64
+	activeListToken       uint64
+	activeListCancel      context.CancelFunc
+	activeListFingerprint string
+	activeListSourceID    string
+	shutdownOnce          sync.Once
+}
+
+type imageCacheCall struct {
+	done   chan struct{}
+	detail DockerImageDetail
+	err    error
+}
+
+type prewarmJob struct {
+	sourceID    string
+	generation  uint64
+	ctx         context.Context
+	source      ImageSource
+	cliPath     string
+	fingerprint string
+	imageID     string
+	repository  string
+}
+
+type prewarmGeneration struct {
+	number      uint64
+	fingerprint string
+	ctx         context.Context
+	cancel      context.CancelFunc
 }
 
 func NewImageService(config *ConfigService) *ImageService {
-	return &ImageService{config: config, runner: runImageCommand}
+	ctx, cancel := context.WithCancel(context.Background())
+	service := &ImageService{config: config, ctx: ctx, cancel: cancel, cacheCalls: make(map[string]*imageCacheCall), inventory: make(map[string]imageInventory), prewarmGenerations: make(map[string]*prewarmGeneration)}
+	service.ensurePrewarmWorkers()
+	return service
 }
 
 func (s *ImageService) ServiceName() string { return "ImageService" }
@@ -125,9 +234,9 @@ func (b *limitedBuffer) Write(p []byte) (int, error) {
 	return b.Buffer.Write(p)
 }
 
-func (s *ImageService) source(sourceID string) (ImageSource, string, error) {
+func (s *ImageService) sourceSnapshot(sourceID string) (ImageSource, string, string, error) {
 	if s == nil || s.config == nil {
-		return ImageSource{}, "", errors.New("镜像服务未配置")
+		return ImageSource{}, "", "", errors.New("镜像服务未配置")
 	}
 	config := normalizeConfig(s.config.Get())
 	cliPath := config.DockerCLIPath
@@ -137,19 +246,60 @@ func (s *ImageService) source(sourceID string) (ImageSource, string, error) {
 	for _, source := range config.ImageSources {
 		if source.ID == sourceID {
 			if source.Kind == "local" {
-				return source, cliPath, nil
+				return source, cliPath, imageSourceFingerprint(source, cliPath), nil
 			}
 			if source.Kind == "ssh" && validSSHHost(source.SSHHost) {
-				return source, cliPath, nil
+				return source, "docker", imageSourceFingerprint(source, "docker"), nil
 			}
-			return ImageSource{}, "", errors.New("镜像来源无效")
+			if source.Kind == "registry" {
+				if _, ok := normalizeRegistryURL(source.RegistryURL); ok {
+					return source, "", imageSourceFingerprint(source, ""), nil
+				}
+			}
+			return ImageSource{}, "", "", errors.New("镜像来源无效")
 		}
 	}
-	return ImageSource{}, "", fmt.Errorf("镜像来源 %q 不存在", sourceID)
+	return ImageSource{}, "", "", fmt.Errorf("镜像来源 %q 不存在", sourceID)
+}
+
+func (s *ImageService) source(sourceID string) (ImageSource, string, error) {
+	source, cliPath, _, err := s.sourceSnapshot(sourceID)
+	return source, cliPath, err
+}
+
+func imageSourceFingerprint(source ImageSource, cliPath string) string {
+	value := struct {
+		Kind     string `json:"kind"`
+		Endpoint string `json:"endpoint"`
+		Host     string `json:"host"`
+		Port     int    `json:"port"`
+		Username string `json:"username"`
+		CLI      string `json:"cli"`
+		KeyPath  string `json:"keyPath"`
+	}{Kind: source.Kind, CLI: cliPath}
+	switch source.Kind {
+	case "registry":
+		value.Endpoint, value.Username = source.RegistryURL, source.RegistryUsername
+	case "ssh":
+		value.Host, value.Port, value.Username = source.SSHHost, source.SSHPort, source.SSHUsername
+		value.KeyPath = source.SSHPrivateKeyPath
+	}
+	b, _ := json.Marshal(value)
+	digest := sha256.Sum256(b)
+	return fmt.Sprintf("sha256:%x", digest[:])
 }
 
 func validSSHHost(host string) bool {
-	return validConfigValue(host, 255) && !strings.HasPrefix(host, "-")
+	if !validConfigValue(host, 255) || strings.HasPrefix(host, "-") {
+		return false
+	}
+	for _, r := range host {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || strings.ContainsRune(".-:_[]", r) {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func validPathValue(path string, maxLength int) bool {
@@ -194,7 +344,18 @@ func buildImageCommand(source ImageSource, cliPath string, dockerArgs ...string)
 		return "", nil, errors.New("镜像来源无效")
 	}
 	remoteArgs := append([]string{cliPath}, dockerArgs...)
-	return "ssh", []string{source.SSHHost, shellJoin(remoteArgs)}, nil
+	sshArgs := []string{"-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes"}
+	if source.SSHPort > 0 && source.SSHPort != 22 {
+		sshArgs = append(sshArgs, "-p", strconv.Itoa(source.SSHPort))
+	}
+	if source.SSHUsername != "" {
+		sshArgs = append(sshArgs, "-l", source.SSHUsername)
+	}
+	if source.SSHPrivateKeyPath != "" {
+		sshArgs = append(sshArgs, "-i", source.SSHPrivateKeyPath)
+	}
+	sshArgs = append(sshArgs, "--", source.SSHHost, shellJoin(remoteArgs))
+	return "ssh", sshArgs, nil
 }
 
 func (s *ImageService) runDocker(sourceID string, args []string, timeout time.Duration) ([]byte, error) {
@@ -202,17 +363,153 @@ func (s *ImageService) runDocker(sourceID string, args []string, timeout time.Du
 	if err != nil {
 		return nil, err
 	}
+	return s.runDockerSnapshot(source, cliPath, args, timeout)
+}
+
+func (s *ImageService) runDockerSnapshot(source ImageSource, cliPath string, args []string, timeout time.Duration) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(s.serviceContext(), timeout)
+	defer cancel()
+	return s.runDockerSnapshotContext(ctx, source, cliPath, args)
+}
+
+func (s *ImageService) runDockerSnapshotContext(ctx context.Context, source ImageSource, cliPath string, args []string) ([]byte, error) {
+	if source.Kind == "ssh" && (source.SSHPassword != "" || source.SSHPrivateKey != "" || source.SSHPrivateKeyPath != "") {
+		return runAuthenticatedSSH(ctx, source, cliPath, args...)
+	}
 	name, commandArgs, err := buildImageCommand(source, cliPath, args...)
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
 	runner := s.runner
 	if runner == nil {
 		runner = runImageCommand
 	}
 	return runner(ctx, name, commandArgs...)
+}
+
+func runAuthenticatedSSH(ctx context.Context, source ImageSource, cliPath string, dockerArgs ...string) ([]byte, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, errors.New("获取 SSH 主目录失败")
+	}
+	hostKeyCallback, err := knownhosts.New(filepath.Join(home, ".ssh", "known_hosts"))
+	if err != nil {
+		return nil, errors.New("读取 SSH known_hosts 失败")
+	}
+	user := source.SSHUsername
+	if user == "" {
+		user = os.Getenv("USER")
+	}
+	if user == "" {
+		return nil, errors.New("SSH 用户名为空")
+	}
+	authMethods := make([]ssh.AuthMethod, 0, 2)
+	if source.SSHPassword != "" {
+		authMethods = append(authMethods, ssh.Password(source.SSHPassword))
+	}
+	keyData := source.SSHPrivateKey
+	if keyData == "" && source.SSHPrivateKeyPath != "" {
+		keyData, err = readSSHPrivateKeyFile(source.SSHPrivateKeyPath)
+		if err != nil {
+			return nil, errors.New("读取 SSH 私钥文件失败")
+		}
+	}
+	if keyData != "" {
+		var signer ssh.Signer
+		if source.SSHKeyPassphrase != "" {
+			signer, err = ssh.ParsePrivateKeyWithPassphrase([]byte(keyData), []byte(source.SSHKeyPassphrase))
+		} else {
+			signer, err = ssh.ParsePrivateKey([]byte(keyData))
+		}
+		if err != nil {
+			return nil, errors.New("解析 SSH 私钥失败")
+		}
+		authMethods = append(authMethods, ssh.PublicKeys(signer))
+	}
+	if len(authMethods) == 0 {
+		return nil, errors.New("SSH 未配置认证凭据")
+	}
+	host := strings.TrimPrefix(strings.TrimSuffix(source.SSHHost, "]"), "[")
+	port := source.SSHPort
+	if port == 0 {
+		port = 22
+	}
+	config := &ssh.ClientConfig{User: user, Auth: authMethods, HostKeyCallback: hostKeyCallback, Timeout: imageCommandTimeout}
+	address := net.JoinHostPort(host, strconv.Itoa(port))
+	netConn, err := (&net.Dialer{}).DialContext(ctx, "tcp", address)
+	if err == nil {
+		handshake := make(chan struct {
+			conn     ssh.Conn
+			channels <-chan ssh.NewChannel
+			requests <-chan *ssh.Request
+			err      error
+		}, 1)
+		go func() {
+			clientConn, channels, requests, handshakeErr := ssh.NewClientConn(netConn, address, config)
+			handshake <- struct {
+				conn     ssh.Conn
+				channels <-chan ssh.NewChannel
+				requests <-chan *ssh.Request
+				err      error
+			}{clientConn, channels, requests, handshakeErr}
+		}()
+		select {
+		case result := <-handshake:
+			if result.err == nil {
+				client := ssh.NewClient(result.conn, result.channels, result.requests)
+				defer client.Close()
+				return runSSHCommand(ctx, client, cliPath, dockerArgs...)
+			}
+			err = result.err
+		case <-ctx.Done():
+			_ = netConn.Close()
+			return nil, ctx.Err()
+		}
+		_ = netConn.Close()
+	}
+	if err != nil {
+		return nil, errors.New("连接 SSH 主机失败")
+	}
+	return nil, errors.New("连接 SSH 主机失败")
+}
+
+func runSSHCommand(ctx context.Context, client *ssh.Client, cliPath string, dockerArgs ...string) ([]byte, error) {
+	session, err := client.NewSession()
+	if err != nil {
+		return nil, errors.New("创建 SSH 会话失败")
+	}
+	defer session.Close()
+	stdout := &limitedBuffer{limit: maxImageCommandOutput}
+	stderr := &limitedBuffer{limit: maxImageCommandOutput}
+	session.Stdout = stdout
+	session.Stderr = stderr
+	if err := session.Start(shellJoin(append([]string{cliPath}, dockerArgs...))); err != nil {
+		return nil, errors.New("启动远程 Docker 命令失败")
+	}
+	wait := make(chan error, 1)
+	go func() { wait <- session.Wait() }()
+	select {
+	case err := <-wait:
+		if err != nil {
+			return stdout.Bytes(), fmt.Errorf("远程 Docker 命令失败: %w", err)
+		}
+		return stdout.Bytes(), nil
+	case <-ctx.Done():
+		_ = client.Close()
+		return stdout.Bytes(), ctx.Err()
+	}
+}
+
+func readSSHPrivateKeyFile(path string) (string, error) {
+	info, err := os.Stat(path)
+	if err != nil || !info.Mode().IsRegular() || info.Size() <= 0 || info.Size() > 128<<10 {
+		return "", errors.New("SSH 私钥文件无效")
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
 }
 
 func (s *ImageService) GetSSHConfigHosts() ([]SSHConfigHost, error) {
@@ -430,13 +727,24 @@ func (s *sshConfigParseState) expandInclude(pattern string, baseDir string) ([]s
 }
 
 func (s *ImageService) GetDockerStatus(sourceID string) DockerStatus {
-	_, cliPath, err := s.source(sourceID)
+	source, cliPath, err := s.source(sourceID)
 	status := DockerStatus{CLIPath: cliPath}
 	if err != nil {
 		status.Error = err.Error()
 		return status
 	}
-	output, err := s.runDocker(sourceID, []string{"--version"}, imageCommandTimeout)
+	if source.Kind == "registry" {
+		ctx, cancel := context.WithTimeout(s.serviceContext(), imageCommandTimeout)
+		defer cancel()
+		if err := s.pingRegistry(ctx, source); err != nil {
+			status.Error = err.Error()
+			return status
+		}
+		status.Available = true
+		status.Version = "Registry"
+		return status
+	}
+	output, err := s.runDockerSnapshot(source, cliPath, []string{"--version"}, imageCommandTimeout)
 	if err != nil {
 		status.Error = err.Error()
 		return status
@@ -444,6 +752,39 @@ func (s *ImageService) GetDockerStatus(sourceID string) DockerStatus {
 	status.Available = true
 	status.Version = strings.TrimSpace(string(output))
 	return status
+}
+
+func (s *ImageService) pingRegistry(ctx context.Context, source ImageSource) error {
+	release, err := s.registryPermit(ctx)
+	if err != nil {
+		return err
+	}
+	defer release()
+	endpoint, ok := normalizeRegistryURL(source.RegistryURL)
+	if !ok {
+		return errors.New("镜像仓库地址无效：仅支持 HTTPS")
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint+"/v2/", nil)
+	if err != nil {
+		return errors.New("创建 Registry 探测请求失败")
+	}
+	if source.RegistryUsername != "" {
+		request.SetBasicAuth(source.RegistryUsername, source.RegistryPassword)
+	}
+	transport := http.RoundTripper(remote.DefaultTransport)
+	if s.registryTransport != nil {
+		transport = s.registryTransport
+	}
+	client := &http.Client{Transport: &limitedRegistryTransport{base: transport}}
+	response, err := client.Do(request)
+	if err != nil {
+		return fmt.Errorf("Registry 不可达: %w", redactRegistryError(err, source))
+	}
+	defer response.Body.Close()
+	if response.StatusCode >= 200 && response.StatusCode < 300 || response.StatusCode == http.StatusUnauthorized || response.StatusCode == http.StatusForbidden {
+		return nil
+	}
+	return fmt.Errorf("Registry 探测返回 HTTP %d", response.StatusCode)
 }
 
 type dockerImageListJSON struct {
@@ -493,11 +834,26 @@ func parseDockerImageSize(value string) int64 {
 }
 
 func (s *ImageService) ListDockerImages(sourceID string) ([]DockerImage, error) {
-	output, err := s.runDocker(sourceID, []string{"image", "ls", "--no-trunc", "--format", "{{json .}}"}, imageCommandTimeout)
+	token, requestCtx := s.beginListRequest(sourceID)
+	source, cliPath, fingerprint, err := s.sourceSnapshot(sourceID)
+	if err != nil {
+		return nil, err
+	}
+	if !s.setListFingerprint(token, fingerprint) {
+		return nil, requestCtx.Err()
+	}
+	if source.Kind == "registry" {
+		return s.listRegistryImages(sourceID, source, token, requestCtx)
+	}
+	s.cleanupImageCache()
+	listCtx, cancel := context.WithTimeout(requestCtx, imageCommandTimeout)
+	defer cancel()
+	output, err := s.runDockerSnapshotContext(listCtx, source, cliPath, []string{"image", "ls", "--no-trunc", "--format", "{{json .}}"})
 	if err != nil {
 		return nil, err
 	}
 	images := make([]DockerImage, 0)
+	byID := make(map[string]int)
 	for _, line := range strings.Split(string(output), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
@@ -511,9 +867,934 @@ func (s *ImageService) ListDockerImages(sourceID string) ([]DockerImage, error) 
 		if item.Tag != "" {
 			name += ":" + item.Tag
 		}
-		images = append(images, DockerImage{ID: item.ID, Name: name, Size: item.Size, SizeBytes: parseDockerImageSize(item.Size), CreatedAt: item.CreatedAt})
+		if index, ok := byID[item.ID]; ok {
+			if name != "" && !containsString(images[index].Tags, name) {
+				images[index].Tags = append(images[index].Tags, name)
+			}
+			continue
+		}
+		byID[item.ID] = len(images)
+		images = append(images, DockerImage{ID: item.ID, Name: name, Tags: []string{name}, Size: item.Size, SizeBytes: parseDockerImageSize(item.Size), CreatedAt: item.CreatedAt})
 	}
+	if !s.updateImageInventoryIfCurrent(token, sourceID, fingerprint, source, images) {
+		return images, requestCtx.Err()
+	}
+	s.schedulePrewarm(sourceID, source, cliPath, fingerprint, images, token, requestCtx)
 	return images, nil
+}
+
+func containsString(values []string, value string) bool {
+	for _, item := range values {
+		if item == value {
+			return true
+		}
+	}
+	return false
+}
+
+func registryEndpoint(source ImageSource) (name.Registry, error) {
+	u, ok := normalizeRegistryURL(source.RegistryURL)
+	if !ok {
+		return name.Registry{}, errors.New("镜像仓库地址无效：仅支持 HTTPS")
+	}
+	parsed, err := url.Parse(u)
+	if err != nil {
+		return name.Registry{}, errors.New("镜像仓库地址无效")
+	}
+	registry, err := name.NewRegistry(parsed.Host)
+	if err != nil {
+		return name.Registry{}, fmt.Errorf("解析镜像仓库地址失败: %w", err)
+	}
+	return registry, nil
+}
+
+func registryOptions(ctx context.Context, source ImageSource) []remote.Option {
+	options := []remote.Option{remote.WithContext(ctx)}
+	if source.RegistryUsername != "" {
+		options = append(options, remote.WithAuth(&authn.Basic{Username: source.RegistryUsername, Password: source.RegistryPassword}))
+	}
+	return options
+}
+
+func (s *ImageService) registryOptions(ctx context.Context, source ImageSource) []remote.Option {
+	options := registryOptions(ctx, source)
+	transport := http.RoundTripper(remote.DefaultTransport)
+	if s != nil && s.registryTransport != nil {
+		transport = s.registryTransport
+	}
+	options = append(options, remote.WithTransport(&limitedRegistryTransport{base: transport}))
+	return options
+}
+
+type limitedRegistryTransport struct {
+	base http.RoundTripper
+}
+
+func (t *limitedRegistryTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	response, err := t.base.RoundTrip(request)
+	if err == nil && response != nil && response.Body != nil {
+		response.Body = struct {
+			io.Reader
+			io.Closer
+		}{Reader: io.LimitReader(response.Body, maxRegistryBodySize), Closer: response.Body}
+	}
+	return response, err
+}
+
+func (s *ImageService) registryPermit(ctx context.Context) (func(), error) {
+	s.mu.Lock()
+	if s.registrySem == nil {
+		s.registrySem = make(chan struct{}, registryConcurrency)
+	}
+	sem := s.registrySem
+	s.mu.Unlock()
+	select {
+	case sem <- struct{}{}:
+		return func() { <-sem }, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+func registryRepository(source ImageSource, repository string) (name.Repository, error) {
+	registry, err := registryEndpoint(source)
+	if err != nil {
+		return name.Repository{}, err
+	}
+	if repository == "" || strings.ContainsAny(repository, "@\x00\r\n") {
+		return name.Repository{}, errors.New("镜像仓库名称无效")
+	}
+	repo, err := name.NewRepository(registry.String()+"/"+repository, name.WeakValidation)
+	if err != nil {
+		return name.Repository{}, fmt.Errorf("解析镜像仓库名称失败: %w", err)
+	}
+	return repo, nil
+}
+
+func registryImageID(repository, digest string) string {
+	return repository + "@" + digest
+}
+
+func validRegistryTag(tag string) bool {
+	if len(tag) == 0 || len(tag) > 128 {
+		return false
+	}
+	for i, r := range tag {
+		if i == 0 {
+			if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_') {
+				return false
+			}
+			continue
+		}
+		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || strings.ContainsRune("_.-", r)) {
+			return false
+		}
+	}
+	return true
+}
+
+func parseRegistryImageID(imageID string) (string, string, error) {
+	separator := strings.LastIndexByte(imageID, '@')
+	if separator <= 0 {
+		return "", "", errors.New("Registry 镜像 ID 无效")
+	}
+	repository, digest := imageID[:separator], imageID[separator+1:]
+	if _, err := v1.NewHash(digest); err != nil || !strings.HasPrefix(digest, "sha256:") || len(digest) != len("sha256:")+64 {
+		return "", "", errors.New("Registry 镜像 ID 必须包含规范 sha256 digest")
+	}
+	if _, err := registryRepository(ImageSource{RegistryURL: "https://placeholder.invalid"}, repository); err != nil {
+		// 这里只借助仓库解析器校验名称，不接受任意镜像引用。
+		return "", "", errors.New("Registry 镜像仓库名称无效")
+	}
+	return repository, digest, nil
+}
+
+func formatRegistrySize(size int64) string {
+	if size <= 0 {
+		return ""
+	}
+	return strconv.FormatInt(size, 10) + " B"
+}
+
+func (s *ImageService) listRegistryImages(sourceID string, source ImageSource, token uint64, requestCtx context.Context) ([]DockerImage, error) {
+	s.cleanupImageCache()
+	ctx, cancel := context.WithTimeout(requestCtx, registryListTimeout)
+	defer cancel()
+	release, err := s.registryPermit(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+	registry, err := registryEndpoint(source)
+	if err != nil {
+		return nil, err
+	}
+	options := s.registryOptions(ctx, source)
+	const pageSize = 1000
+	repositories := make([]string, 0)
+	last := ""
+	for len(repositories) < maxRegistryRepositories {
+		page, err := remote.CatalogPage(registry, last, pageSize, options...)
+		if err != nil {
+			return nil, fmt.Errorf("枚举 Registry 仓库失败: %w", redactRegistryError(err, source))
+		}
+		if len(page) == 0 || len(page) > pageSize {
+			break
+		}
+		repositories = append(repositories, page...)
+		if len(page) < pageSize {
+			break
+		}
+		next := page[len(page)-1]
+		if next == last {
+			return nil, errors.New("Registry 仓库目录分页未前进")
+		}
+		last = next
+	}
+	if len(repositories) >= maxRegistryRepositories {
+		return nil, errors.New("Registry 仓库数量超过限制")
+	}
+	byID := make(map[string]int)
+	images := make([]DockerImage, 0)
+	for _, repositoryName := range repositories {
+		repository, err := registryRepository(source, repositoryName)
+		if err != nil {
+			continue
+		}
+		tags, err := remote.ListWithContext(ctx, repository, options...)
+		if err != nil {
+			return nil, fmt.Errorf("枚举 Registry 仓库 %q 的标签失败: %w", repositoryName, redactRegistryError(err, source))
+		}
+		if len(tags) > maxRegistryTags {
+			return nil, fmt.Errorf("Registry 仓库 %q 的标签数量超过限制", repositoryName)
+		}
+		for _, tag := range tags {
+			if !validRegistryTag(tag) {
+				continue
+			}
+			ref := repository.Tag(tag)
+			descriptor, err := remote.Head(ref, options...)
+			if err != nil {
+				return nil, fmt.Errorf("解析 Registry 镜像 %q:%q 的 digest 失败: %w", repositoryName, tag, redactRegistryError(err, source))
+			}
+			digest := descriptor.Digest.String()
+			if _, err := v1.NewHash(digest); err != nil || !strings.HasPrefix(digest, "sha256:") {
+				return nil, fmt.Errorf("Registry 镜像 %q:%q 返回了无效 digest", repositoryName, tag)
+			}
+			id := registryImageID(repositoryName, digest)
+			if index, ok := byID[id]; ok {
+				fullTag := repositoryName + ":" + tag
+				if !containsString(images[index].Tags, fullTag) {
+					images[index].Tags = append(images[index].Tags, fullTag)
+				}
+				continue
+			}
+			byID[id] = len(images)
+			images = append(images, DockerImage{ID: id, Name: repositoryName, Tags: []string{repositoryName + ":" + tag}, Repository: repositoryName, Digest: digest, MediaType: string(descriptor.MediaType), SizeType: "manifest", Size: formatRegistrySize(descriptor.Size), SizeBytes: descriptor.Size})
+		}
+	}
+	sort.Slice(images, func(i, j int) bool { return images[i].ID < images[j].ID })
+	fingerprint := imageSourceFingerprint(source, "")
+	if !s.updateImageInventoryIfCurrent(token, sourceID, fingerprint, source, images) {
+		return images, requestCtx.Err()
+	}
+	s.schedulePrewarm(sourceID, source, "", fingerprint, images, token, requestCtx)
+	return images, nil
+}
+
+func redactRegistryError(err error, source ImageSource) error {
+	if err == nil {
+		return nil
+	}
+	message := err.Error()
+	for _, secret := range []string{source.RegistryPassword, source.RegistryUsername} {
+		if secret != "" {
+			message = strings.ReplaceAll(message, secret, "[redacted]")
+		}
+	}
+	return errors.New(message)
+}
+
+type imageCacheEntry struct {
+	Schema            int               `json:"schema"`
+	SourceID          string            `json:"sourceID"`
+	SourceFingerprint string            `json:"sourceFingerprint"`
+	Digest            string            `json:"digest"`
+	Repository        string            `json:"repository"`
+	Detail            DockerImageDetail `json:"detail"`
+}
+
+type imageInventory struct {
+	Name string
+	Tags []string
+}
+
+const imageCacheSchema = 1
+
+func imageCacheKey(sourceID, fingerprint, imageID, repository string) string {
+	value := sourceID + "\x00" + fingerprint + "\x00" + imageID + "\x00" + repository
+	digest := sha256.Sum256([]byte(value))
+	return fmt.Sprintf("%x", digest[:])
+}
+
+func (s *ImageService) imageCacheRoot() string {
+	if s != nil && s.cacheDir != "" {
+		return s.cacheDir
+	}
+	return filepath.Join(appDataDir(), "image-cache")
+}
+
+func canonicalSHA256Digest(value string) bool {
+	if len(value) != len("sha256:")+64 || !strings.HasPrefix(value, "sha256:") {
+		return false
+	}
+	for _, r := range value[len("sha256:"):] {
+		if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f')) {
+			return false
+		}
+	}
+	return true
+}
+
+func cacheIdentity(source ImageSource, imageID, repository string) (string, string, bool) {
+	if source.Kind == "registry" {
+		parsedRepository, digest, err := parseRegistryImageID(imageID)
+		if err != nil || (repository != "" && repository != parsedRepository) {
+			return "", "", false
+		}
+		return digest, parsedRepository, true
+	}
+	if !canonicalSHA256Digest(imageID) {
+		return "", "", false
+	}
+	return imageID, "", true
+}
+
+func imageInventoryKey(sourceID, fingerprint, digest, repository string) string {
+	return sourceID + "\x00" + fingerprint + "\x00" + digest + "\x00" + repository
+}
+
+func (s *ImageService) currentInventory(sourceID, fingerprint, digest, repository string) (imageInventory, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	item, ok := s.inventory[imageInventoryKey(sourceID, fingerprint, digest, repository)]
+	if !ok {
+		return imageInventory{}, false
+	}
+	item.Tags = append([]string(nil), item.Tags...)
+	return item, true
+}
+
+func applyImageInventory(detail DockerImageDetail, inventory imageInventory, ok bool) DockerImageDetail {
+	if !ok {
+		return detail
+	}
+	detail.Name = inventory.Name
+	detail.Tags = append([]string(nil), inventory.Tags...)
+	return detail
+}
+
+func (s *ImageService) updateImageInventory(sourceID, fingerprint string, source ImageSource, images []DockerImage) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.updateImageInventoryLocked(sourceID, fingerprint, source, images)
+}
+
+func (s *ImageService) updateImageInventoryIfCurrent(token uint64, sourceID, fingerprint string, source ImageSource, images []DockerImage) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.activeListToken != token || s.activeListFingerprint != fingerprint || !s.sourceFingerprintCurrent(sourceID, fingerprint) {
+		return false
+	}
+	s.updateImageInventoryLocked(sourceID, fingerprint, source, images)
+	return true
+}
+
+func (s *ImageService) updateImageInventoryLocked(sourceID, fingerprint string, source ImageSource, images []DockerImage) {
+	if s.inventory == nil {
+		s.inventory = make(map[string]imageInventory)
+	}
+	prefix := sourceID + "\x00" + fingerprint + "\x00"
+	for key := range s.inventory {
+		if strings.HasPrefix(key, prefix) {
+			delete(s.inventory, key)
+		}
+	}
+	for _, image := range images {
+		digest, repository, ok := cacheIdentity(source, image.ID, image.Repository)
+		if !ok {
+			continue
+		}
+		s.inventory[imageInventoryKey(sourceID, fingerprint, digest, repository)] = imageInventory{Name: image.Name, Tags: append([]string(nil), image.Tags...)}
+	}
+}
+
+func (s *ImageService) loadImageCache(sourceID, fingerprint, digest, repository, detailID string) (DockerImageDetail, bool) {
+	path := filepath.Join(s.imageCacheRoot(), imageCacheKey(sourceID, fingerprint, digest, repository)+".json")
+	info, err := os.Stat(path)
+	if err != nil || info.Size() <= 0 || info.Size() > maxImageCacheEntryBytes {
+		return DockerImageDetail{}, false
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return DockerImageDetail{}, false
+	}
+	var entry imageCacheEntry
+	if json.Unmarshal(b, &entry) != nil || entry.Schema != imageCacheSchema || entry.SourceID != sourceID || entry.SourceFingerprint != fingerprint || entry.Digest != digest || entry.Repository != repository || entry.Detail.ID != detailID {
+		return DockerImageDetail{}, false
+	}
+	inventory, ok := s.currentInventory(sourceID, fingerprint, digest, repository)
+	return applyImageInventory(entry.Detail, inventory, ok), true
+}
+
+func writeImageCacheAtomically(path string, data []byte) error {
+	if len(data) > maxImageCacheEntryBytes {
+		return errors.New("镜像详情缓存条目超过大小限制")
+	}
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	if err := os.Chmod(dir, 0o700); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".image-cache-*")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	defer func() { _ = tmp.Close(); _ = os.Remove(tmpPath) }()
+	if err := tmp.Chmod(0o600); err != nil {
+		return err
+	}
+	if _, err := tmp.Write(data); err != nil {
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmpPath, path)
+}
+
+func (s *ImageService) saveImageCache(sourceID, fingerprint, digest, repository string, detail DockerImageDetail) error {
+	if !s.sourceFingerprintCurrent(sourceID, fingerprint) {
+		return nil
+	}
+	core := detail
+	core.Name = ""
+	core.Tags = nil
+	entry := imageCacheEntry{Schema: imageCacheSchema, SourceID: sourceID, SourceFingerprint: fingerprint, Digest: digest, Repository: repository, Detail: core}
+	b, err := json.Marshal(entry)
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(s.imageCacheRoot(), imageCacheKey(sourceID, fingerprint, digest, repository)+".json")
+	if err := writeImageCacheAtomically(path, b); err != nil {
+		return err
+	}
+	s.enforceImageCacheLimit()
+	return nil
+}
+
+func (s *ImageService) removeImageCache(sourceID, fingerprint, imageID, repository string) {
+	path := filepath.Join(s.imageCacheRoot(), imageCacheKey(sourceID, fingerprint, imageID, repository)+".json")
+	_ = os.Remove(path)
+}
+
+type imageCacheFile struct {
+	path    string
+	size    int64
+	modTime time.Time
+}
+
+func (s *ImageService) cacheFiles() []imageCacheFile {
+	entries, err := os.ReadDir(s.imageCacheRoot())
+	if err != nil {
+		return nil
+	}
+	files := make([]imageCacheFile, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil || !info.Mode().IsRegular() {
+			continue
+		}
+		files = append(files, imageCacheFile{path: filepath.Join(s.imageCacheRoot(), entry.Name()), size: info.Size(), modTime: info.ModTime()})
+	}
+	return files
+}
+
+func (s *ImageService) enforceImageCacheLimit() {
+	files := s.cacheFiles()
+	sort.Slice(files, func(i, j int) bool { return files[i].modTime.Before(files[j].modTime) })
+	total := int64(0)
+	for _, file := range files {
+		total += file.size
+	}
+	for len(files) > maxImageCacheEntries || total > maxImageCacheBytes {
+		if len(files) == 0 {
+			break
+		}
+		oldest := files[0]
+		files = files[1:]
+		if os.Remove(oldest.path) == nil {
+			total -= oldest.size
+		}
+	}
+}
+
+func (s *ImageService) cleanupImageCache() {
+	current := make(map[string]string)
+	if s != nil && s.config != nil {
+		config := normalizeConfig(s.config.Get())
+		for _, source := range config.ImageSources {
+			cliPath := ""
+			if source.Kind == "local" {
+				cliPath = config.DockerCLIPath
+				if cliPath == "" {
+					cliPath = "docker"
+				}
+			} else if source.Kind == "ssh" {
+				cliPath = "docker"
+			}
+			current[source.ID] = imageSourceFingerprint(source, cliPath)
+		}
+	}
+	s.invalidatePrewarmSources(current)
+	for _, file := range s.cacheFiles() {
+		remove := file.size <= 0 || file.size > maxImageCacheEntryBytes
+		if !remove {
+			b, err := os.ReadFile(file.path)
+			var entry imageCacheEntry
+			if err != nil || json.Unmarshal(b, &entry) != nil || entry.Schema != imageCacheSchema {
+				remove = true
+			} else if fingerprint, ok := current[entry.SourceID]; !ok || fingerprint != entry.SourceFingerprint {
+				remove = true
+			}
+		}
+		if remove {
+			_ = os.Remove(file.path)
+		}
+	}
+	s.enforceImageCacheLimit()
+}
+
+func (s *ImageService) invalidatePrewarmSources(current map[string]string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for sourceID, generation := range s.prewarmGenerations {
+		fingerprint, ok := current[sourceID]
+		if !ok || fingerprint != generation.fingerprint {
+			generation.cancel()
+			delete(s.prewarmGenerations, sourceID)
+			if s.activeSourceID == sourceID {
+				s.activeSourceID = ""
+			}
+		}
+	}
+	for key := range s.inventory {
+		parts := strings.SplitN(key, "\x00", 3)
+		if len(parts) < 2 {
+			continue
+		}
+		fingerprint, ok := current[parts[0]]
+		if !ok || fingerprint != parts[1] {
+			delete(s.inventory, key)
+		}
+	}
+	if s.activeListToken != 0 && s.activeListFingerprint != "" {
+		fingerprint, ok := current[s.activeListSourceID]
+		if !ok || fingerprint != s.activeListFingerprint {
+			if s.activeListCancel != nil {
+				s.activeListCancel()
+			}
+			s.activeListToken = 0
+		}
+	}
+}
+
+func (s *ImageService) sourceFingerprintCurrent(sourceID, fingerprint string) bool {
+	_, _, current, err := s.sourceSnapshot(sourceID)
+	return err == nil && current == fingerprint
+}
+
+func (s *ImageService) serviceContext() context.Context {
+	if s != nil && s.ctx != nil {
+		return s.ctx
+	}
+	return context.Background()
+}
+
+func (s *ImageService) beginListRequest(sourceID string) (uint64, context.Context) {
+	s.ensurePrewarmWorkers()
+	requestCtx, cancel := context.WithCancel(s.serviceContext())
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.requestToken++
+	if s.activeListCancel != nil {
+		s.activeListCancel()
+	}
+	if s.activeSourceID != "" {
+		if generation := s.prewarmGenerations[s.activeSourceID]; generation != nil {
+			generation.cancel()
+		}
+		delete(s.prewarmGenerations, s.activeSourceID)
+	}
+	s.activeListToken = s.requestToken
+	s.activeListCancel = cancel
+	s.activeListFingerprint = ""
+	s.activeListSourceID = sourceID
+	s.activeSourceID = sourceID
+	return s.requestToken, requestCtx
+}
+
+func (s *ImageService) listRequestCurrent(token uint64) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.activeListToken == token
+}
+
+func (s *ImageService) setListFingerprint(token uint64, fingerprint string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.activeListToken != token {
+		return false
+	}
+	s.activeListFingerprint = fingerprint
+	return true
+}
+
+func (s *ImageService) ensurePrewarmWorkers() {
+	if s == nil {
+		return
+	}
+	s.prewarmOnce.Do(func() {
+		if s.ctx == nil {
+			s.ctx, s.cancel = context.WithCancel(context.Background())
+		}
+		if s.cacheCalls == nil {
+			s.cacheCalls = make(map[string]*imageCacheCall)
+		}
+		if s.inventory == nil {
+			s.inventory = make(map[string]imageInventory)
+		}
+		if s.prewarmGenerations == nil {
+			s.prewarmGenerations = make(map[string]*prewarmGeneration)
+		}
+		s.detailSem = make(chan struct{}, imageDetailConcurrency)
+		s.prewarmQueue = make(chan prewarmJob, prewarmQueueSize)
+		for i := 0; i < imageDetailConcurrency; i++ {
+			s.prewarmWG.Add(1)
+			go s.prewarmWorker()
+		}
+	})
+}
+
+func (s *ImageService) prewarmWorker() {
+	defer s.prewarmWG.Done()
+	for {
+		select {
+		case <-s.serviceContext().Done():
+			return
+		case job := <-s.prewarmQueue:
+			if !s.prewarmGenerationCurrent(job.sourceID, job.fingerprint, job.generation, job.ctx) {
+				continue
+			}
+			if _, err := s.inspectWithGeneration(job.sourceID, job.source, job.cliPath, job.fingerprint, job.imageID, job.repository, job.ctx, job.generation); err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+				log.Printf("镜像详情预热失败 source=%s fingerprint=%s: %v", job.sourceID, job.fingerprint, redactImageError(err, job.source))
+			}
+		}
+	}
+}
+
+func (s *ImageService) prewarmGenerationCurrent(sourceID, fingerprint string, number uint64, expected context.Context) bool {
+	s.mu.Lock()
+	generation := s.prewarmGenerations[sourceID]
+	current := generation != nil && generation.number == number && generation.fingerprint == fingerprint && generation.ctx == expected
+	s.mu.Unlock()
+	return current && expected.Err() == nil && s.sourceFingerprintCurrent(sourceID, fingerprint)
+}
+
+func (s *ImageService) detailPermit(ctx context.Context) (func(), error) {
+	s.ensurePrewarmWorkers()
+	select {
+	case s.detailSem <- struct{}{}:
+		if err := ctx.Err(); err != nil {
+			<-s.detailSem
+			return nil, err
+		}
+		return func() { <-s.detailSem }, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+func redactImageError(err error, source ImageSource) error {
+	if err == nil {
+		return nil
+	}
+	message := err.Error()
+	for _, secret := range []string{source.SSHPassword, source.SSHPrivateKey, source.SSHPrivateKeyPath, source.RegistryPassword, source.RegistryUsername, source.RegistryURL} {
+		if secret != "" {
+			message = strings.ReplaceAll(message, secret, "[redacted]")
+		}
+	}
+	return errors.New(message)
+}
+
+func (s *ImageService) shutdown() {
+	if s == nil {
+		return
+	}
+	s.shutdownOnce.Do(func() {
+		if s.cancel != nil {
+			s.cancel()
+		}
+		s.mu.Lock()
+		for _, generation := range s.prewarmGenerations {
+			generation.cancel()
+		}
+		s.prewarmGenerations = make(map[string]*prewarmGeneration)
+		s.mu.Unlock()
+		s.prewarmWG.Wait()
+	})
+}
+
+func (s *ImageService) schedulePrewarm(sourceID string, source ImageSource, cliPath, fingerprint string, images []DockerImage, token uint64, requestCtx context.Context) {
+	if s == nil {
+		return
+	}
+	s.ensurePrewarmWorkers()
+	s.mu.Lock()
+	if s.activeListToken != token || s.activeListFingerprint != fingerprint || !s.sourceFingerprintCurrent(sourceID, fingerprint) {
+		s.mu.Unlock()
+		return
+	}
+	if s.prewarmGenerations == nil {
+		s.prewarmGenerations = make(map[string]*prewarmGeneration)
+	}
+	if s.activeSourceID != "" && s.activeSourceID != sourceID {
+		if previous := s.prewarmGenerations[s.activeSourceID]; previous != nil {
+			previous.cancel()
+		}
+		delete(s.prewarmGenerations, s.activeSourceID)
+	}
+	previous := s.prewarmGenerations[sourceID]
+	if previous != nil {
+		previous.cancel()
+	}
+	number := token
+	generationContext, cancel := context.WithCancel(requestCtx)
+	s.prewarmGenerations[sourceID] = &prewarmGeneration{number: number, fingerprint: fingerprint, ctx: generationContext, cancel: cancel}
+	s.activeSourceID = sourceID
+	s.mu.Unlock()
+
+	misses := make([]DockerImage, 0, len(images))
+	for _, image := range images {
+		digest, repository, ok := cacheIdentity(source, image.ID, image.Repository)
+		if ok {
+			if _, cached := s.loadImageCache(sourceID, fingerprint, digest, repository, image.ID); !cached {
+				misses = append(misses, image)
+			}
+		}
+		if !ok {
+			misses = append(misses, image)
+		}
+	}
+	if len(misses) == 0 {
+		return
+	}
+	for _, image := range misses {
+		job := prewarmJob{sourceID: sourceID, generation: number, ctx: generationContext, source: source, cliPath: cliPath, fingerprint: fingerprint, imageID: image.ID, repository: image.Repository}
+		select {
+		case s.prewarmQueue <- job:
+		case <-requestCtx.Done():
+			return
+		case <-s.serviceContext().Done():
+			return
+		default:
+			log.Printf("镜像详情预热队列已满 source=%s fingerprint=%s", sourceID, fingerprint)
+			return
+		}
+	}
+}
+
+func (s *ImageService) inspectWithSnapshot(sourceID string, source ImageSource, cliPath, fingerprint, imageID, repository string) (DockerImageDetail, error) {
+	return s.inspectWithGeneration(sourceID, source, cliPath, fingerprint, imageID, repository, s.serviceContext(), 0)
+}
+
+func (s *ImageService) inspectWithGeneration(sourceID string, source ImageSource, cliPath, fingerprint, imageID, repository string, requestCtx context.Context, generation uint64) (DockerImageDetail, error) {
+	digest, repository, cacheable := cacheIdentity(source, imageID, repository)
+	if !cacheable {
+		release, err := s.detailPermit(requestCtx)
+		if err != nil {
+			return DockerImageDetail{}, err
+		}
+		defer release()
+		if source.Kind == "registry" {
+			return s.inspectRegistryImage(requestCtx, source, imageID, repository)
+		}
+		return s.inspectDockerImage(requestCtx, source, cliPath, imageID)
+	}
+	if detail, ok := s.loadImageCache(sourceID, fingerprint, digest, repository, imageID); ok {
+		return detail, nil
+	}
+	key := imageCacheKey(sourceID, fingerprint, digest, repository)
+	s.mu.Lock()
+	if s.cacheCalls == nil {
+		s.cacheCalls = make(map[string]*imageCacheCall)
+	}
+	if call, ok := s.cacheCalls[key]; ok {
+		s.mu.Unlock()
+		select {
+		case <-call.done:
+			if generation == 0 && (errors.Is(call.err, context.Canceled) || errors.Is(call.err, context.DeadlineExceeded)) && requestCtx.Err() == nil {
+				return s.inspectWithGeneration(sourceID, source, cliPath, fingerprint, imageID, repository, requestCtx, generation)
+			}
+			return call.detail, call.err
+		case <-requestCtx.Done():
+			return DockerImageDetail{}, requestCtx.Err()
+		}
+	}
+	call := &imageCacheCall{done: make(chan struct{})}
+	s.cacheCalls[key] = call
+	s.mu.Unlock()
+	defer func() {
+		s.mu.Lock()
+		delete(s.cacheCalls, key)
+		close(call.done)
+		s.mu.Unlock()
+	}()
+	if detail, ok := s.loadImageCache(sourceID, fingerprint, digest, repository, imageID); ok {
+		call.detail = detail
+		return detail, nil
+	}
+	release, err := s.detailPermit(requestCtx)
+	if err != nil {
+		call.err = err
+		return DockerImageDetail{}, err
+	}
+	defer release()
+	var detail DockerImageDetail
+	var inspectErr error
+	if source.Kind == "registry" {
+		detail, inspectErr = s.inspectRegistryImage(requestCtx, source, imageID, repository)
+	} else {
+		detail, inspectErr = s.inspectDockerImage(requestCtx, source, cliPath, imageID)
+	}
+	if inspectErr == nil {
+		inventory, ok := s.currentInventory(sourceID, fingerprint, digest, repository)
+		detail = applyImageInventory(detail, inventory, ok)
+		if generation == 0 || s.prewarmGenerationCurrent(sourceID, fingerprint, generation, requestCtx) {
+			_ = s.saveImageCache(sourceID, fingerprint, digest, repository, detail)
+		}
+	}
+	call.detail, call.err = detail, inspectErr
+	return detail, inspectErr
+}
+
+func (s *ImageService) inspectDockerImage(ctx context.Context, source ImageSource, cliPath, imageID string) (DockerImageDetail, error) {
+	if !validImageReference(imageID) {
+		return DockerImageDetail{}, errors.New("镜像 ID 无效")
+	}
+	commandCtx, cancel := context.WithTimeout(ctx, imageCommandTimeout)
+	defer cancel()
+	output, err := s.runDockerSnapshotContext(commandCtx, source, cliPath, []string{"image", "inspect", imageID})
+	if err != nil {
+		return DockerImageDetail{}, err
+	}
+	var entries []dockerImageInspectJSON
+	if err := json.Unmarshal(output, &entries); err != nil {
+		return DockerImageDetail{}, fmt.Errorf("解析 Docker 镜像详情失败: %w", err)
+	}
+	if len(entries) == 0 {
+		return DockerImageDetail{}, errors.New("Docker 镜像详情为空")
+	}
+	item := entries[0]
+	tags := append([]string(nil), item.RepoTags...)
+	nameValue := ""
+	if len(tags) > 0 {
+		nameValue = tags[0]
+	}
+	return DockerImageDetail{ID: item.ID, Name: nameValue, Tags: tags, Size: item.Size, CreatedAt: item.Created, Architecture: item.Architecture, OS: item.OS, Labels: item.Config.Labels, Command: item.Config.Cmd, Entrypoint: item.Config.Entrypoint}, nil
+}
+
+func registryDescriptor(value v1.Descriptor) RegistryDescriptor {
+	result := RegistryDescriptor{MediaType: string(value.MediaType), Digest: value.Digest.String(), Size: value.Size}
+	if value.Platform != nil {
+		result.Platform = &RegistryPlatform{Architecture: value.Platform.Architecture, OS: value.Platform.OS, Variant: value.Platform.Variant}
+	}
+	return result
+}
+
+func (s *ImageService) inspectRegistryImage(ctx context.Context, source ImageSource, imageID, repository string) (DockerImageDetail, error) {
+	parsedRepository, digest, err := parseRegistryImageID(imageID)
+	if err != nil {
+		return DockerImageDetail{}, err
+	}
+	if repository != "" && repository != parsedRepository {
+		return DockerImageDetail{}, errors.New("Registry 镜像仓库不匹配")
+	}
+	repository = parsedRepository
+	repo, err := registryRepository(source, repository)
+	if err != nil {
+		return DockerImageDetail{}, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, registryListTimeout)
+	defer cancel()
+	release, err := s.registryPermit(ctx)
+	if err != nil {
+		return DockerImageDetail{}, err
+	}
+	defer release()
+	descriptor, err := remote.Get(repo.Digest(digest), s.registryOptions(ctx, source)...)
+	if err != nil {
+		return DockerImageDetail{}, fmt.Errorf("读取 Registry manifest 失败: %w", redactRegistryError(err, source))
+	}
+	if descriptor.Digest.String() != digest {
+		return DockerImageDetail{}, errors.New("Registry 返回的 manifest digest 与请求不一致")
+	}
+	detail := DockerImageDetail{ID: imageID, Name: repository, Repository: repository, Digest: digest, MediaType: string(descriptor.MediaType), Size: descriptor.Size, SizeType: "manifest"}
+	var envelope struct {
+		SchemaVersion int             `json:"schemaVersion"`
+		MediaType     string          `json:"mediaType"`
+		Config        v1.Descriptor   `json:"config"`
+		Layers        []v1.Descriptor `json:"layers"`
+		Manifests     []v1.Descriptor `json:"manifests"`
+	}
+	if err := json.Unmarshal(descriptor.Manifest, &envelope); err != nil {
+		return DockerImageDetail{}, fmt.Errorf("解析 Registry manifest 失败: %w", err)
+	}
+	if descriptor.MediaType == types.OCIImageIndex || descriptor.MediaType == types.DockerManifestList {
+		detail.SizeType = "manifest-index"
+		manifests := make([]RegistryDescriptor, 0, len(envelope.Manifests))
+		for _, item := range envelope.Manifests {
+			manifests = append(manifests, registryDescriptor(item))
+		}
+		detail.Index = &RegistryIndex{SchemaVersion: envelope.SchemaVersion, MediaType: envelope.MediaType, Manifests: manifests}
+	} else {
+		layers := make([]RegistryDescriptor, 0, len(envelope.Layers))
+		for _, item := range envelope.Layers {
+			layers = append(layers, registryDescriptor(item))
+		}
+		detail.Manifest = &RegistryManifest{SchemaVersion: envelope.SchemaVersion, MediaType: envelope.MediaType, Config: registryDescriptor(envelope.Config), Layers: layers}
+	}
+	if image, imageErr := descriptor.Image(); imageErr == nil {
+		if config, configErr := image.ConfigFile(); configErr == nil && config != nil {
+			detail.CreatedAt = config.Created.Time.UTC().Format(time.RFC3339Nano)
+			detail.Architecture = config.Architecture
+			detail.OS = config.OS
+			detail.Labels = config.Config.Labels
+			detail.Command = config.Config.Cmd
+			detail.Entrypoint = config.Config.Entrypoint
+		}
+	}
+	return detail, nil
 }
 
 type dockerImageInspectJSON struct {
@@ -531,27 +1812,21 @@ type dockerImageInspectJSON struct {
 }
 
 func (s *ImageService) InspectDockerImage(sourceID string, imageID string) (DockerImageDetail, error) {
-	if !validImageReference(imageID) {
-		return DockerImageDetail{}, errors.New("镜像 ID 无效")
-	}
-	output, err := s.runDocker(sourceID, []string{"image", "inspect", imageID}, imageCommandTimeout)
+	s.cleanupImageCache()
+	source, cliPath, fingerprint, err := s.sourceSnapshot(sourceID)
 	if err != nil {
 		return DockerImageDetail{}, err
 	}
-	var entries []dockerImageInspectJSON
-	if err := json.Unmarshal(output, &entries); err != nil {
-		return DockerImageDetail{}, fmt.Errorf("解析 Docker 镜像详情失败: %w", err)
+	repository := ""
+	if source.Kind == "registry" {
+		repository, _, err = parseRegistryImageID(imageID)
+		if err != nil {
+			return DockerImageDetail{}, err
+		}
+	} else if !validImageReference(imageID) {
+		return DockerImageDetail{}, errors.New("镜像 ID 无效")
 	}
-	if len(entries) == 0 {
-		return DockerImageDetail{}, errors.New("Docker 镜像详情为空")
-	}
-	item := entries[0]
-	tags := append([]string(nil), item.RepoTags...)
-	name := ""
-	if len(tags) > 0 {
-		name = tags[0]
-	}
-	return DockerImageDetail{ID: item.ID, Name: name, Tags: tags, Size: item.Size, CreatedAt: item.Created, Architecture: item.Architecture, OS: item.OS, Labels: item.Config.Labels, Command: item.Config.Cmd, Entrypoint: item.Config.Entrypoint}, nil
+	return s.inspectWithSnapshot(sourceID, source, cliPath, fingerprint, imageID, repository)
 }
 
 func (s *ImageService) PushDockerImage(sourceID string, image string) (DockerOperationResult, error) {
@@ -560,7 +1835,16 @@ func (s *ImageService) PushDockerImage(sourceID string, image string) (DockerOpe
 		result.Error = "镜像引用无效"
 		return result, errors.New(result.Error)
 	}
-	output, err := s.runDocker(sourceID, []string{"image", "push", image}, imagePushTimeout)
+	source, cliPath, err := s.source(sourceID)
+	if err != nil {
+		result.Error = err.Error()
+		return result, err
+	}
+	if source.Kind == "registry" {
+		result.Error = "Registry 来源不支持 Docker CLI 推送"
+		return result, errors.New(result.Error)
+	}
+	output, err := s.runDockerSnapshot(source, cliPath, []string{"image", "push", image}, imagePushTimeout)
 	result.Output = string(output)
 	if err != nil {
 		result.Error = err.Error()
@@ -588,15 +1872,58 @@ func (s *ImageService) DeleteDockerImages(sourceID string, imageIDs []string) Do
 		}
 		ids = ids[:maxDockerDeleteImages]
 	}
+	source, cliPath, fingerprint, sourceErr := s.sourceSnapshot(sourceID)
+	if sourceErr != nil {
+		for _, imageID := range ids {
+			result.Failed = append(result.Failed, DockerDeleteFailure{ImageID: imageID, Error: sourceErr.Error()})
+		}
+		return result
+	}
+	ctx := s.serviceContext()
+	var cancel context.CancelFunc
+	if source.Kind == "registry" {
+		ctx, cancel = context.WithTimeout(ctx, registryListTimeout)
+		defer cancel()
+		release, err := s.registryPermit(ctx)
+		if err != nil {
+			for _, imageID := range ids {
+				result.Failed = append(result.Failed, DockerDeleteFailure{ImageID: imageID, Error: err.Error()})
+			}
+			return result
+		}
+		defer release()
+	}
 	for _, imageID := range ids {
+		if source.Kind == "registry" {
+			repository, digest, err := parseRegistryImageID(imageID)
+			if err != nil {
+				result.Failed = append(result.Failed, DockerDeleteFailure{ImageID: imageID, Error: err.Error()})
+				continue
+			}
+			repo, err := registryRepository(source, repository)
+			if err != nil {
+				result.Failed = append(result.Failed, DockerDeleteFailure{ImageID: imageID, Error: err.Error()})
+				continue
+			}
+			if err := remote.Delete(repo.Digest(digest), s.registryOptions(ctx, source)...); err != nil {
+				result.Failed = append(result.Failed, DockerDeleteFailure{ImageID: imageID, Error: fmt.Sprintf("删除 Registry manifest 失败: %v", redactRegistryError(err, source))})
+				continue
+			}
+			s.removeImageCache(sourceID, fingerprint, digest, repository)
+			result.Deleted = append(result.Deleted, imageID)
+			continue
+		}
 		if !validImageReference(imageID) {
 			result.Failed = append(result.Failed, DockerDeleteFailure{ImageID: imageID, Error: "镜像 ID 无效"})
 			continue
 		}
-		_, err := s.runDocker(sourceID, []string{"image", "rm", imageID}, imageCommandTimeout)
+		_, err := s.runDockerSnapshot(source, cliPath, []string{"image", "rm", imageID}, imageCommandTimeout)
 		if err != nil {
 			result.Failed = append(result.Failed, DockerDeleteFailure{ImageID: imageID, Error: err.Error()})
 			continue
+		}
+		if digest, _, ok := cacheIdentity(source, imageID, ""); ok {
+			s.removeImageCache(sourceID, fingerprint, digest, "")
 		}
 		result.Deleted = append(result.Deleted, imageID)
 	}

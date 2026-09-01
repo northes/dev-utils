@@ -5,8 +5,13 @@ import {
   CaretDown,
   CaretLeft,
   CaretUp,
+  Check,
+  Copy,
   HardDrives,
   MagnifyingGlass,
+  PencilSimple,
+  Plus,
+  Trash,
 } from '@phosphor-icons/react';
 import {
   DeleteDockerImages,
@@ -69,15 +74,32 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { toast } from './ui/toast';
 
 const LOCAL_SOURCE_ID = 'local';
-const LOCAL_SOURCE: ImageSource = {
+const LOCAL_SOURCE = {
   id: LOCAL_SOURCE_ID,
   name: '本机',
   kind: 'local',
   sshHost: '',
+} as unknown as ImageSource;
+
+type SourceKind = 'local' | 'ssh' | 'registry';
+type ManagedImageSource = Omit<ImageSource, 'sshPort' | 'sshUsername' | 'sshPassword' | 'sshPrivateKey' | 'sshKeyPassphrase' | 'sshPrivateKeyPath' | 'registryURL' | 'registryUsername' | 'registryPassword'> & {
+  sshPort?: number | string;
+  sshUsername?: string;
+  sshPassword?: string;
+  sshPrivateKey?: string;
+  sshKeyPassphrase?: string;
+  sshPrivateKeyPath?: string;
+  registryURL?: string;
+  registryUsername?: string;
+  registryPassword?: string;
+  capabilities?: { canDelete?: boolean; canPush?: boolean };
 };
+type SourceDraft = Partial<ManagedImageSource> & Pick<ManagedImageSource, 'name' | 'kind' | 'sshHost'> & { id?: string };
 
 type ConfirmState =
-  { type: 'push'; image: DockerImage } | { type: 'delete'; ids: string[]; name: string } | null;
+  | { type: 'push'; image: DockerImage }
+  | { type: 'delete'; ids: string[]; name: string; sourceId: string; sourceKind: string; digests: string[]; tags: string[] }
+  | null;
 
 function errorMessage(error: unknown) {
   if (error instanceof Error && error.message) return error.message;
@@ -105,7 +127,41 @@ function resolveSources(sources: ImageSource[] | null | undefined): ImageSource[
 }
 
 function sourceDisplayName(source: ImageSource, t: (key: string) => string) {
-  return isLocalSource(source) ? t('imageManagerTool.localSource') : source.name || source.sshHost;
+  return isLocalSource(source)
+    ? t('imageManagerTool.localSource')
+    : source.name || (source as ManagedImageSource).registryURL || source.sshHost;
+}
+
+function bindingSource(source: ManagedImageSource): ImageSource {
+  const ssh = source.kind === 'ssh';
+  const registry = source.kind === 'registry';
+  const registryURL = registry ? source.registryURL?.trim() ?? '' : '';
+  let normalizedRegistryURL = registryURL.replace(/\/+$/, '');
+  try {
+    const parsed = new URL(registryURL);
+    if (parsed.protocol === 'https:') {
+      parsed.hostname = parsed.hostname.toLowerCase();
+      parsed.pathname = parsed.pathname.replace(/\/+$/, '');
+      normalizedRegistryURL = parsed.toString().replace(/\/$/, '');
+    }
+  } catch {
+    // 让服务端返回具体的 URL 校验错误。
+  }
+  return {
+    id: source.id,
+    name: source.name.trim(),
+    kind: source.kind.trim(),
+    sshHost: ssh ? source.sshHost.trim() : '',
+    sshPort: ssh ? Number(source.sshPort) || 22 : 0,
+    sshUsername: ssh ? source.sshUsername?.trim() ?? '' : '',
+    sshPassword: ssh ? source.sshPassword ?? '' : '',
+    sshPrivateKey: ssh ? source.sshPrivateKey ?? '' : '',
+    sshPrivateKeyPath: ssh ? source.sshPrivateKeyPath ?? '' : '',
+    sshKeyPassphrase: ssh ? source.sshKeyPassphrase ?? '' : '',
+    registryURL: normalizedRegistryURL,
+    registryUsername: registry ? source.registryUsername?.trim() ?? '' : '',
+    registryPassword: registry ? source.registryPassword ?? '' : '',
+  } as ImageSource;
 }
 
 function asStringList(value: string[] | string | null | undefined) {
@@ -180,7 +236,7 @@ export default function ImageManagerTool({
 }: {
   active: boolean;
   settings: Settings;
-  onSettingsChange: (patch: Pick<Settings, 'dockerCLIPath' | 'imageSources'>) => void;
+  onSettingsChange: (patch: Pick<Settings, 'dockerCLIPath' | 'imageSources'>) => Promise<void>;
   record: (tool: ToolId, action: string, detail: string, input: string, output?: string) => void;
   pending: PendingAction | null;
   clearPending: () => void;
@@ -203,6 +259,11 @@ export default function ImageManagerTool({
   const [detailLoading, setDetailLoading] = useState(false);
   const [busy, setBusy] = useState<'push' | 'delete' | null>(null);
   const [manageOpen, setManageOpen] = useState(false);
+  const [editingSource, setEditingSource] = useState<SourceDraft | null>(null);
+  const [draftSources, setDraftSources] = useState<ImageSource[]>([]);
+  const [savingSources, setSavingSources] = useState(false);
+  const [sourceSaveError, setSourceSaveError] = useState('');
+  const [copiedName, setCopiedName] = useState<string | null>(null);
   const [draftCliPath, setDraftCliPath] = useState(cliPath);
   const [hostOptions, setHostOptions] = useState<Array<{ alias: string; selected: boolean }>>([]);
   const [hostsLoading, setHostsLoading] = useState(false);
@@ -211,6 +272,7 @@ export default function ImageManagerTool({
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const detailRequest = useRef(0);
 
   useEffect(() => {
     if (!sources.some((item) => item.id === sourceId))
@@ -360,6 +422,8 @@ export default function ImageManagerTool({
     setHostsError('');
     setHostOptions([]);
     setManageOpen(true);
+    setDraftSources(sources);
+    setSourceSaveError('');
     setHostsLoading(true);
     void GetSSHConfigHosts()
       .then((hosts) => {
@@ -389,21 +453,69 @@ export default function ImageManagerTool({
       .finally(() => setHostsLoading(false));
   };
 
-  const saveSources = () => {
-    const local = sources.find(isLocalSource) ?? LOCAL_SOURCE;
+  const newSource = (kind: SourceKind) => {
+    setEditingSource({ id: '', name: '', kind, sshHost: '', sshPort: 22 });
+  };
+
+  const editSource = (item: ImageSource) => {
+    setEditingSource({ ...(item as ManagedImageSource) });
+  };
+
+  const updateDraft = (patch: Partial<SourceDraft>) =>
+    setEditingSource((current) => (current ? { ...current, ...patch } : current));
+
+  const saveSource = () => {
+    if (!editingSource || !editingSource.name?.trim()) return;
+    const kind = editingSource.kind as SourceKind;
+    const id = editingSource.id?.trim() || `${kind}:${crypto.randomUUID()}`;
+    const next = { ...editingSource, id, name: editingSource.name.trim(), kind } as ManagedImageSource;
+    setDraftSources((current) => [
+      ...current.filter((item) => !isLocalSource(item) && item.id !== editingSource.id),
+      bindingSource(next),
+    ]);
+    setEditingSource(null);
+  };
+
+  const removeSource = (id: string) => {
+    if (id === LOCAL_SOURCE_ID) return;
+    setDraftSources((current) => current.filter((item) => isLocalSource(item) || item.id !== id));
+    if (sourceId === id) setSourceId(LOCAL_SOURCE_ID);
+  };
+
+  const saveSources = async () => {
+    const local = draftSources.find(isLocalSource) ?? LOCAL_SOURCE;
+    const existing = draftSources.filter((item) => !isLocalSource(item));
+    const existingIds = new Set(existing.map((item) => item.id));
     const nextSources: ImageSource[] = [
-      { ...local, id: LOCAL_SOURCE_ID, kind: 'local' },
+      bindingSource({ ...local, id: LOCAL_SOURCE_ID, kind: 'local' } as ManagedImageSource),
       ...hostOptions
         .filter((host) => host.selected)
-        .map((host) => ({
+        .filter((host) => !existingIds.has(sshSourceId(host.alias)))
+        .map((host) => bindingSource({
           id: sshSourceId(host.alias),
           name: host.alias,
           kind: 'ssh',
           sshHost: host.alias,
-        })),
+        } as ManagedImageSource)),
+      ...existing.filter((item) => !hostOptions.some((host) => sshSourceId(host.alias) === item.id && !host.selected)).map((item) => bindingSource(item as ManagedImageSource)),
     ];
-    onSettingsChange({ dockerCLIPath: draftCliPath.trim(), imageSources: nextSources });
-    setManageOpen(false);
+    const invalid = nextSources.find((item) =>
+      item.kind === 'ssh' ? !item.sshHost.trim() : item.kind === 'registry' ? !item.registryURL.trim() : false,
+    );
+    if (invalid) {
+      setSourceSaveError(t(invalid.kind === 'ssh' ? 'imageManagerTool.sshHostRequired' : 'imageManagerTool.registryURLRequired'));
+      return;
+    }
+    setSavingSources(true);
+    setSourceSaveError('');
+    try {
+      await onSettingsChange({ dockerCLIPath: draftCliPath.trim(), imageSources: nextSources });
+      setManageOpen(false);
+    } catch (error) {
+      setSourceSaveError(errorMessage(error) || t('imageManagerTool.sourceSaveFailed'));
+    } finally {
+      setSavingSources(false);
+    }
   };
 
   const toggleAll = (checked: boolean) => {
@@ -420,9 +532,12 @@ export default function ImageManagerTool({
   };
 
   const viewImage = async (image: DockerImage) => {
+    const request = ++detailRequest.current;
+    const requestedSourceId = source.id;
     setDetailLoading(true);
     try {
       const next = await InspectDockerImage(source.id, image.id);
+      if (request !== detailRequest.current || requestedSourceId !== sourceId) return;
       setDetail(next);
       record(
         'image-manager',
@@ -438,6 +553,17 @@ export default function ImageManagerTool({
       });
     } finally {
       setDetailLoading(false);
+    }
+  };
+
+  const copyImageName = async (name: string) => {
+    try {
+      await navigator.clipboard.writeText(name);
+      setCopiedName(name);
+      window.setTimeout(() => setCopiedName((current) => (current === name ? null : current)), 1400);
+      toast.add({ title: t('imageManagerTool.copied') });
+    } catch {
+      toast.add({ title: t('imageManagerTool.copyFailed'), type: 'error' });
     }
   };
 
@@ -467,10 +593,10 @@ export default function ImageManagerTool({
     }
   };
 
-  const runDelete = async (ids: string[], name: string) => {
+  const runDelete = async (sourceID: string, ids: string[], name: string) => {
     setBusy('delete');
     try {
-      const result = await DeleteDockerImages(source.id, ids);
+      const result = await DeleteDockerImages(sourceID, ids);
       const deleted = result.deleted?.length ?? 0;
       const failed = result.failed?.length ?? 0;
       if (failed > 0) {
@@ -500,10 +626,16 @@ export default function ImageManagerTool({
   const confirmAction = () => {
     if (!confirm || busy) return;
     if (confirm.type === 'push') void runPush(confirm.image);
-    else void runDelete(confirm.ids, confirm.name);
+    else void runDelete(confirm.sourceId, confirm.ids, confirm.name);
   };
 
-  const statusText = loading
+  const statusText = source.kind === 'registry'
+    ? loading
+      ? t('imageManagerTool.statusCheckingRegistry')
+      : loadError
+        ? t('imageManagerTool.statusRegistryUnavailable')
+        : t('imageManagerTool.statusRegistryAvailable')
+    : loading
     ? t('imageManagerTool.statusChecking')
     : status?.available
       ? t('imageManagerTool.statusAvailable', {
@@ -523,6 +655,18 @@ export default function ImageManagerTool({
           key: 'size',
           label: t('imageManagerTool.detailSize'),
           value: formatBytes(detail.size, i18n.language),
+        },
+        { key: 'digest', label: t('imageManagerTool.detailDigest'), value: detail.digest },
+        { key: 'mediaType', label: t('imageManagerTool.detailMediaType'), value: detail.mediaType },
+        {
+          key: 'manifest',
+          label: t('imageManagerTool.detailManifest'),
+          value: detail.manifest ? `${detail.manifest.mediaType} · ${t('imageManagerTool.manifestSize', { size: formatBytes(detail.manifest.config.size + (detail.manifest.layers ?? []).reduce((total, layer) => total + layer.size, 0), i18n.language) })}` : detail.index ? t('imageManagerTool.detailIndex') : '',
+        },
+        {
+          key: 'platforms',
+          label: t('imageManagerTool.detailPlatforms'),
+          value: detail.index?.manifests?.map((item) => item.platform ? `${item.platform.os}/${item.platform.architecture}${item.platform.variant ? `/${item.platform.variant}` : ''}` : '').filter(Boolean).join(', '),
         },
         {
           key: 'createdAt',
@@ -582,6 +726,7 @@ export default function ImageManagerTool({
                     value={source.id}
                     onValueChange={(value) => {
                       if (value) {
+                        detailRequest.current += 1;
                         setDetail(null);
                         setSourceId(value);
                       }
@@ -603,7 +748,7 @@ export default function ImageManagerTool({
                   </Select>
                 </div>
                 <p
-                  className={`max-w-full text-[11px] leading-[1.4] ${status?.available ? 'text-muted-foreground' : 'text-destructive'}`}
+                  className={`max-w-full text-[11px] leading-[1.4] ${source.kind === 'registry' ? (loadError ? 'text-destructive' : 'text-muted-foreground') : status?.available ? 'text-muted-foreground' : 'text-destructive'}`}
                   title={status?.cliPath || undefined}
                 >
                   {statusText}
@@ -813,13 +958,11 @@ export default function ImageManagerTool({
                       </TableCell>
                       <TableCell>
                         <span className="font-mono text-[12px]" title={image.id}>
-                          {shortId(image.id)}
+                          {source.kind === 'registry' ? shortId(image.digest || image.id) : shortId(image.id)}
                         </span>
                       </TableCell>
                       <TableCell>
-                        <span className="max-w-[28rem] truncate" title={image.name}>
-                          {imageLabel(image, unnamed)}
-                        </span>
+                        <button type="button" className="inline-flex min-w-0 items-center gap-1 truncate text-left" title={t('imageManagerTool.copyName', { name: imageLabel(image, unnamed) })} aria-label={t('imageManagerTool.copyName', { name: imageLabel(image, unnamed) })} onClick={() => void copyImageName(imageLabel(image, unnamed))}>{copiedName === imageLabel(image, unnamed) ? <Check size={13} aria-hidden="true" /> : <Copy size={13} aria-hidden="true" />}<span className="truncate">{imageLabel(image, unnamed)}</span></button>
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {image.size || t('imageManagerTool.emptyValue')}
@@ -855,23 +998,21 @@ export default function ImageManagerTool({
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="min-w-32">
                               <DropdownMenuGroup>
-                                <DropdownMenuItem
-                                  onClick={() => setConfirm({ type: 'push', image })}
-                                >
-                                  {t('imageManagerTool.push')}
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  variant="destructive"
+                                {((source as ManagedImageSource).capabilities?.canPush ?? source.kind !== 'registry') ? <DropdownMenuItem onClick={() => setConfirm({ type: 'push', image })}>
+                                  {t('imageManagerTool.push')} </DropdownMenuItem> : null} {((source as ManagedImageSource).capabilities?.canDelete ?? true) ? <DropdownMenuItem variant="destructive"
                                   onClick={() =>
                                     setConfirm({
                                       type: 'delete',
                                       ids: [image.id],
                                       name: imageLabel(image, unnamed),
+                                      sourceId: source.id,
+                                      sourceKind: source.kind,
+                                      digests: [image.digest || image.id],
+                                      tags: asStringList(image.tags),
                                     })
                                   }
                                 >
-                                  {t('imageManagerTool.delete')}
-                                </DropdownMenuItem>
+                                  {t('imageManagerTool.delete')} </DropdownMenuItem> : null}
                               </DropdownMenuGroup>
                             </DropdownMenuContent>
                           </DropdownMenu>
@@ -912,6 +1053,10 @@ export default function ImageManagerTool({
                       type: 'delete',
                       ids: [...selected],
                       name: t('imageManagerTool.selectedCount', { count: selectedCount }),
+                      sourceId: source.id,
+                      sourceKind: source.kind,
+                      digests: filteredImages.filter((image) => selected.has(image.id)).map((image) => image.digest || image.id),
+                      tags: filteredImages.flatMap((image) => asStringList(image.tags)),
                     })
                   }
                 >
@@ -929,7 +1074,7 @@ export default function ImageManagerTool({
             <DialogTitle>{t('imageManagerTool.manageSourcesTitle')}</DialogTitle>
             <DialogDescription>{t('imageManagerTool.manageSourcesDesc')}</DialogDescription>
           </DialogHeader>
-          <div className="flex flex-col gap-4">
+          <div className="flex max-h-[min(70vh,42rem)] flex-col gap-4 overflow-y-auto [padding-inline-end:var(--overlay-scrollbar-hit-size)]">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor={cliPathId}>{t('imageManagerTool.dockerCliPath')}</Label>
               <Input
@@ -944,10 +1089,31 @@ export default function ImageManagerTool({
             </div>
             <div className="flex flex-col gap-2">
               <div className="flex items-center justify-between gap-3 border-b border-border py-2">
-                <span className="text-sm text-foreground">{t('imageManagerTool.localSource')}</span>
-                <span className="text-[10px] text-muted-foreground">
-                  {t('imageManagerTool.localSourceHint')}
-                </span>
+                <span className="text-sm text-foreground">{t('imageManagerTool.sources')}</span>
+                <Button variant="outline" size="sm" onClick={() => newSource('ssh')}>
+                  <Plus data-icon="inline-start" /> {t('imageManagerTool.addSource')}
+                </Button>
+              </div>
+              <div className="divide-y divide-border">
+                {draftSources.map((item) => (
+                  <div key={item.id} className="flex items-center justify-between gap-3 py-2">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm text-foreground">{sourceDisplayName(item, t)}</div>
+                      <div className="text-[10px] text-muted-foreground">
+                        {t(`imageManagerTool.kind${item.kind === 'registry' ? 'Registry' : item.kind === 'ssh' ? 'Ssh' : 'Local'}`)}
+                      </div>
+                    </div>
+                    {isLocalSource(item) ? <span className="text-[10px] text-muted-foreground">{t('imageManagerTool.localSourceHint')}</span> : (
+                      <div className="flex flex-none gap-1">
+                        <Button variant="ghost" size="sm" aria-label={t('imageManagerTool.editSource')} onClick={() => editSource(item)}><PencilSimple /></Button>
+                        <Button variant="ghost" size="sm" aria-label={t('imageManagerTool.removeSource')} onClick={() => removeSource(item.id)}><Trash /></Button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-2 pt-1">
+                <Button variant="ghost" size="sm" onClick={() => newSource('registry')}><Plus data-icon="inline-start" /> {t('imageManagerTool.addRegistry')}</Button>
               </div>
               <span className="text-[10px] font-medium text-muted-foreground">
                 {t('imageManagerTool.sshHosts')}
@@ -990,12 +1156,35 @@ export default function ImageManagerTool({
                 </div>
               )}
             </div>
+            {editingSource ? (
+              <div className="flex flex-col gap-3 border-t border-border pt-3">
+                <div className="flex items-center justify-between"><h3 className="m-0 text-sm font-medium">{editingSource.id ? t('imageManagerTool.editSource') : t('imageManagerTool.addSource')}</h3><Button variant="ghost" size="sm" onClick={() => setEditingSource(null)}>{t('imageManagerTool.cancel')}</Button></div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="flex flex-col gap-1"><Label>{t('imageManagerTool.sourceName')}</Label><Input value={editingSource.name ?? ''} onChange={(e) => updateDraft({ name: e.target.value })} /></div>
+                  <div className="flex flex-col gap-1"><Label>{t('imageManagerTool.sourceKind')}</Label><Select items={[{ value: 'ssh', label: t('imageManagerTool.kindSsh') }, { value: 'registry', label: t('imageManagerTool.kindRegistry') }]} value={editingSource.kind} onValueChange={(value) => updateDraft({ kind: value as SourceKind })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ssh">{t('imageManagerTool.kindSsh')}</SelectItem><SelectItem value="registry">{t('imageManagerTool.kindRegistry')}</SelectItem></SelectContent></Select></div>
+                  {editingSource.kind === 'ssh' ? <>
+                    <div className="flex flex-col gap-1"><Label>{t('imageManagerTool.sshHost')}</Label><Input value={editingSource.sshHost ?? ''} onChange={(e) => updateDraft({ sshHost: e.target.value })} placeholder={t('imageManagerTool.sshHostPlaceholder')} /></div>
+                    <div className="flex flex-col gap-1"><Label>{t('imageManagerTool.sshPort')}</Label><Input type="number" value={editingSource.sshPort ?? 22} onChange={(e) => updateDraft({ sshPort: Number(e.target.value) || 22 })} /></div>
+                    <div className="flex flex-col gap-1"><Label>{t('imageManagerTool.sshUsername')}</Label><Input value={editingSource.sshUsername ?? ''} onChange={(e) => updateDraft({ sshUsername: e.target.value })} /></div>
+                    <div className="flex flex-col gap-1"><Label>{t('imageManagerTool.sshPassword')}</Label><Input type="password" value={editingSource.sshPassword ?? ''} onChange={(e) => updateDraft({ sshPassword: e.target.value })} /></div>
+                    <div className="flex flex-col gap-1 sm:col-span-2"><Label>{t('imageManagerTool.sshPrivateKey')}</Label><textarea className="min-h-24 rounded-md border border-input bg-transparent px-3 py-2 text-xs outline-none" value={editingSource.sshPrivateKey ?? ''} onChange={(e) => updateDraft({ sshPrivateKey: e.target.value })} /></div>
+                    <div className="flex flex-col gap-1 sm:col-span-2"><Label>{t('imageManagerTool.sshKeyPassphrase')}</Label><Input type="password" value={editingSource.sshKeyPassphrase ?? ''} onChange={(e) => updateDraft({ sshKeyPassphrase: e.target.value })} /></div>
+                  </> : <>
+                    <div className="flex flex-col gap-1 sm:col-span-2"><Label>{t('imageManagerTool.registryURL')}</Label><Input value={editingSource.registryURL ?? ''} onChange={(e) => updateDraft({ registryURL: e.target.value })} placeholder={t('imageManagerTool.registryURLPlaceholder')} /></div>
+                    <div className="flex flex-col gap-1"><Label>{t('imageManagerTool.registryUsername')}</Label><Input value={editingSource.registryUsername ?? ''} onChange={(e) => updateDraft({ registryUsername: e.target.value })} /></div>
+                    <div className="flex flex-col gap-1"><Label>{t('imageManagerTool.registryPassword')}</Label><Input type="password" value={editingSource.registryPassword ?? ''} onChange={(e) => updateDraft({ registryPassword: e.target.value })} /></div>
+                  </>}
+                </div>
+                <Button onClick={saveSource} disabled={!editingSource.name?.trim()}>{t('imageManagerTool.saveSource')}</Button>
+              </div>
+            ) : null}
           </div>
+          {sourceSaveError ? <p className="m-0 text-sm text-destructive">{sourceSaveError}</p> : null}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setManageOpen(false)}>
+            <Button variant="outline" disabled={savingSources} onClick={() => setManageOpen(false)}>
               {t('imageManagerTool.cancel')}
             </Button>
-            <Button onClick={saveSources}>{t('imageManagerTool.saveSources')}</Button>
+            <Button disabled={savingSources} onClick={() => void saveSources()}>{savingSources ? <Spinner data-icon="inline-start" /> : null}{t('imageManagerTool.saveSources')}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1018,7 +1207,9 @@ export default function ImageManagerTool({
                     name: imageLabel(confirm.image, unnamed),
                   })
                 : confirm?.type === 'delete'
-                  ? confirm.ids.length > 1
+                  ? confirm.sourceKind === 'registry'
+                    ? t('imageManagerTool.registryDeleteConfirmBody', { digest: confirm.digests.join(', '), tags: confirm.tags.join(', ') || t('imageManagerTool.emptyValue') })
+                    : confirm.ids.length > 1
                     ? t('imageManagerTool.deleteConfirmManyBody', { count: confirm.ids.length })
                     : t('imageManagerTool.deleteConfirmBody', { name: confirm.name })
                   : null}

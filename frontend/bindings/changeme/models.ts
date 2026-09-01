@@ -36,6 +36,11 @@ export interface DockerDeleteResult {
 export interface DockerImage {
     "id": string;
     "name": string;
+    "tags": string[] | null;
+    "repository": string;
+    "digest": string;
+    "mediaType": string;
+    "sizeType": string;
     "size": string;
     "sizeBytes": number;
     "createdAt": string;
@@ -52,6 +57,12 @@ export interface DockerImageDetail {
     "labels": { [_ in string]?: string } | null;
     "command": string[] | null;
     "entrypoint": string[] | null;
+    "repository": string;
+    "digest": string;
+    "mediaType": string;
+    "sizeType": string;
+    "manifest": RegistryManifest | null;
+    "index": RegistryIndex | null;
 }
 
 export interface DockerOperationResult {
@@ -113,6 +124,41 @@ export interface ImageSource {
     "name": string;
     "kind": string;
     "sshHost": string;
+    "sshPort": number;
+    "sshUsername": string;
+    "sshPassword": string;
+    "sshPrivateKey": string;
+    "sshPrivateKeyPath": string;
+    "sshKeyPassphrase": string;
+    "registryURL": string;
+    "registryUsername": string;
+    "registryPassword": string;
+}
+
+export interface RegistryDescriptor {
+    "mediaType": string;
+    "digest": string;
+    "size": number;
+    "platform": RegistryPlatform | null;
+}
+
+export interface RegistryIndex {
+    "schemaVersion": number;
+    "mediaType": string;
+    "manifests": RegistryDescriptor[] | null;
+}
+
+export interface RegistryManifest {
+    "schemaVersion": number;
+    "mediaType": string;
+    "config": RegistryDescriptor;
+    "layers": RegistryDescriptor[] | null;
+}
+
+export interface RegistryPlatform {
+    "architecture": string;
+    "os": string;
+    "variant": string;
 }
 
 /**

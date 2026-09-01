@@ -102,10 +102,48 @@ import { resolveTheme } from './theme';
 
 type Page = 'settings' | 'history' | ToolId;
 type SaveWaiter = {
+  target: Settings;
+  resolve: () => void;
+  reject: (reason?: unknown) => void;
+};
+type ImageSourceSaveRequest = {
+  patch: Pick<Settings, 'dockerCLIPath' | 'imageSources'>;
   resolve: () => void;
   reject: (reason?: unknown) => void;
 };
 type SidebarMode = 'full' | 'icon' | 'hidden';
+function normalizedImageSource(source: NonNullable<Settings['imageSources']>[number]) {
+  const value = source as unknown as Record<string, unknown>;
+  const kind = String(value.kind ?? '').trim();
+  const registry = kind === 'registry';
+  const ssh = kind === 'ssh';
+  let registryURL = registry ? String(value.registryURL ?? '').trim().replace(/\/+$/, '') : '';
+  try {
+    const parsed = new URL(registryURL);
+    if (parsed.protocol === 'https:') {
+      parsed.hostname = parsed.hostname.toLowerCase();
+      parsed.pathname = parsed.pathname.replace(/\/+$/, '');
+      registryURL = parsed.toString().replace(/\/$/, '');
+    }
+  } catch {
+    // 保留服务端可接受的非标准地址，由服务端负责最终校验。
+  }
+  return {
+    id: String(value.id ?? ''),
+    name: String(value.name ?? '').trim(),
+    kind,
+    sshHost: ssh ? String(value.sshHost ?? '').trim() : '',
+    sshPort: ssh ? Number(value.sshPort) || 22 : 0,
+    sshUsername: ssh ? String(value.sshUsername ?? '').trim() : '',
+    sshPassword: ssh ? String(value.sshPassword ?? '') : '',
+    sshPrivateKey: ssh ? String(value.sshPrivateKey ?? '') : '',
+    sshPrivateKeyPath: ssh ? String(value.sshPrivateKeyPath ?? '') : '',
+    sshKeyPassphrase: ssh ? String(value.sshKeyPassphrase ?? '') : '',
+    registryURL,
+    registryUsername: registry ? String(value.registryUsername ?? '').trim() : '',
+    registryPassword: registry ? String(value.registryPassword ?? '') : '',
+  };
+}
 type PaletteContext = string;
 type PaletteItem = {
   id: string;
@@ -173,7 +211,23 @@ const defaultSettings: Settings = {
   jsonAutoFormatOnFill: true,
   jsonAutoFormatOnFillMigrated: true,
   dockerCLIPath: '',
-  imageSources: [{ id: 'local', name: '本机', kind: 'local', sshHost: '' }],
+  imageSources: [
+    {
+      id: 'local',
+      name: '本机',
+      kind: 'local',
+      sshHost: '',
+      sshPort: 0,
+      sshUsername: '',
+      sshPassword: '',
+      sshPrivateKey: '',
+      sshPrivateKeyPath: '',
+      sshKeyPassphrase: '',
+      registryURL: '',
+      registryUsername: '',
+      registryPassword: '',
+    },
+  ],
 };
 const JsonTool = lazy(() => import('./components/JsonTool'));
 const TimeTool = lazy(() => import('./components/TimeTool'));
@@ -1012,6 +1066,7 @@ function AppShell() {
   const saveInFlight = useRef(false);
   const saveQueued = useRef(false);
   const saveWaiters = useRef<SaveWaiter[]>([]);
+  const imageSourceSaveRequests = useRef<ImageSourceSaveRequest[]>([]);
   const persistLatestRef = useRef<() => Promise<void>>(async () => {});
   const startPersistLatest = () => {
     void persistLatestRef.current().catch((error) => {
@@ -1173,26 +1228,48 @@ function AppShell() {
   persistLatestRef.current = async () => {
     if (saveInFlight.current) return;
     saveInFlight.current = true;
-    let latestSaveFailed = false;
-    let latestSaveError: unknown;
     try {
-      while (saveQueued.current) {
+      while (saveQueued.current || imageSourceSaveRequests.current.length > 0) {
+        const sourceRequest = imageSourceSaveRequests.current.shift();
+        if (sourceRequest) {
+          const candidate = { ...settingsRef.current, ...sourceRequest.patch };
+          try {
+            await SaveConfig(candidate);
+            const canonical = await GetConfig();
+            const candidateSources = (candidate.imageSources ?? []).map(normalizedImageSource);
+            const canonicalSources = (canonical.imageSources ?? []).map(normalizedImageSource);
+            if (JSON.stringify(canonicalSources) !== JSON.stringify(candidateSources)) throw new Error(t('toast.settingsCanonicalMismatch'));
+            const committed = {
+              ...settingsRef.current,
+              dockerCLIPath: canonical.dockerCLIPath,
+              imageSources: canonical.imageSources,
+            };
+            settingsRef.current = committed;
+            setSettingsWithThemeTransition(committed);
+            sourceRequest.resolve();
+          } catch (error) {
+            sourceRequest.reject(error);
+          }
+          continue;
+        }
         saveQueued.current = false;
         const cfg = settingsRef.current;
         try {
           await SaveConfig(cfg);
+          const completed = saveWaiters.current.filter((waiter) => waiter.target === cfg);
+          saveWaiters.current = saveWaiters.current.filter((waiter) => waiter.target !== cfg);
+          completed.forEach((waiter) => waiter.resolve());
           if (settingsRef.current !== cfg) {
             saveQueued.current = true;
             continue;
           }
           void SetAutoCheckEnabled(cfg.autoCheckUpdates);
           setHistoryRevision((current) => current + 1);
-          latestSaveFailed = false;
-          latestSaveError = undefined;
         } catch (error) {
           toast.add({ title: t('toast.settingsFailed'), type: 'error' });
-          latestSaveFailed = true;
-          latestSaveError = error;
+          const failed = saveWaiters.current.filter((waiter) => waiter.target === cfg);
+          saveWaiters.current = saveWaiters.current.filter((waiter) => waiter.target !== cfg);
+          failed.forEach((waiter) => waiter.reject(error));
           if (settingsRef.current !== cfg) saveQueued.current = true;
         }
       }
@@ -1200,23 +1277,29 @@ function AppShell() {
       saveInFlight.current = false;
       if (saveQueued.current) startPersistLatest();
       else {
-        const waiters = saveWaiters.current;
+        // 仅由对应配置对象的 SaveConfig 结果结算 waiter。
+        const orphaned = saveWaiters.current;
         saveWaiters.current = [];
-        for (const waiter of waiters) {
-          if (latestSaveFailed) waiter.reject(latestSaveError);
-          else waiter.resolve();
-        }
+        orphaned.forEach((waiter) => waiter.reject(new Error('Settings save snapshot was superseded')));
       }
     }
   };
-  const flushSettingsSave = () => {
+  const flushSettingsSave = (target: Settings = settingsRef.current) => {
     if (!settingsReady.current) return Promise.resolve();
     saveQueued.current = true;
     const pending = new Promise<void>((resolve, reject) => {
-      saveWaiters.current.push({ resolve, reject });
+      saveWaiters.current.push({ target, resolve, reject });
     });
     startPersistLatest();
     return pending;
+  };
+  const saveImageManagerSettings = (patch: Pick<Settings, 'dockerCLIPath' | 'imageSources'>) => {
+    const transaction = new Promise<void>((resolve, reject) => {
+      imageSourceSaveRequests.current.push({ patch, resolve, reject });
+    });
+    saveQueued.current = true;
+    startPersistLatest();
+    return transaction;
   };
   useEffect(() => {
     if (!settingsReady.current) return;
@@ -1711,9 +1794,7 @@ function AppShell() {
                   <ImageManagerTool
                     active={page === 'image-manager'}
                     settings={settings}
-                    onSettingsChange={(patch) =>
-                      setSettings((current) => ({ ...current, ...patch }))
-                    }
+                    onSettingsChange={saveImageManagerSettings}
                     record={record}
                     pending={pending}
                     clearPending={() => setPending(null)}
