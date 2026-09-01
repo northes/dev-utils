@@ -728,11 +728,38 @@ func (s *sshConfigParseState) expandInclude(pattern string, baseDir string) ([]s
 
 func (s *ImageService) GetDockerStatus(sourceID string) DockerStatus {
 	source, cliPath, err := s.source(sourceID)
-	status := DockerStatus{CLIPath: cliPath}
 	if err != nil {
-		status.Error = err.Error()
-		return status
+		return DockerStatus{CLIPath: cliPath, Error: err.Error()}
 	}
+	return s.sourceConnectionStatus(source, cliPath)
+}
+
+// TestImageSourceConnection 使用未持久化的来源配置测试 SSH 或 Registry 连接。
+func (s *ImageService) TestImageSourceConnection(source ImageSource) error {
+	if s == nil || s.config == nil {
+		return errors.New("镜像服务未配置")
+	}
+	normalized, err := s.config.ValidateImageSource(source)
+	if err != nil {
+		return err
+	}
+	if normalized.Kind != "ssh" && normalized.Kind != "registry" {
+		return errors.New("仅支持测试 SSH 或 Registry 来源")
+	}
+	config := normalizeConfig(s.config.Get())
+	cliPath := config.DockerCLIPath
+	if cliPath == "" {
+		cliPath = "docker"
+	}
+	status := s.sourceConnectionStatus(normalized, cliPath)
+	if !status.Available {
+		return errors.New(status.Error)
+	}
+	return nil
+}
+
+func (s *ImageService) sourceConnectionStatus(source ImageSource, cliPath string) DockerStatus {
+	status := DockerStatus{CLIPath: cliPath}
 	if source.Kind == "registry" {
 		ctx, cancel := context.WithTimeout(s.serviceContext(), imageCommandTimeout)
 		defer cancel()
@@ -837,19 +864,29 @@ func (s *ImageService) ListDockerImages(sourceID string) ([]DockerImage, error) 
 	token, requestCtx := s.beginListRequest(sourceID)
 	source, cliPath, fingerprint, err := s.sourceSnapshot(sourceID)
 	if err != nil {
+		if s.listRequestObsolete(token, requestCtx) {
+			return []DockerImage{}, nil
+		}
 		return nil, err
 	}
 	if !s.setListFingerprint(token, fingerprint) {
-		return nil, requestCtx.Err()
+		return []DockerImage{}, nil
 	}
 	if source.Kind == "registry" {
-		return s.listRegistryImages(sourceID, source, token, requestCtx)
+		images, err := s.listRegistryImages(sourceID, source, token, requestCtx)
+		if s.listRequestObsolete(token, requestCtx) {
+			return []DockerImage{}, nil
+		}
+		return images, err
 	}
 	s.cleanupImageCache()
 	listCtx, cancel := context.WithTimeout(requestCtx, imageCommandTimeout)
 	defer cancel()
 	output, err := s.runDockerSnapshotContext(listCtx, source, cliPath, []string{"image", "ls", "--no-trunc", "--format", "{{json .}}"})
 	if err != nil {
+		if s.listRequestObsolete(token, requestCtx) {
+			return []DockerImage{}, nil
+		}
 		return nil, err
 	}
 	images := make([]DockerImage, 0)
@@ -861,6 +898,9 @@ func (s *ImageService) ListDockerImages(sourceID string) ([]DockerImage, error) 
 		}
 		var item dockerImageListJSON
 		if err := json.Unmarshal([]byte(line), &item); err != nil {
+			if s.listRequestObsolete(token, requestCtx) {
+				return []DockerImage{}, nil
+			}
 			return nil, fmt.Errorf("解析 Docker 镜像列表失败: %w", err)
 		}
 		name := item.Repository
@@ -877,7 +917,7 @@ func (s *ImageService) ListDockerImages(sourceID string) ([]DockerImage, error) 
 		images = append(images, DockerImage{ID: item.ID, Name: name, Tags: []string{name}, Size: item.Size, SizeBytes: parseDockerImageSize(item.Size), CreatedAt: item.CreatedAt})
 	}
 	if !s.updateImageInventoryIfCurrent(token, sourceID, fingerprint, source, images) {
-		return images, requestCtx.Err()
+		return images, nil
 	}
 	s.schedulePrewarm(sourceID, source, cliPath, fingerprint, images, token, requestCtx)
 	return images, nil
@@ -1457,6 +1497,12 @@ func (s *ImageService) listRequestCurrent(token uint64) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.activeListToken == token
+}
+
+// 被新请求或服务生命周期取消的刷新属于正常控制流，不应把 context.Canceled
+// 穿透到 Wails 绑定层，变成用户可见的 Binding call failed。
+func (s *ImageService) listRequestObsolete(token uint64, requestCtx context.Context) bool {
+	return requestCtx.Err() != nil || !s.listRequestCurrent(token)
 }
 
 func (s *ImageService) setListFingerprint(token uint64, fingerprint string) bool {

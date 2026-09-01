@@ -1,5 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+// @ts-ignore -- 遵循明确要求: 用且只用 import { TbBrandDocker } from "react-icons/tb"
+import { TbBrandDocker } from 'react-icons/tb';
 import {
   ArrowsClockwise,
   CaretDown,
@@ -20,7 +22,9 @@ import {
   InspectDockerImage,
   ListDockerImages,
   PushDockerImage,
+  TestImageSourceConnection,
 } from '../../bindings/changeme/imageservice';
+import { ValidateImageSource } from '../../bindings/changeme/configservice';
 import type {
   Config as Settings,
   DockerImage,
@@ -48,6 +52,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from './ui/alert-dialog';
+import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { ButtonGroup } from './ui/button-group';
 import { Checkbox } from './ui/checkbox';
@@ -68,9 +73,12 @@ import {
 } from './ui/dropdown-menu';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
+import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Spinner } from './ui/spinner';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
+import { Textarea } from './ui/textarea';
 import { toast } from './ui/toast';
 
 const LOCAL_SOURCE_ID = 'local';
@@ -82,7 +90,18 @@ const LOCAL_SOURCE = {
 } as unknown as ImageSource;
 
 type SourceKind = 'local' | 'ssh' | 'registry';
-type ManagedImageSource = Omit<ImageSource, 'sshPort' | 'sshUsername' | 'sshPassword' | 'sshPrivateKey' | 'sshKeyPassphrase' | 'sshPrivateKeyPath' | 'registryURL' | 'registryUsername' | 'registryPassword'> & {
+type ManagedImageSource = Omit<
+  ImageSource,
+  | 'sshPort'
+  | 'sshUsername'
+  | 'sshPassword'
+  | 'sshPrivateKey'
+  | 'sshKeyPassphrase'
+  | 'sshPrivateKeyPath'
+  | 'registryURL'
+  | 'registryUsername'
+  | 'registryPassword'
+> & {
   sshPort?: number | string;
   sshUsername?: string;
   sshPassword?: string;
@@ -94,11 +113,20 @@ type ManagedImageSource = Omit<ImageSource, 'sshPort' | 'sshUsername' | 'sshPass
   registryPassword?: string;
   capabilities?: { canDelete?: boolean; canPush?: boolean };
 };
-type SourceDraft = Partial<ManagedImageSource> & Pick<ManagedImageSource, 'name' | 'kind' | 'sshHost'> & { id?: string };
+type SourceDraft = Partial<ManagedImageSource> &
+  Pick<ManagedImageSource, 'name' | 'kind' | 'sshHost'> & { id?: string };
 
 type ConfirmState =
   | { type: 'push'; image: DockerImage }
-  | { type: 'delete'; ids: string[]; name: string; sourceId: string; sourceKind: string; digests: string[]; tags: string[] }
+  | {
+      type: 'delete';
+      ids: string[];
+      name: string;
+      sourceId: string;
+      sourceKind: string;
+      digests: string[];
+      tags: string[];
+    }
   | null;
 
 function errorMessage(error: unknown) {
@@ -135,7 +163,7 @@ function sourceDisplayName(source: ImageSource, t: (key: string) => string) {
 function bindingSource(source: ManagedImageSource): ImageSource {
   const ssh = source.kind === 'ssh';
   const registry = source.kind === 'registry';
-  const registryURL = registry ? source.registryURL?.trim() ?? '' : '';
+  const registryURL = registry ? (source.registryURL?.trim() ?? '') : '';
   let normalizedRegistryURL = registryURL.replace(/\/+$/, '');
   try {
     const parsed = new URL(registryURL);
@@ -153,14 +181,14 @@ function bindingSource(source: ManagedImageSource): ImageSource {
     kind: source.kind.trim(),
     sshHost: ssh ? source.sshHost.trim() : '',
     sshPort: ssh ? Number(source.sshPort) || 22 : 0,
-    sshUsername: ssh ? source.sshUsername?.trim() ?? '' : '',
-    sshPassword: ssh ? source.sshPassword ?? '' : '',
-    sshPrivateKey: ssh ? source.sshPrivateKey ?? '' : '',
-    sshPrivateKeyPath: ssh ? source.sshPrivateKeyPath ?? '' : '',
-    sshKeyPassphrase: ssh ? source.sshKeyPassphrase ?? '' : '',
+    sshUsername: ssh ? (source.sshUsername?.trim() ?? '') : '',
+    sshPassword: ssh ? (source.sshPassword ?? '') : '',
+    sshPrivateKey: ssh ? (source.sshPrivateKey ?? '') : '',
+    sshPrivateKeyPath: ssh ? (source.sshPrivateKeyPath ?? '') : '',
+    sshKeyPassphrase: ssh ? (source.sshKeyPassphrase ?? '') : '',
     registryURL: normalizedRegistryURL,
-    registryUsername: registry ? source.registryUsername?.trim() ?? '' : '',
-    registryPassword: registry ? source.registryPassword ?? '' : '',
+    registryUsername: registry ? (source.registryUsername?.trim() ?? '') : '',
+    registryPassword: registry ? (source.registryPassword ?? '') : '',
   } as ImageSource;
 }
 
@@ -190,10 +218,63 @@ function formatBytes(bytes: number, locale: string) {
   })} ${units[unit]}`;
 }
 
+function parseDateSafe(value: string): Date | null {
+  if (!value) return null;
+  const raw = value.trim();
+  if (!raw) return null;
+
+  // 1. 标准 Date 解析（ISO 8601、RFC 3339 等）
+  let parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed;
+  }
+
+  // 2. 匹配 Go time.String() 格式，例如: "2025-07-15 19:01:16 +0800 CST" 或 "2025-07-15 19:01:16.123456789 +0800 CST m=+0.000000001"
+  // 去除尾随的非标准时区缩写/单调时钟，转换为标准 ISO/RFC 格式 "YYYY-MM-DDTHH:mm:ss[.SSS]±HH:MM"
+  const goTimeMatch = raw.match(
+    /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2}(?:\.\d+)?)\s*([+-]\d{2})(?::?(\d{2}))?(?:\s+[A-Za-z0-9_-]+)?(?:\s+m=.*)?$/,
+  );
+  if (goTimeMatch) {
+    const [, datePart, timePart, tzHours, tzMinutes = '00'] = goTimeMatch;
+    const isoString = `${datePart}T${timePart}${tzHours}:${tzMinutes}`;
+    parsed = new Date(isoString);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed;
+    }
+  }
+
+  // 3. 匹配常见无时区格式 "YYYY-MM-DD HH:mm:ss"
+  const simpleMatch = raw.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2}(?:\.\d+)?)$/);
+  if (simpleMatch) {
+    const [, datePart, timePart] = simpleMatch;
+    parsed = new Date(`${datePart}T${timePart}`);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed;
+    }
+  }
+
+  return null;
+}
+
 function formatCreatedAt(value: string, locale: string) {
   if (!value) return '';
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString(locale);
+  const date = parseDateSafe(value);
+  return date ? date.toLocaleString(locale) : value;
+}
+
+function formatCreatedAtCompact(value: string, locale: string) {
+  if (!value) return '';
+  const date = parseDateSafe(value);
+  if (!date) return value;
+  const isCurrentYear = date.getFullYear() === new Date().getFullYear();
+  return new Intl.DateTimeFormat(locale, {
+    ...(isCurrentYear ? {} : { year: 'numeric' }),
+    month: 'numeric',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).format(date);
 }
 
 function shortId(id: string) {
@@ -244,7 +325,6 @@ export default function ImageManagerTool({
   const { t, i18n } = useTranslation();
   const consumed = useRef<PendingAction | null>(null);
   const sourceLabelId = useId();
-  const cliPathId = useId();
   const sources = useMemo(() => resolveSources(settings.imageSources), [settings.imageSources]);
   const cliPath = settings.dockerCLIPath ?? '';
   const [sourceId, setSourceId] = useState(LOCAL_SOURCE_ID);
@@ -259,12 +339,14 @@ export default function ImageManagerTool({
   const [detailLoading, setDetailLoading] = useState(false);
   const [busy, setBusy] = useState<'push' | 'delete' | null>(null);
   const [manageOpen, setManageOpen] = useState(false);
+  const [manageTab, setManageTab] = useState<'ssh' | 'registry'>('ssh');
   const [editingSource, setEditingSource] = useState<SourceDraft | null>(null);
   const [draftSources, setDraftSources] = useState<ImageSource[]>([]);
   const [savingSources, setSavingSources] = useState(false);
   const [sourceSaveError, setSourceSaveError] = useState('');
+  const [sourceDraftError, setSourceDraftError] = useState('');
+  const [testingSource, setTestingSource] = useState(false);
   const [copiedName, setCopiedName] = useState<string | null>(null);
-  const [draftCliPath, setDraftCliPath] = useState(cliPath);
   const [hostOptions, setHostOptions] = useState<Array<{ alias: string; selected: boolean }>>([]);
   const [hostsLoading, setHostsLoading] = useState(false);
   const [hostsError, setHostsError] = useState('');
@@ -418,12 +500,13 @@ export default function ImageManagerTool({
   };
 
   const openManage = () => {
-    setDraftCliPath(cliPath);
+    setManageTab('ssh');
     setHostsError('');
     setHostOptions([]);
     setManageOpen(true);
     setDraftSources(sources);
     setSourceSaveError('');
+    setSourceDraftError('');
     setHostsLoading(true);
     void GetSSHConfigHosts()
       .then((hosts) => {
@@ -453,33 +536,215 @@ export default function ImageManagerTool({
       .finally(() => setHostsLoading(false));
   };
 
-  const newSource = (kind: SourceKind) => {
+  const newSource = (kind: 'ssh' | 'registry') => {
+    setManageTab(kind);
+    setSourceDraftError('');
     setEditingSource({ id: '', name: '', kind, sshHost: '', sshPort: 22 });
   };
 
   const editSource = (item: ImageSource) => {
-    setEditingSource({ ...(item as ManagedImageSource) });
+    const kind = (item.kind === 'registry' ? 'registry' : 'ssh') as 'ssh' | 'registry';
+    setManageTab(kind);
+    setSourceDraftError('');
+    setEditingSource({ ...(item as ManagedImageSource), kind });
   };
 
-  const updateDraft = (patch: Partial<SourceDraft>) =>
+  const updateDraft = (patch: Partial<SourceDraft>) => {
+    setSourceDraftError('');
     setEditingSource((current) => (current ? { ...current, ...patch } : current));
+  };
 
-  const saveSource = () => {
-    if (!editingSource || !editingSource.name?.trim()) return;
+  const sourceCandidate = (draft: SourceDraft, id?: string) => {
+    const kind = draft.kind as 'ssh' | 'registry';
+    return bindingSource({
+      ...draft,
+      id: id || draft.id?.trim() || `${kind}:connection-test`,
+      kind,
+      name: draft.name?.trim() ?? '',
+      sshHost: draft.sshHost?.trim() ?? '',
+    } as ManagedImageSource);
+  };
+
+  const saveSource = async () => {
+    if (!editingSource) return;
     const kind = editingSource.kind as SourceKind;
     const id = editingSource.id?.trim() || `${kind}:${crypto.randomUUID()}`;
-    const next = { ...editingSource, id, name: editingSource.name.trim(), kind } as ManagedImageSource;
-    setDraftSources((current) => [
-      ...current.filter((item) => !isLocalSource(item) && item.id !== editingSource.id),
-      bindingSource(next),
-    ]);
-    setEditingSource(null);
+    try {
+      const next = await ValidateImageSource(sourceCandidate(editingSource, id));
+      setDraftSources((current) => [
+        ...current.filter((item) => !isLocalSource(item) && item.id !== editingSource.id),
+        next,
+      ]);
+      setSourceDraftError('');
+      setEditingSource(null);
+    } catch (error) {
+      setSourceDraftError(errorMessage(error) || t('imageManagerTool.sourceInvalid'));
+    }
+  };
+
+  const testSourceConnection = async () => {
+    if (!editingSource) return;
+    setTestingSource(true);
+    try {
+      await TestImageSourceConnection(sourceCandidate(editingSource));
+      setSourceDraftError('');
+      toast.add({ title: t('imageManagerTool.connectionSucceeded'), type: 'success' });
+    } catch (error) {
+      setSourceDraftError(errorMessage(error) || t('imageManagerTool.connectionFailed'));
+    } finally {
+      setTestingSource(false);
+    }
   };
 
   const removeSource = (id: string) => {
     if (id === LOCAL_SOURCE_ID) return;
     setDraftSources((current) => current.filter((item) => isLocalSource(item) || item.id !== id));
     if (sourceId === id) setSourceId(LOCAL_SOURCE_ID);
+  };
+
+  const renderEditForm = () => {
+    if (!editingSource) return null;
+    return (
+      <div className="flex flex-col gap-3 border-t border-border pt-3">
+        <div className="flex items-center justify-between">
+          <h3 className="m-0 text-sm font-medium text-foreground">
+            {editingSource.id ? t('imageManagerTool.editSource') : t('imageManagerTool.addSource')}
+          </h3>
+          <Button variant="ghost" size="sm" onClick={() => setEditingSource(null)}>
+            {t('imageManagerTool.cancel')}
+          </Button>
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="flex flex-col gap-1 sm:col-span-2">
+            <Label htmlFor="source-edit-name">{t('imageManagerTool.sourceName')}</Label>
+            <Input
+              id="source-edit-name"
+              value={editingSource.name ?? ''}
+              onChange={(e) => updateDraft({ name: e.target.value })}
+            />
+          </div>
+          {editingSource.kind === 'ssh' ? (
+            <>
+              <div className="flex flex-col gap-1">
+                <Label htmlFor="source-edit-ssh-host">{t('imageManagerTool.sshHost')}</Label>
+                <Input
+                  id="source-edit-ssh-host"
+                  value={editingSource.sshHost ?? ''}
+                  onChange={(e) => updateDraft({ sshHost: e.target.value })}
+                  placeholder={t('imageManagerTool.sshHostPlaceholder')}
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <Label htmlFor="source-edit-ssh-port">{t('imageManagerTool.sshPort')}</Label>
+                <Input
+                  id="source-edit-ssh-port"
+                  type="number"
+                  value={editingSource.sshPort ?? 22}
+                  onChange={(e) => updateDraft({ sshPort: Number(e.target.value) || 22 })}
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <Label htmlFor="source-edit-ssh-username">
+                  {t('imageManagerTool.sshUsername')}
+                </Label>
+                <Input
+                  id="source-edit-ssh-username"
+                  value={editingSource.sshUsername ?? ''}
+                  onChange={(e) => updateDraft({ sshUsername: e.target.value })}
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <Label htmlFor="source-edit-ssh-password">
+                  {t('imageManagerTool.sshPassword')}
+                </Label>
+                <Input
+                  id="source-edit-ssh-password"
+                  type="password"
+                  value={editingSource.sshPassword ?? ''}
+                  onChange={(e) => updateDraft({ sshPassword: e.target.value })}
+                />
+              </div>
+              <div className="flex flex-col gap-1 sm:col-span-2">
+                <Label htmlFor="source-edit-ssh-privkey">
+                  {t('imageManagerTool.sshPrivateKey')}
+                </Label>
+                <Textarea
+                  id="source-edit-ssh-privkey"
+                  className="min-h-32 text-xs font-mono"
+                  value={editingSource.sshPrivateKey ?? ''}
+                  onChange={(e) => updateDraft({ sshPrivateKey: e.target.value })}
+                />
+              </div>
+              <div className="flex flex-col gap-1 sm:col-span-2">
+                <Label htmlFor="source-edit-ssh-passphrase">
+                  {t('imageManagerTool.sshKeyPassphrase')}
+                </Label>
+                <Input
+                  id="source-edit-ssh-passphrase"
+                  type="password"
+                  value={editingSource.sshKeyPassphrase ?? ''}
+                  onChange={(e) => updateDraft({ sshKeyPassphrase: e.target.value })}
+                />
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex flex-col gap-1 sm:col-span-2">
+                <Label htmlFor="source-edit-registry-url">
+                  {t('imageManagerTool.registryURL')}
+                </Label>
+                <Input
+                  id="source-edit-registry-url"
+                  value={editingSource.registryURL ?? ''}
+                  onChange={(e) => updateDraft({ registryURL: e.target.value })}
+                  placeholder={t('imageManagerTool.registryURLPlaceholder')}
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <Label htmlFor="source-edit-registry-username">
+                  {t('imageManagerTool.registryUsername')}
+                </Label>
+                <Input
+                  id="source-edit-registry-username"
+                  value={editingSource.registryUsername ?? ''}
+                  onChange={(e) => updateDraft({ registryUsername: e.target.value })}
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <Label htmlFor="source-edit-registry-password">
+                  {t('imageManagerTool.registryPassword')}
+                </Label>
+                <Input
+                  id="source-edit-registry-password"
+                  type="password"
+                  value={editingSource.registryPassword ?? ''}
+                  onChange={(e) => updateDraft({ registryPassword: e.target.value })}
+                />
+              </div>
+            </>
+          )}
+        </div>
+        {sourceDraftError ? (
+          <p className="m-0 text-sm text-destructive" role="alert">
+            {sourceDraftError}
+          </p>
+        ) : null}
+        <div className="flex justify-end gap-2 pt-1">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={testingSource}
+            onClick={() => void testSourceConnection()}
+          >
+            {testingSource ? <Spinner data-icon="inline-start" /> : null}
+            {t('imageManagerTool.testConnection')}
+          </Button>
+          <Button size="sm" onClick={() => void saveSource()} disabled={testingSource}>
+            {t('imageManagerTool.saveSource')}
+          </Button>
+        </div>
+      </div>
+    );
   };
 
   const saveSources = async () => {
@@ -491,25 +756,42 @@ export default function ImageManagerTool({
       ...hostOptions
         .filter((host) => host.selected)
         .filter((host) => !existingIds.has(sshSourceId(host.alias)))
-        .map((host) => bindingSource({
-          id: sshSourceId(host.alias),
-          name: host.alias,
-          kind: 'ssh',
-          sshHost: host.alias,
-        } as ManagedImageSource)),
-      ...existing.filter((item) => !hostOptions.some((host) => sshSourceId(host.alias) === item.id && !host.selected)).map((item) => bindingSource(item as ManagedImageSource)),
+        .map((host) =>
+          bindingSource({
+            id: sshSourceId(host.alias),
+            name: host.alias,
+            kind: 'ssh',
+            sshHost: host.alias,
+          } as ManagedImageSource),
+        ),
+      ...existing
+        .filter(
+          (item) =>
+            !hostOptions.some((host) => sshSourceId(host.alias) === item.id && !host.selected),
+        )
+        .map((item) => bindingSource(item as ManagedImageSource)),
     ];
     const invalid = nextSources.find((item) =>
-      item.kind === 'ssh' ? !item.sshHost.trim() : item.kind === 'registry' ? !item.registryURL.trim() : false,
+      item.kind === 'ssh'
+        ? !item.sshHost.trim()
+        : item.kind === 'registry'
+          ? !item.registryURL.trim()
+          : false,
     );
     if (invalid) {
-      setSourceSaveError(t(invalid.kind === 'ssh' ? 'imageManagerTool.sshHostRequired' : 'imageManagerTool.registryURLRequired'));
+      setSourceSaveError(
+        t(
+          invalid.kind === 'ssh'
+            ? 'imageManagerTool.sshHostRequired'
+            : 'imageManagerTool.registryURLRequired',
+        ),
+      );
       return;
     }
     setSavingSources(true);
     setSourceSaveError('');
     try {
-      await onSettingsChange({ dockerCLIPath: draftCliPath.trim(), imageSources: nextSources });
+      await onSettingsChange({ dockerCLIPath: cliPath, imageSources: nextSources });
       setManageOpen(false);
     } catch (error) {
       setSourceSaveError(errorMessage(error) || t('imageManagerTool.sourceSaveFailed'));
@@ -560,7 +842,10 @@ export default function ImageManagerTool({
     try {
       await navigator.clipboard.writeText(name);
       setCopiedName(name);
-      window.setTimeout(() => setCopiedName((current) => (current === name ? null : current)), 1400);
+      window.setTimeout(
+        () => setCopiedName((current) => (current === name ? null : current)),
+        1400,
+      );
       toast.add({ title: t('imageManagerTool.copied') });
     } catch {
       toast.add({ title: t('imageManagerTool.copyFailed'), type: 'error' });
@@ -629,19 +914,46 @@ export default function ImageManagerTool({
     else void runDelete(confirm.sourceId, confirm.ids, confirm.name);
   };
 
-  const statusText = source.kind === 'registry'
-    ? loading
-      ? t('imageManagerTool.statusCheckingRegistry')
-      : loadError
-        ? t('imageManagerTool.statusRegistryUnavailable')
-        : t('imageManagerTool.statusRegistryAvailable')
-    : loading
-    ? t('imageManagerTool.statusChecking')
-    : status?.available
-      ? t('imageManagerTool.statusAvailable', {
-          version: status.version || t('imageManagerTool.emptyValue'),
-        })
-      : status?.error || t('imageManagerTool.statusUnavailable');
+  const statusText =
+    source.kind === 'registry'
+      ? loading
+        ? t('imageManagerTool.statusCheckingRegistry')
+        : loadError
+          ? t('imageManagerTool.statusRegistryUnavailable')
+          : t('imageManagerTool.statusRegistryAvailable')
+      : loading
+        ? t('imageManagerTool.statusChecking')
+        : status?.available
+          ? t('imageManagerTool.statusAvailable', {
+              version: status.version || t('imageManagerTool.emptyValue'),
+            })
+          : status?.error || t('imageManagerTool.statusUnavailable');
+
+  const statusBadgeLabel =
+    source.kind === 'registry'
+      ? loading
+        ? t('imageManagerTool.statusBadgeRegistryChecking')
+        : loadError
+          ? t('imageManagerTool.statusBadgeUnavailable')
+          : t('imageManagerTool.statusBadgeRegistryAvailable')
+      : loading
+        ? t('imageManagerTool.statusBadgeChecking')
+        : status?.available
+          ? t('imageManagerTool.statusBadgeAvailable')
+          : t('imageManagerTool.statusBadgeUnavailable');
+
+  const statusBadgeVariant =
+    source.kind === 'registry'
+      ? loadError
+        ? 'destructive'
+        : 'outline'
+      : loading || status?.available
+        ? 'outline'
+        : 'destructive';
+
+  const sourceKindLabel = t(
+    `imageManagerTool.kind${source.kind === 'registry' ? 'Registry' : source.kind === 'ssh' ? 'Ssh' : 'Local'}`,
+  );
 
   const detailRows = detail
     ? [
@@ -661,12 +973,23 @@ export default function ImageManagerTool({
         {
           key: 'manifest',
           label: t('imageManagerTool.detailManifest'),
-          value: detail.manifest ? `${detail.manifest.mediaType} · ${t('imageManagerTool.manifestSize', { size: formatBytes(detail.manifest.config.size + (detail.manifest.layers ?? []).reduce((total, layer) => total + layer.size, 0), i18n.language) })}` : detail.index ? t('imageManagerTool.detailIndex') : '',
+          value: detail.manifest
+            ? `${detail.manifest.mediaType} · ${t('imageManagerTool.manifestSize', { size: formatBytes(detail.manifest.config.size + (detail.manifest.layers ?? []).reduce((total, layer) => total + layer.size, 0), i18n.language) })}`
+            : detail.index
+              ? t('imageManagerTool.detailIndex')
+              : '',
         },
         {
           key: 'platforms',
           label: t('imageManagerTool.detailPlatforms'),
-          value: detail.index?.manifests?.map((item) => item.platform ? `${item.platform.os}/${item.platform.architecture}${item.platform.variant ? `/${item.platform.variant}` : ''}` : '').filter(Boolean).join(', '),
+          value: detail.index?.manifests
+            ?.map((item) =>
+              item.platform
+                ? `${item.platform.os}/${item.platform.architecture}${item.platform.variant ? `/${item.platform.variant}` : ''}`
+                : '',
+            )
+            .filter(Boolean)
+            .join(', '),
         },
         {
           key: 'createdAt',
@@ -705,7 +1028,7 @@ export default function ImageManagerTool({
               <Button
                 variant="ghost"
                 onClick={() => setDetail(null)}
-                className="h-[32px] flex-none text-[11px]"
+                className="h-[30px] flex-none px-[11px] text-[11px]"
               >
                 <CaretLeft data-icon="inline-start" weight="duotone" />
                 {t('imageManagerTool.back')}
@@ -733,7 +1056,7 @@ export default function ImageManagerTool({
                     }}
                   >
                     <SelectTrigger
-                      className="w-[220px] max-w-full max-[700px]:w-full"
+                      className="h-[30px] w-[220px] max-w-full text-[11px] max-[700px]:w-full"
                       aria-labelledby={sourceLabelId}
                     >
                       <SelectValue />
@@ -747,12 +1070,6 @@ export default function ImageManagerTool({
                     </SelectContent>
                   </Select>
                 </div>
-                <p
-                  className={`max-w-full text-[11px] leading-[1.4] ${source.kind === 'registry' ? (loadError ? 'text-destructive' : 'text-muted-foreground') : status?.available ? 'text-muted-foreground' : 'text-destructive'}`}
-                  title={status?.cliPath || undefined}
-                >
-                  {statusText}
-                </p>
                 <div className="flex min-w-0 flex-col gap-1 text-[10px] font-medium text-muted-foreground max-[700px]:w-full">
                   <Label htmlFor="image-manager-search">{t('imageManagerTool.search')}</Label>
                   <div className="relative flex w-[220px] max-w-full items-center max-[700px]:w-full">
@@ -767,17 +1084,51 @@ export default function ImageManagerTool({
                       value={search}
                       onChange={(event) => setSearch(event.target.value)}
                       placeholder={t('imageManagerTool.searchPlaceholder')}
-                      className="pl-8 text-[11px]"
+                      className="h-[30px] pl-8 text-[11px]"
                     />
                   </div>
                 </div>
               </div>
             }
             right={
-              <div className="flex min-w-0 flex-wrap items-end gap-2 max-[700px]:w-full max-[700px]:justify-end">
+              <div className="flex min-w-0 flex-wrap items-center gap-2 max-[700px]:w-full max-[700px]:justify-end">
+                <Popover>
+                  <PopoverTrigger
+                    render={
+                      <Badge
+                        variant={statusBadgeVariant}
+                        className="cursor-pointer text-[10px]"
+                        aria-label={statusText}
+                      />
+                    }
+                  >
+                    {source.kind !== 'registry' ? (
+                      <TbBrandDocker
+                        data-icon="inline-start"
+                        className="size-3.5 shrink-0"
+                        aria-hidden="true"
+                      />
+                    ) : null}
+                    {statusBadgeLabel}
+                  </PopoverTrigger>
+                  <PopoverContent align="end" className="w-auto min-w-56 gap-2 p-3 text-xs">
+                    <div className="font-medium text-foreground">{sourceKindLabel}</div>
+                    <div className="text-muted-foreground">{statusText}</div>
+                    {source.kind !== 'registry' ? (
+                      <div className="flex items-center justify-between gap-2 border-t border-border pt-1.5 text-[11px]">
+                        <span className="text-muted-foreground">
+                          {t('imageManagerTool.dockerCliPath')}
+                        </span>
+                        <span className="font-mono text-foreground">
+                          {status?.cliPath || t('imageManagerTool.emptyValue')}
+                        </span>
+                      </div>
+                    ) : null}
+                  </PopoverContent>
+                </Popover>
                 <Button
                   variant="outline"
-                  className="h-[32px] min-w-[32px] flex-none text-[11px]"
+                  className="h-[30px] min-w-[30px] flex-none px-[11px] text-[11px]"
                   disabled={working}
                   onClick={() => {
                     setDetail(null);
@@ -799,7 +1150,7 @@ export default function ImageManagerTool({
                 </Button>
                 <Button
                   variant="ghost"
-                  className="h-[32px] flex-none text-[11px]"
+                  className="h-[30px] flex-none px-[11px] text-[11px]"
                   onClick={openManage}
                 >
                   {t('imageManagerTool.manageSources')}
@@ -811,41 +1162,43 @@ export default function ImageManagerTool({
         <ToolLayoutContent className="flex min-h-0 flex-col">
           {detail ? (
             <div className="h-full min-h-0 overflow-x-hidden overflow-y-auto [padding-inline-end:var(--overlay-scrollbar-hit-size)]">
-              <h2 className="m-0 text-sm font-medium text-foreground">
+              <h2 className="m-0 text-[13px] font-semibold text-foreground">
                 {t('imageManagerTool.detailTitle')}
               </h2>
               <dl className="mt-3 divide-y divide-border">
-                {detailRows.map((row) => (
-                  <div
-                    key={row.key}
-                    className="grid grid-cols-1 gap-1 py-2.5 sm:grid-cols-[8.5rem_minmax(0,1fr)] sm:gap-4"
-                  >
-                    <dt className="text-[11px] font-medium text-muted-foreground">{row.label}</dt>
-                    <dd className="m-0 min-w-0 break-words text-[13px] text-foreground">
-                      {row.value || t('imageManagerTool.emptyValue')}
-                    </dd>
-                  </div>
-                ))}
-                <div className="grid grid-cols-1 gap-1 py-2.5 sm:grid-cols-[8.5rem_minmax(0,1fr)] sm:gap-4">
-                  <dt className="text-[11px] font-medium text-muted-foreground">
+                {detailRows.map((row) => {
+                  const isMono = ['id', 'digest', 'command', 'entrypoint'].includes(row.key);
+                  return (
+                    <div
+                      key={row.key}
+                      className="grid grid-cols-1 gap-1 py-2.5 sm:grid-cols-[7rem_minmax(0,1fr)] sm:gap-4"
+                    >
+                      <dt className="text-[10px] font-medium text-muted-foreground">{row.label}</dt>
+                      <dd
+                        className={`m-0 min-w-0 break-words text-[12px] text-foreground ${isMono ? 'font-mono' : ''}`}
+                      >
+                        {row.value || t('imageManagerTool.emptyValue')}
+                      </dd>
+                    </div>
+                  );
+                })}
+                <div className="grid grid-cols-1 gap-1 py-2.5 sm:grid-cols-[7rem_minmax(0,1fr)] sm:gap-4">
+                  <dt className="text-[10px] font-medium text-muted-foreground">
                     {t('imageManagerTool.detailLabels')}
                   </dt>
                   <dd className="m-0 min-w-0">
                     {labelEntries(detail.labels).length === 0 ? (
-                      <p className="m-0 text-[13px] text-muted-foreground">
+                      <p className="m-0 text-[12px] text-muted-foreground">
                         {t('imageManagerTool.labelsEmpty')}
                       </p>
                     ) : (
-                      <div className="divide-y divide-border">
+                      <div className="space-y-2">
                         {labelEntries(detail.labels).map(([key, value]) => (
-                          <div
-                            key={key}
-                            className="flex flex-col gap-0.5 py-1.5 first:pt-0 last:pb-0"
-                          >
-                            <span className="font-mono text-[11px] text-muted-foreground">
+                          <div key={key} className="flex flex-col gap-0.5">
+                            <span className="font-mono text-[10px] text-muted-foreground">
                               {key}
                             </span>
-                            <span className="break-words text-[13px] text-foreground">{value}</span>
+                            <span className="break-words text-[12px] text-foreground">{value}</span>
                           </div>
                         ))}
                       </div>
@@ -855,19 +1208,24 @@ export default function ImageManagerTool({
               </dl>
             </div>
           ) : loadError ? (
-            <Button
-              variant="ghost"
-              className="flex h-auto min-h-0 flex-1 flex-col items-center justify-center gap-2 text-muted-foreground [&_svg]:size-7"
-              onClick={() => setReloadNonce((value) => value + 1)}
-            >
-              <HardDrives data-icon="inline-start" weight="duotone" />
-              <span className="text-sm font-medium text-foreground">
+            <div className="flex h-auto min-h-0 flex-1 flex-col items-center justify-center gap-2 text-center">
+              <HardDrives size={28} weight="duotone" className="text-muted-foreground" />
+              <div className="text-sm font-medium text-foreground">
                 {t('imageManagerTool.loadFailed')}
-              </span>
-              <span className="text-xs text-muted-foreground">
+              </div>
+              <div className="max-w-md text-xs text-muted-foreground">
                 {loadError || t('imageManagerTool.loadFailedHint')}
-              </span>
-            </Button>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-2 h-[30px] px-[11px] text-[11px]"
+                onClick={() => setReloadNonce((value) => value + 1)}
+              >
+                <ArrowsClockwise data-icon="inline-start" weight="duotone" />
+                {t('imageManagerTool.refresh')}
+              </Button>
+            </div>
           ) : loading || images.length === 0 || filteredImages.length === 0 ? (
             <div className="flex h-auto min-h-0 flex-1 flex-col items-center justify-center gap-2 text-center">
               {loading ? (
@@ -889,11 +1247,11 @@ export default function ImageManagerTool({
               )}
             </div>
           ) : (
-            <div className="min-h-0 flex-1 overflow-auto [padding-inline-end:var(--overlay-scrollbar-hit-size)]">
-              <Table containerClassName="overflow-visible">
+            <div className="min-h-0 flex-1 overflow-auto overscroll-contain [padding-inline-end:var(--overlay-scrollbar-hit-size)]">
+              <Table className="min-w-[760px]" containerClassName="overflow-visible">
                 <TableHeader className="sticky top-0 z-10 bg-background">
                   <TableRow>
-                    <TableHead className="w-10">
+                    <TableHead className="w-10 whitespace-nowrap">
                       <Checkbox
                         checked={allSelected}
                         indeterminate={someSelected}
@@ -901,8 +1259,11 @@ export default function ImageManagerTool({
                         aria-label={t('imageManagerTool.selectAll')}
                       />
                     </TableHead>
-                    <TableHead>{t('imageManagerTool.columnId')}</TableHead>
+                    <TableHead className="whitespace-nowrap">
+                      {t('imageManagerTool.columnId')}
+                    </TableHead>
                     <TableHead
+                      className="min-w-40"
                       aria-sort={
                         sortKey === 'name'
                           ? sortDirection === 'asc'
@@ -914,6 +1275,7 @@ export default function ImageManagerTool({
                       {sortableHeader('name', t('imageManagerTool.columnName'))}
                     </TableHead>
                     <TableHead
+                      className="whitespace-nowrap"
                       aria-sort={
                         sortKey === 'size'
                           ? sortDirection === 'asc'
@@ -925,6 +1287,7 @@ export default function ImageManagerTool({
                       {sortableHeader('size', t('imageManagerTool.columnSize'))}
                     </TableHead>
                     <TableHead
+                      className="whitespace-nowrap"
                       aria-sort={
                         sortKey === 'createdAt'
                           ? sortDirection === 'asc'
@@ -935,7 +1298,7 @@ export default function ImageManagerTool({
                     >
                       {sortableHeader('createdAt', t('imageManagerTool.columnCreated'))}
                     </TableHead>
-                    <TableHead className="text-right">
+                    <TableHead className="w-32 whitespace-nowrap text-right">
                       {t('imageManagerTool.columnActions')}
                     </TableHead>
                   </TableRow>
@@ -956,23 +1319,45 @@ export default function ImageManagerTool({
                           aria-label={t('imageManagerTool.selectRow')}
                         />
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="whitespace-nowrap">
                         <span className="font-mono text-[12px]" title={image.id}>
-                          {source.kind === 'registry' ? shortId(image.digest || image.id) : shortId(image.id)}
+                          {source.kind === 'registry'
+                            ? shortId(image.digest || image.id)
+                            : shortId(image.id)}
                         </span>
                       </TableCell>
-                      <TableCell>
-                        <button type="button" className="inline-flex min-w-0 items-center gap-1 truncate text-left" title={t('imageManagerTool.copyName', { name: imageLabel(image, unnamed) })} aria-label={t('imageManagerTool.copyName', { name: imageLabel(image, unnamed) })} onClick={() => void copyImageName(imageLabel(image, unnamed))}>{copiedName === imageLabel(image, unnamed) ? <Check size={13} aria-hidden="true" /> : <Copy size={13} aria-hidden="true" />}<span className="truncate">{imageLabel(image, unnamed)}</span></button>
+                      <TableCell className="min-w-40">
+                        <button
+                          type="button"
+                          className="inline-flex min-w-0 max-w-full items-center gap-1.5 truncate text-left"
+                          title={t('imageManagerTool.copyName', {
+                            name: imageLabel(image, unnamed),
+                          })}
+                          aria-label={t('imageManagerTool.copyName', {
+                            name: imageLabel(image, unnamed),
+                          })}
+                          onClick={() => void copyImageName(imageLabel(image, unnamed))}
+                        >
+                          {copiedName === imageLabel(image, unnamed) ? (
+                            <Check size={13} className="shrink-0" aria-hidden="true" />
+                          ) : (
+                            <Copy size={13} className="shrink-0" aria-hidden="true" />
+                          )}
+                          <span className="truncate">{imageLabel(image, unnamed)}</span>
+                        </button>
                       </TableCell>
-                      <TableCell className="text-muted-foreground">
+                      <TableCell className="whitespace-nowrap text-muted-foreground">
                         {image.size || t('imageManagerTool.emptyValue')}
                       </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {formatCreatedAt(image.createdAt, i18n.language)}
+                      <TableCell
+                        className="whitespace-nowrap text-muted-foreground"
+                        title={formatCreatedAt(image.createdAt, i18n.language)}
+                      >
+                        {formatCreatedAtCompact(image.createdAt, i18n.language)}
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="whitespace-nowrap text-right">
                         <ButtonGroup
-                          className="ml-auto"
+                          className="ml-auto flex-none"
                           aria-label={t('imageManagerTool.rowActions')}
                         >
                           <Button
@@ -998,21 +1383,33 @@ export default function ImageManagerTool({
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="min-w-32">
                               <DropdownMenuGroup>
-                                {((source as ManagedImageSource).capabilities?.canPush ?? source.kind !== 'registry') ? <DropdownMenuItem onClick={() => setConfirm({ type: 'push', image })}>
-                                  {t('imageManagerTool.push')} </DropdownMenuItem> : null} {((source as ManagedImageSource).capabilities?.canDelete ?? true) ? <DropdownMenuItem variant="destructive"
-                                  onClick={() =>
-                                    setConfirm({
-                                      type: 'delete',
-                                      ids: [image.id],
-                                      name: imageLabel(image, unnamed),
-                                      sourceId: source.id,
-                                      sourceKind: source.kind,
-                                      digests: [image.digest || image.id],
-                                      tags: asStringList(image.tags),
-                                    })
-                                  }
-                                >
-                                  {t('imageManagerTool.delete')} </DropdownMenuItem> : null}
+                                {((source as ManagedImageSource).capabilities?.canPush ??
+                                source.kind !== 'registry') ? (
+                                  <DropdownMenuItem
+                                    onClick={() => setConfirm({ type: 'push', image })}
+                                  >
+                                    {t('imageManagerTool.push')}
+                                  </DropdownMenuItem>
+                                ) : null}
+                                {((source as ManagedImageSource).capabilities?.canDelete ??
+                                true) ? (
+                                  <DropdownMenuItem
+                                    variant="destructive"
+                                    onClick={() =>
+                                      setConfirm({
+                                        type: 'delete',
+                                        ids: [image.id],
+                                        name: imageLabel(image, unnamed),
+                                        sourceId: source.id,
+                                        sourceKind: source.kind,
+                                        digests: [image.digest || image.id],
+                                        tags: asStringList(image.tags),
+                                      })
+                                    }
+                                  >
+                                    {t('imageManagerTool.delete')}
+                                  </DropdownMenuItem>
+                                ) : null}
                               </DropdownMenuGroup>
                             </DropdownMenuContent>
                           </DropdownMenu>
@@ -1055,7 +1452,9 @@ export default function ImageManagerTool({
                       name: t('imageManagerTool.selectedCount', { count: selectedCount }),
                       sourceId: source.id,
                       sourceKind: source.kind,
-                      digests: filteredImages.filter((image) => selected.has(image.id)).map((image) => image.digest || image.id),
+                      digests: filteredImages
+                        .filter((image) => selected.has(image.id))
+                        .map((image) => image.digest || image.id),
                       tags: filteredImages.flatMap((image) => asStringList(image.tags)),
                     })
                   }
@@ -1069,122 +1468,188 @@ export default function ImageManagerTool({
         </ToolLayoutFooter>
       </ToolLayout>
       <Dialog open={manageOpen} onOpenChange={setManageOpen}>
-        <DialogContent className="sm:max-w-lg" showCloseButton>
-          <DialogHeader>
+        <DialogContent
+          className="flex max-h-[calc(100dvh-2rem)] min-h-0 flex-col sm:max-w-lg"
+          showCloseButton
+        >
+          <DialogHeader className="flex-none">
             <DialogTitle>{t('imageManagerTool.manageSourcesTitle')}</DialogTitle>
             <DialogDescription>{t('imageManagerTool.manageSourcesDesc')}</DialogDescription>
           </DialogHeader>
-          <div className="flex max-h-[min(70vh,42rem)] flex-col gap-4 overflow-y-auto [padding-inline-end:var(--overlay-scrollbar-hit-size)]">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor={cliPathId}>{t('imageManagerTool.dockerCliPath')}</Label>
-              <Input
-                id={cliPathId}
-                value={draftCliPath}
-                onChange={(event) => setDraftCliPath(event.target.value)}
-                placeholder={t('imageManagerTool.dockerCliPathPlaceholder')}
-              />
-              <p className="text-[10px] leading-[1.4] text-muted-foreground">
-                {t('imageManagerTool.dockerCliPathHint')}
-              </p>
-            </div>
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center justify-between gap-3 border-b border-border py-2">
-                <span className="text-sm text-foreground">{t('imageManagerTool.sources')}</span>
-                <Button variant="outline" size="sm" onClick={() => newSource('ssh')}>
-                  <Plus data-icon="inline-start" /> {t('imageManagerTool.addSource')}
-                </Button>
-              </div>
-              <div className="divide-y divide-border">
-                {draftSources.map((item) => (
-                  <div key={item.id} className="flex items-center justify-between gap-3 py-2">
-                    <div className="min-w-0">
-                      <div className="truncate text-sm text-foreground">{sourceDisplayName(item, t)}</div>
-                      <div className="text-[10px] text-muted-foreground">
-                        {t(`imageManagerTool.kind${item.kind === 'registry' ? 'Registry' : item.kind === 'ssh' ? 'Ssh' : 'Local'}`)}
+          <div className="min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain [padding-inline-end:var(--overlay-scrollbar-hit-size)]">
+            <Tabs
+              value={manageTab}
+              onValueChange={(value) => {
+                const tab = value as 'ssh' | 'registry';
+                setManageTab(tab);
+                setEditingSource((current) => (current ? { ...current, kind: tab } : current));
+              }}
+              orientation="horizontal"
+              className="flex-col min-w-0 gap-4"
+            >
+              <TabsList className="w-full">
+                <TabsTrigger value="ssh">{t('imageManagerTool.manageTabSsh')}</TabsTrigger>
+                <TabsTrigger value="registry">
+                  {t('imageManagerTool.manageTabRegistry')}
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="ssh" className="flex min-w-0 flex-col gap-4">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-sm font-medium text-foreground">
+                    {t('imageManagerTool.sources')}
+                  </span>
+                  <Button variant="outline" size="sm" onClick={() => newSource('ssh')}>
+                    <Plus data-icon="inline-start" /> {t('imageManagerTool.addSource')}
+                  </Button>
+                </div>
+                {draftSources.filter((item) => item.kind === 'ssh').length > 0 ? (
+                  <div className="divide-y divide-border">
+                    {draftSources
+                      .filter((item) => item.kind === 'ssh')
+                      .map((item) => (
+                        <div key={item.id} className="flex items-center justify-between gap-3 py-2">
+                          <div className="min-w-0">
+                            <div className="truncate text-sm text-foreground">
+                              {sourceDisplayName(item, t)}
+                            </div>
+                            <div className="text-[10px] text-muted-foreground">
+                              {t('imageManagerTool.kindSsh')}
+                            </div>
+                          </div>
+                          <div className="flex flex-none gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              aria-label={t('imageManagerTool.editSource')}
+                              onClick={() => editSource(item)}
+                            >
+                              <PencilSimple />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              aria-label={t('imageManagerTool.removeSource')}
+                              onClick={() => removeSource(item.id)}
+                            >
+                              <Trash />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                ) : null}
+
+                {!editingSource || editingSource.kind !== 'ssh' ? (
+                  <div className="flex flex-col gap-2 border-t border-border pt-3">
+                    <span className="text-[10px] font-medium text-muted-foreground">
+                      {t('imageManagerTool.sshHosts')}
+                    </span>
+                    {hostsLoading ? (
+                      <div className="flex justify-center py-3">
+                        <Spinner />
                       </div>
-                    </div>
-                    {isLocalSource(item) ? <span className="text-[10px] text-muted-foreground">{t('imageManagerTool.localSourceHint')}</span> : (
-                      <div className="flex flex-none gap-1">
-                        <Button variant="ghost" size="sm" aria-label={t('imageManagerTool.editSource')} onClick={() => editSource(item)}><PencilSimple /></Button>
-                        <Button variant="ghost" size="sm" aria-label={t('imageManagerTool.removeSource')} onClick={() => removeSource(item.id)}><Trash /></Button>
+                    ) : hostsError ? (
+                      <p className="m-0 text-sm text-destructive">{hostsError}</p>
+                    ) : hostOptions.length === 0 ? (
+                      <p className="m-0 text-sm text-muted-foreground">
+                        {t('imageManagerTool.sshHostsEmpty')}
+                      </p>
+                    ) : (
+                      <div className="divide-y divide-border">
+                        {hostOptions.map((host, index) => {
+                          const id = sshSourceId(host.alias);
+                          return (
+                            <label key={id} className="flex cursor-pointer items-center gap-2 py-2">
+                              <Checkbox
+                                checked={host.selected}
+                                onCheckedChange={(checked) =>
+                                  setHostOptions((current) =>
+                                    current.map((item, itemIndex) =>
+                                      itemIndex === index
+                                        ? { ...item, selected: checked === true }
+                                        : item,
+                                    ),
+                                  )
+                                }
+                              />
+                              <span className="min-w-0 truncate font-mono text-[13px]">
+                                {host.alias}
+                              </span>
+                            </label>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
-                ))}
-              </div>
-              <div className="flex flex-wrap gap-2 pt-1">
-                <Button variant="ghost" size="sm" onClick={() => newSource('registry')}><Plus data-icon="inline-start" /> {t('imageManagerTool.addRegistry')}</Button>
-              </div>
-              <span className="text-[10px] font-medium text-muted-foreground">
-                {t('imageManagerTool.sshHosts')}
-              </span>
-              {hostsLoading ? (
-                <div className="flex justify-center py-3">
-                  <Spinner />
+                ) : null}
+
+                {editingSource?.kind === 'ssh' ? renderEditForm() : null}
+              </TabsContent>
+
+              <TabsContent value="registry" className="flex min-w-0 flex-col gap-4">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-sm font-medium text-foreground">
+                    {t('imageManagerTool.sources')}
+                  </span>
+                  <Button variant="outline" size="sm" onClick={() => newSource('registry')}>
+                    <Plus data-icon="inline-start" /> {t('imageManagerTool.addRegistry')}
+                  </Button>
                 </div>
-              ) : hostsError ? (
-                <p className="m-0 text-sm text-destructive">{hostsError}</p>
-              ) : hostOptions.length === 0 ? (
-                <p className="m-0 text-sm text-muted-foreground">
-                  {t('imageManagerTool.sshHostsEmpty')}
-                </p>
-              ) : (
-                <div className="max-h-56 overflow-y-auto [padding-inline-end:var(--overlay-scrollbar-hit-size)]">
-                  {hostOptions.map((host, index) => {
-                    const id = sshSourceId(host.alias);
-                    return (
-                      <label
-                        key={id}
-                        className="flex items-center gap-2 border-b border-border py-2 last:border-b-0"
-                      >
-                        <Checkbox
-                          checked={host.selected}
-                          onCheckedChange={(checked) =>
-                            setHostOptions((current) =>
-                              current.map((item, itemIndex) =>
-                                itemIndex === index
-                                  ? { ...item, selected: checked === true }
-                                  : item,
-                              ),
-                            )
-                          }
-                        />
-                        <span className="min-w-0 truncate font-mono text-[13px]">{host.alias}</span>
-                      </label>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-            {editingSource ? (
-              <div className="flex flex-col gap-3 border-t border-border pt-3">
-                <div className="flex items-center justify-between"><h3 className="m-0 text-sm font-medium">{editingSource.id ? t('imageManagerTool.editSource') : t('imageManagerTool.addSource')}</h3><Button variant="ghost" size="sm" onClick={() => setEditingSource(null)}>{t('imageManagerTool.cancel')}</Button></div>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div className="flex flex-col gap-1"><Label>{t('imageManagerTool.sourceName')}</Label><Input value={editingSource.name ?? ''} onChange={(e) => updateDraft({ name: e.target.value })} /></div>
-                  <div className="flex flex-col gap-1"><Label>{t('imageManagerTool.sourceKind')}</Label><Select items={[{ value: 'ssh', label: t('imageManagerTool.kindSsh') }, { value: 'registry', label: t('imageManagerTool.kindRegistry') }]} value={editingSource.kind} onValueChange={(value) => updateDraft({ kind: value as SourceKind })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ssh">{t('imageManagerTool.kindSsh')}</SelectItem><SelectItem value="registry">{t('imageManagerTool.kindRegistry')}</SelectItem></SelectContent></Select></div>
-                  {editingSource.kind === 'ssh' ? <>
-                    <div className="flex flex-col gap-1"><Label>{t('imageManagerTool.sshHost')}</Label><Input value={editingSource.sshHost ?? ''} onChange={(e) => updateDraft({ sshHost: e.target.value })} placeholder={t('imageManagerTool.sshHostPlaceholder')} /></div>
-                    <div className="flex flex-col gap-1"><Label>{t('imageManagerTool.sshPort')}</Label><Input type="number" value={editingSource.sshPort ?? 22} onChange={(e) => updateDraft({ sshPort: Number(e.target.value) || 22 })} /></div>
-                    <div className="flex flex-col gap-1"><Label>{t('imageManagerTool.sshUsername')}</Label><Input value={editingSource.sshUsername ?? ''} onChange={(e) => updateDraft({ sshUsername: e.target.value })} /></div>
-                    <div className="flex flex-col gap-1"><Label>{t('imageManagerTool.sshPassword')}</Label><Input type="password" value={editingSource.sshPassword ?? ''} onChange={(e) => updateDraft({ sshPassword: e.target.value })} /></div>
-                    <div className="flex flex-col gap-1 sm:col-span-2"><Label>{t('imageManagerTool.sshPrivateKey')}</Label><textarea className="min-h-24 rounded-md border border-input bg-transparent px-3 py-2 text-xs outline-none" value={editingSource.sshPrivateKey ?? ''} onChange={(e) => updateDraft({ sshPrivateKey: e.target.value })} /></div>
-                    <div className="flex flex-col gap-1 sm:col-span-2"><Label>{t('imageManagerTool.sshKeyPassphrase')}</Label><Input type="password" value={editingSource.sshKeyPassphrase ?? ''} onChange={(e) => updateDraft({ sshKeyPassphrase: e.target.value })} /></div>
-                  </> : <>
-                    <div className="flex flex-col gap-1 sm:col-span-2"><Label>{t('imageManagerTool.registryURL')}</Label><Input value={editingSource.registryURL ?? ''} onChange={(e) => updateDraft({ registryURL: e.target.value })} placeholder={t('imageManagerTool.registryURLPlaceholder')} /></div>
-                    <div className="flex flex-col gap-1"><Label>{t('imageManagerTool.registryUsername')}</Label><Input value={editingSource.registryUsername ?? ''} onChange={(e) => updateDraft({ registryUsername: e.target.value })} /></div>
-                    <div className="flex flex-col gap-1"><Label>{t('imageManagerTool.registryPassword')}</Label><Input type="password" value={editingSource.registryPassword ?? ''} onChange={(e) => updateDraft({ registryPassword: e.target.value })} /></div>
-                  </>}
-                </div>
-                <Button onClick={saveSource} disabled={!editingSource.name?.trim()}>{t('imageManagerTool.saveSource')}</Button>
-              </div>
+                {draftSources.filter((item) => item.kind === 'registry').length > 0 ? (
+                  <div className="divide-y divide-border">
+                    {draftSources
+                      .filter((item) => item.kind === 'registry')
+                      .map((item) => (
+                        <div key={item.id} className="flex items-center justify-between gap-3 py-2">
+                          <div className="min-w-0">
+                            <div className="truncate text-sm text-foreground">
+                              {sourceDisplayName(item, t)}
+                            </div>
+                            <div className="text-[10px] text-muted-foreground">
+                              {t('imageManagerTool.kindRegistry')}
+                            </div>
+                          </div>
+                          <div className="flex flex-none gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              aria-label={t('imageManagerTool.editSource')}
+                              onClick={() => editSource(item)}
+                            >
+                              <PencilSimple />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              aria-label={t('imageManagerTool.removeSource')}
+                              onClick={() => removeSource(item.id)}
+                            >
+                              <Trash />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                ) : null}
+
+                {editingSource?.kind === 'registry' ? renderEditForm() : null}
+              </TabsContent>
+            </Tabs>
+            {sourceSaveError ? (
+              <p className="m-0 pt-3 text-sm text-destructive" role="alert">
+                {sourceSaveError}
+              </p>
             ) : null}
           </div>
-          {sourceSaveError ? <p className="m-0 text-sm text-destructive">{sourceSaveError}</p> : null}
-          <DialogFooter>
+          <DialogFooter className="flex-none">
             <Button variant="outline" disabled={savingSources} onClick={() => setManageOpen(false)}>
               {t('imageManagerTool.cancel')}
             </Button>
-            <Button disabled={savingSources} onClick={() => void saveSources()}>{savingSources ? <Spinner data-icon="inline-start" /> : null}{t('imageManagerTool.saveSources')}</Button>
+            <Button disabled={savingSources} onClick={() => void saveSources()}>
+              {savingSources ? <Spinner data-icon="inline-start" /> : null}
+              {t('imageManagerTool.saveSources')}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1208,10 +1673,13 @@ export default function ImageManagerTool({
                   })
                 : confirm?.type === 'delete'
                   ? confirm.sourceKind === 'registry'
-                    ? t('imageManagerTool.registryDeleteConfirmBody', { digest: confirm.digests.join(', '), tags: confirm.tags.join(', ') || t('imageManagerTool.emptyValue') })
+                    ? t('imageManagerTool.registryDeleteConfirmBody', {
+                        digest: confirm.digests.join(', '),
+                        tags: confirm.tags.join(', ') || t('imageManagerTool.emptyValue'),
+                      })
                     : confirm.ids.length > 1
-                    ? t('imageManagerTool.deleteConfirmManyBody', { count: confirm.ids.length })
-                    : t('imageManagerTool.deleteConfirmBody', { name: confirm.name })
+                      ? t('imageManagerTool.deleteConfirmManyBody', { count: confirm.ids.length })
+                      : t('imageManagerTool.deleteConfirmBody', { name: confirm.name })
                   : null}
             </AlertDialogDescription>
           </AlertDialogHeader>

@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/url"
 	"os"
@@ -235,91 +236,183 @@ func validLegacySourceSuffix(value string) bool {
 	return true
 }
 
+// normalizeImageSource 规范化单个镜像来源并判断其合法性，是来源校验/规范化的唯一权威，
+// 供批量 normalizeImageSources 与 Save 的提交验证共用。seen 用于跨来源去重（成功时写入），
+// hasLocal 用于本地来源追踪（Save 校验时传 nil）。无法合法化的来源返回非 nil error。
+func normalizeImageSource(source ImageSource, seen map[string]bool, hasLocal *bool) (ImageSource, error) {
+	source.ID = strings.TrimSpace(source.ID)
+	source.Name = strings.TrimSpace(source.Name)
+	source.Kind = strings.TrimSpace(strings.ToLower(source.Kind))
+	source.SSHHost = strings.TrimSpace(source.SSHHost)
+	source.SSHUsername = strings.TrimSpace(source.SSHUsername)
+	source.RegistryURL = strings.TrimSpace(source.RegistryURL)
+	source.RegistryUsername = strings.TrimSpace(source.RegistryUsername)
+	if source.Kind == "" && (source.ID == "" || source.ID == localImageSourceID) {
+		source.Kind = "local"
+	}
+	switch source.Kind {
+	case "local":
+		if source.ID != localImageSourceID {
+			return ImageSource{}, errors.New("本机来源 ID 必须为 local")
+		}
+		if seen[source.ID] {
+			return ImageSource{}, fmt.Errorf("本机来源 ID %q 重复", source.ID)
+		}
+		if source.Name == "" {
+			source.Name = "本机"
+		}
+		if !validTextValue(source.Name, 128) {
+			return ImageSource{}, errors.New("本机来源名称非法")
+		}
+		source.SSHHost = ""
+		source.SSHPort = 0
+		source.SSHUsername = ""
+		source.SSHPassword = ""
+		source.SSHPrivateKey = ""
+		source.SSHPrivateKeyPath = ""
+		source.SSHKeyPassphrase = ""
+		source.RegistryURL = ""
+		source.RegistryUsername = ""
+		source.RegistryPassword = ""
+		if hasLocal != nil {
+			*hasLocal = true
+		}
+	case "ssh":
+		if source.ID == localImageSourceID {
+			return ImageSource{}, errors.New("SSH 来源 ID 不能为 local")
+		}
+		if !validImageSourceID(source.ID) {
+			return ImageSource{}, errors.New("SSH 来源 ID 非法")
+		}
+		if seen[source.ID] {
+			return ImageSource{}, fmt.Errorf("SSH 来源 ID %q 重复", source.ID)
+		}
+		if !validSSHHost(source.SSHHost) {
+			return ImageSource{}, errors.New("SSH 主机非法")
+		}
+		if source.SSHPort < 0 || source.SSHPort > 65535 {
+			return ImageSource{}, errors.New("SSH 端口超出 0-65535")
+		}
+		if source.SSHUsername != "" && (!validConfigValue(source.SSHUsername, 256) || strings.HasPrefix(source.SSHUsername, "-")) {
+			return ImageSource{}, errors.New("SSH 用户名非法")
+		}
+		if !validSecretValue(source.SSHPassword, 4096) {
+			return ImageSource{}, errors.New("SSH 密码非法")
+		}
+		if !validSecretValue(source.SSHPrivateKey, 128<<10) {
+			return ImageSource{}, errors.New("SSH 私钥非法")
+		}
+		if source.SSHPrivateKeyPath != "" && (!validPathValue(source.SSHPrivateKeyPath, 4096) || strings.HasPrefix(source.SSHPrivateKeyPath, "-")) {
+			return ImageSource{}, errors.New("SSH 私钥路径非法")
+		}
+		if !validSecretValue(source.SSHKeyPassphrase, 4096) {
+			return ImageSource{}, errors.New("SSH 密钥口令非法")
+		}
+		if source.SSHKeyPassphrase != "" && source.SSHPrivateKey == "" && source.SSHPrivateKeyPath == "" {
+			return ImageSource{}, errors.New("SSH 密钥口令未关联私钥")
+		}
+		if source.SSHPort == 0 {
+			source.SSHPort = 22
+		}
+		if source.Name == "" {
+			source.Name = source.SSHHost
+		}
+		if !validTextValue(source.Name, 128) {
+			return ImageSource{}, errors.New("SSH 来源名称非法")
+		}
+		source.RegistryURL = ""
+		source.RegistryUsername = ""
+		source.RegistryPassword = ""
+	case "registry":
+		if source.ID == localImageSourceID {
+			return ImageSource{}, errors.New("registry 来源 ID 不能为 local")
+		}
+		if !validImageSourceID(source.ID) {
+			return ImageSource{}, errors.New("registry 来源 ID 非法")
+		}
+		if seen[source.ID] {
+			return ImageSource{}, fmt.Errorf("registry 来源 ID %q 重复", source.ID)
+		}
+		var ok bool
+		source.RegistryURL, ok = normalizeRegistryURL(source.RegistryURL)
+		if !ok {
+			return ImageSource{}, errors.New("registry 地址非法（需 https 且不含凭据、查询参数或路径）")
+		}
+		if !validSecretValue(source.RegistryPassword, 4096) {
+			return ImageSource{}, errors.New("registry 密码非法")
+		}
+		if source.RegistryPassword != "" && source.RegistryUsername == "" {
+			return ImageSource{}, errors.New("registry 密码缺少用户名")
+		}
+		if source.RegistryUsername != "" && !validTextValue(source.RegistryUsername, 256) {
+			return ImageSource{}, errors.New("registry 用户名非法")
+		}
+		if source.Name == "" {
+			source.Name = source.RegistryURL
+		}
+		if !validTextValue(source.Name, 128) {
+			return ImageSource{}, errors.New("registry 来源名称非法")
+		}
+		source.SSHHost = ""
+		source.SSHPort = 0
+		source.SSHUsername = ""
+		source.SSHPassword = ""
+		source.SSHPrivateKey = ""
+		source.SSHPrivateKeyPath = ""
+		source.SSHKeyPassphrase = ""
+	default:
+		return ImageSource{}, fmt.Errorf("未知来源类型 %q", source.Kind)
+	}
+	seen[source.ID] = true
+	return source, nil
+}
+
 func normalizeImageSources(sources []ImageSource) []ImageSource {
 	result := make([]ImageSource, 0, len(sources)+1)
 	seen := make(map[string]bool, len(sources)+1)
 	hasLocal := false
 	for _, source := range sources {
-		source.ID = strings.TrimSpace(source.ID)
-		source.Name = strings.TrimSpace(source.Name)
-		source.Kind = strings.TrimSpace(strings.ToLower(source.Kind))
-		source.SSHHost = strings.TrimSpace(source.SSHHost)
-		source.SSHUsername = strings.TrimSpace(source.SSHUsername)
-		source.RegistryURL = strings.TrimSpace(source.RegistryURL)
-		source.RegistryUsername = strings.TrimSpace(source.RegistryUsername)
-		if source.Kind == "" && (source.ID == "" || source.ID == localImageSourceID) {
-			source.Kind = "local"
+		if normalized, err := normalizeImageSource(source, seen, &hasLocal); err == nil {
+			result = append(result, normalized)
 		}
-		switch source.Kind {
-		case "local":
-			if source.ID != localImageSourceID || seen[source.ID] {
-				continue
-			}
-			if source.Name == "" {
-				source.Name = "本机"
-			}
-			if !validTextValue(source.Name, 128) {
-				continue
-			}
-			source.SSHHost = ""
-			source.SSHPort = 0
-			source.SSHUsername = ""
-			source.SSHPassword = ""
-			source.SSHPrivateKey = ""
-			source.SSHPrivateKeyPath = ""
-			source.SSHKeyPassphrase = ""
-			source.RegistryURL = ""
-			source.RegistryUsername = ""
-			source.RegistryPassword = ""
-			hasLocal = true
-		case "ssh":
-			if source.ID == localImageSourceID || !validImageSourceID(source.ID) || seen[source.ID] || !validSSHHost(source.SSHHost) || source.SSHPort < 0 || source.SSHPort > 65535 || (source.SSHUsername != "" && (!validConfigValue(source.SSHUsername, 256) || strings.HasPrefix(source.SSHUsername, "-"))) || !validSecretValue(source.SSHPassword, 4096) || !validSecretValue(source.SSHPrivateKey, 128<<10) || (source.SSHPrivateKeyPath != "" && (!validPathValue(source.SSHPrivateKeyPath, 4096) || strings.HasPrefix(source.SSHPrivateKeyPath, "-"))) || !validSecretValue(source.SSHKeyPassphrase, 4096) || (source.SSHKeyPassphrase != "" && source.SSHPrivateKey == "" && source.SSHPrivateKeyPath == "") {
-				continue
-			}
-			if source.SSHPort == 0 {
-				source.SSHPort = 22
-			}
-			if source.Name == "" {
-				source.Name = source.SSHHost
-			}
-			if !validTextValue(source.Name, 128) {
-				continue
-			}
-			source.RegistryURL = ""
-			source.RegistryUsername = ""
-			source.RegistryPassword = ""
-		case "registry":
-			var ok bool
-			if source.ID == localImageSourceID || !validImageSourceID(source.ID) || seen[source.ID] {
-				continue
-			}
-			source.RegistryURL, ok = normalizeRegistryURL(source.RegistryURL)
-			if !ok || !validSecretValue(source.RegistryPassword, 4096) || (source.RegistryPassword != "" && source.RegistryUsername == "") || (source.RegistryUsername != "" && !validTextValue(source.RegistryUsername, 256)) {
-				continue
-			}
-			if source.Name == "" {
-				source.Name = source.RegistryURL
-			}
-			if !validTextValue(source.Name, 128) {
-				continue
-			}
-			source.SSHHost = ""
-			source.SSHPort = 0
-			source.SSHUsername = ""
-			source.SSHPassword = ""
-			source.SSHPrivateKey = ""
-			source.SSHPrivateKeyPath = ""
-			source.SSHKeyPassphrase = ""
-		default:
-			continue
-		}
-		result = append(result, source)
-		seen[source.ID] = true
 	}
 	if !hasLocal {
 		result = append([]ImageSource{{ID: localImageSourceID, Name: "本机", Kind: "local"}}, result...)
 	}
 	return result
+}
+
+// imageSourceIdentifier 返回用于错误提示的来源标识，优先 Name，其次 ID。
+func imageSourceIdentifier(source ImageSource) string {
+	if name := strings.TrimSpace(source.Name); name != "" {
+		return name
+	}
+	if id := strings.TrimSpace(source.ID); id != "" {
+		return id
+	}
+	if kind := strings.TrimSpace(source.Kind); kind != "" {
+		return kind
+	}
+	return "未知来源"
+}
+
+// validateImageSourcesForSave 严格校验客户端提交的镜像来源；任一来源无法合法规范化
+// 即返回错误，并携带来源标识（优先 Name/ID）与序号。与 normalizeImageSources 共用
+// normalizeImageSource 同一套校验规则，避免复制。
+func validateImageSourcesForSave(sources []ImageSource) error {
+	seen := make(map[string]bool, len(sources))
+	for i, source := range sources {
+		if _, err := normalizeImageSource(source, seen, nil); err != nil {
+			return fmt.Errorf("镜像来源无效（第 %d 项 %q）：%v", i+1, imageSourceIdentifier(source), err)
+		}
+	}
+	return nil
+}
+
+// ValidateImageSource 校验并规范化单个镜像来源，但不会写入配置。
+// 编辑镜像来源时用它尽早反馈输入错误，最终 Save 仍会校验完整列表。
+func (s *ConfigService) ValidateImageSource(source ImageSource) (ImageSource, error) {
+	return normalizeImageSource(source, make(map[string]bool, 1), nil)
 }
 
 func normalizeDockerCLIPath(path string) string {
@@ -529,6 +622,10 @@ func (s *ConfigService) setOnChange(callback func(Config)) {
 
 func (s *ConfigService) Save(cfg Config) error {
 	s.mu.Lock()
+	if err := validateImageSourcesForSave(cfg.ImageSources); err != nil {
+		s.mu.Unlock()
+		return err
+	}
 	cfg = normalizeConfig(cfg)
 	b, err := json.Marshal(cfg)
 	if err != nil {

@@ -208,6 +208,28 @@ func TestGetDockerStatusUsesCLIWithoutDaemon(t *testing.T) {
 	}
 }
 
+func TestImageSourceConnectionTestsDraftWithoutPersistence(t *testing.T) {
+	config := &ConfigService{cfg: normalizeConfig(defaultConfig())}
+	service := NewImageService(config)
+	defer service.shutdown()
+	service.runner = func(_ context.Context, name string, args ...string) ([]byte, error) {
+		if name != "ssh" || !reflect.DeepEqual(args, []string{"-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes", "--", "dev-box", "'docker' '--version'"}) {
+			t.Fatalf("SSH 连接测试命令为 %q %#v", name, args)
+		}
+		return []byte("Docker version 27.0.0\n"), nil
+	}
+
+	if err := service.TestImageSourceConnection(ImageSource{ID: "ssh:connection-test", Kind: "ssh", SSHHost: "dev-box"}); err != nil {
+		t.Fatalf("SSH 草稿连接测试失败: %v", err)
+	}
+	if got := config.Get().ImageSources; len(got) != 1 || got[0].ID != localImageSourceID {
+		t.Fatalf("连接测试不应写入配置: %#v", got)
+	}
+	if err := service.TestImageSourceConnection(ImageSource{ID: "ssh:connection-test", Kind: "ssh"}); err == nil {
+		t.Fatal("非法 SSH 草稿应在连接测试前被拒绝")
+	}
+}
+
 func TestBuildImageCommandLocalAndSSH(t *testing.T) {
 	localName, localArgs, err := buildImageCommand(ImageSource{ID: "local", Kind: "local"}, "/opt/My Docker/docker", "image", "ls", "--format", "{{json .}}")
 	if err != nil {
@@ -350,6 +372,36 @@ func TestRegistryListDetailAndDeleteUseDigest(t *testing.T) {
 		t.Fatalf("Registry 删除结果为 %#v，路径为 %q", result, deletedPath)
 	}
 	service.shutdown()
+}
+
+func TestImageSourceConnectionTestsRegistryDraft(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		username, password, ok := r.BasicAuth()
+		if r.URL.Path != "/v2/" || !ok || username != "user" || password != "password" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+	defer server.Client().CloseIdleConnections()
+
+	config := &ConfigService{cfg: normalizeConfig(defaultConfig())}
+	service := NewImageService(config)
+	defer service.shutdown()
+	service.registryTransport = server.Client().Transport
+	if err := service.TestImageSourceConnection(ImageSource{
+		ID:               "registry:connection-test",
+		Kind:             "registry",
+		RegistryURL:      server.URL,
+		RegistryUsername: "user",
+		RegistryPassword: "password",
+	}); err != nil {
+		t.Fatalf("Registry 草稿连接测试失败: %v", err)
+	}
+	if got := config.Get().ImageSources; len(got) != 1 || got[0].ID != localImageSourceID {
+		t.Fatalf("连接测试不应写入配置: %#v", got)
+	}
 }
 
 func TestImageDetailCacheIsolatedAndInvalidated(t *testing.T) {
@@ -555,8 +607,8 @@ func TestListRequestTokenPreventsSlowSourceFromOverwritingFastSource(t *testing.
 	if fastErr != nil || len(fastImages) != 1 || fastImages[0].Name != "fast:latest" {
 		t.Fatalf("快速来源列表错误: %#v，错误 %v", fastImages, fastErr)
 	}
-	if slowErr == nil || len(slowImages) != 1 {
-		t.Fatalf("慢来源应因 token 过期返回取消错误: %#v，错误 %v", slowImages, slowErr)
+	if slowErr != nil || len(slowImages) != 1 {
+		t.Fatalf("慢来源被淘汰后应安静完成: %#v，错误 %v", slowImages, slowErr)
 	}
 	remote, _, remoteFingerprint, err := service.sourceSnapshot("remote")
 	if err != nil {
@@ -607,8 +659,8 @@ func TestSameSourceOldListCannotOverwriteNewerList(t *testing.T) {
 	if newErr != nil || len(newImages) != 1 || newImages[0].Name != "new:latest" {
 		t.Fatalf("新同源列表错误: %#v，错误 %v", newImages, newErr)
 	}
-	if oldErr == nil || len(oldImages) != 1 {
-		t.Fatalf("旧同源列表应被 token 淘汰: %#v，错误 %v", oldImages, oldErr)
+	if oldErr != nil || len(oldImages) != 1 {
+		t.Fatalf("旧同源列表被淘汰后应安静完成: %#v，错误 %v", oldImages, oldErr)
 	}
 	fingerprint := imageSourceFingerprint(config.Get().ImageSources[0], "docker")
 	if inventory, ok := service.currentInventory("local", fingerprint, "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", ""); !ok || inventory.Name != "new:latest" {
@@ -616,6 +668,57 @@ func TestSameSourceOldListCannotOverwriteNewerList(t *testing.T) {
 	}
 	if _, ok := service.currentInventory("local", fingerprint, "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", ""); ok {
 		t.Fatal("旧同源请求覆盖了新 inventory")
+	}
+}
+
+func TestCancelledListRequestSettlesWithoutBindingError(t *testing.T) {
+	config := &ConfigService{cfg: normalizeConfig(Config{ImageSources: []ImageSource{
+		{ID: "local", Kind: "local"},
+		{ID: "remote", Kind: "ssh", SSHHost: "dev-box"},
+	}})}
+	service := NewImageService(config)
+	defer service.shutdown()
+	started := make(chan struct{})
+	service.runner = func(ctx context.Context, name string, args ...string) ([]byte, error) {
+		isList := len(args) >= 2 && args[0] == "image" && args[1] == "ls"
+		if name == "ssh" && len(args) > 0 {
+			isList = strings.Contains(args[len(args)-1], "'image' 'ls'")
+		}
+		if !isList {
+			return []byte(`[]`), nil
+		}
+		if name == "docker" {
+			close(started)
+			<-ctx.Done()
+			return nil, ctx.Err()
+		}
+		return []byte(`{"ID":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","Repository":"fast","Tag":"latest"}`), nil
+	}
+
+	var cancelledImages []DockerImage
+	var cancelledErr error
+	done := make(chan struct{})
+	go func() {
+		cancelledImages, cancelledErr = service.ListDockerImages("local")
+		close(done)
+	}()
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("旧列表请求未开始")
+	}
+
+	images, err := service.ListDockerImages("remote")
+	if err != nil || len(images) != 1 || images[0].Name != "fast:latest" {
+		t.Fatalf("新列表请求错误: %#v，错误 %v", images, err)
+	}
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("被取消的旧列表请求未完成")
+	}
+	if cancelledErr != nil || len(cancelledImages) != 0 {
+		t.Fatalf("被取消的旧列表请求应返回空数组且无错误: %#v，错误 %v", cancelledImages, cancelledErr)
 	}
 }
 

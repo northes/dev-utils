@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -463,5 +464,122 @@ func TestNormalizeImageSourceKeepsHistoricalIDs(t *testing.T) {
 	}
 	if cfg.ImageSources[1].ID != "ssh:build-box" || cfg.ImageSources[2].ID != "registry:550e8400-e29b-41d4-a716-446655440000" {
 		t.Fatalf("历史来源 ID 未保持原值: %#v", cfg.ImageSources)
+	}
+}
+
+func TestConfigServiceSaveRejectsInvalidImageSource(t *testing.T) {
+	root := t.TempDir()
+	service := &ConfigService{path: filepath.Join(root, "config.json"), cfg: normalizeConfig(defaultConfig())}
+	if err := service.Save(defaultConfig()); err != nil {
+		t.Fatalf("保存初始配置失败: %v", err)
+	}
+	baseline, err := os.ReadFile(service.path)
+	if err != nil {
+		t.Fatalf("读取初始配置失败: %v", err)
+	}
+	before := service.Get()
+
+	tests := []struct {
+		name     string
+		sources  []ImageSource
+		wantPart string
+	}{
+		{name: "空 registry 地址", sources: []ImageSource{{ID: "registry:repo-a", Name: "仓库A", Kind: "registry", RegistryURL: ""}}, wantPart: "registry 地址非法"},
+		{name: "非 https registry 地址", sources: []ImageSource{{ID: "registry:repo-a", Name: "仓库A", Kind: "registry", RegistryURL: "http://registry.example"}}, wantPart: "registry 地址非法"},
+		{name: "无用户名的 registry 密码", sources: []ImageSource{{ID: "registry:repo-a", Name: "仓库A", Kind: "registry", RegistryURL: "https://registry.example", RegistryPassword: "secret"}}, wantPart: "registry 密码缺少用户名"},
+		{name: "无私钥的密钥口令", sources: []ImageSource{{ID: "ssh:box-a", Name: "构建机A", Kind: "ssh", SSHHost: "box-a", SSHKeyPassphrase: "pass"}}, wantPart: "未关联私钥"},
+		{name: "非法 SSH 主机", sources: []ImageSource{{ID: "ssh:box-a", Name: "构建机A", Kind: "ssh", SSHHost: "bad host"}}, wantPart: "SSH 主机非法"},
+		{name: "非法 ID", sources: []ImageSource{{ID: "bad id", Name: "坏来源", Kind: "ssh", SSHHost: "box-a"}}, wantPart: "ID 非法"},
+		{name: "重复 ID 辨别第二项", sources: []ImageSource{
+			{ID: "ssh:box-a", Name: "构建机A", Kind: "ssh", SSHHost: "box-a"},
+			{ID: "ssh:box-a", Name: "构建机B", Kind: "ssh", SSHHost: "box-a"},
+		}, wantPart: "构建机B"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			cfg := defaultConfig()
+			cfg.ImageSources = test.sources
+			err := service.Save(cfg)
+			if err == nil {
+				t.Fatalf("保存含无效来源的配置应返回错误: %#v", test.sources)
+			}
+			if !strings.Contains(err.Error(), test.wantPart) {
+				t.Fatalf("错误 %q 应包含 %q", err.Error(), test.wantPart)
+			}
+			if got := service.Get(); !imageSourcesEqual(got.ImageSources, before.ImageSources) {
+				t.Fatalf("无效来源保存后内存配置不应变化: %#v", got.ImageSources)
+			}
+			b, err := os.ReadFile(service.path)
+			if err != nil {
+				t.Fatalf("读取配置文件失败: %v", err)
+			}
+			if string(b) != string(baseline) {
+				t.Fatalf("无效来源保存后磁盘配置不应变化")
+			}
+		})
+	}
+}
+
+func TestConfigServiceSaveAcceptsNormalizableImageSource(t *testing.T) {
+	root := t.TempDir()
+	service := &ConfigService{path: filepath.Join(root, "config.json"), cfg: normalizeConfig(defaultConfig())}
+
+	cfg := defaultConfig()
+	cfg.ImageSources = []ImageSource{
+		{ID: "local", Kind: "local"},
+		{ID: "ssh:box-a", Name: "构建机A", Kind: "ssh", SSHHost: "box-a", SSHPort: 0},
+		{ID: "registry:repo-a", Name: "仓库A", Kind: "registry", RegistryURL: "https://REGISTRY.EXAMPLE/", RegistryUsername: "user", RegistryPassword: "pass"},
+	}
+	if err := service.Save(cfg); err != nil {
+		t.Fatalf("保存可规范化来源失败: %v", err)
+	}
+
+	saved := service.Get()
+	if len(saved.ImageSources) != 3 {
+		t.Fatalf("保存后来源数量为 %d，期望 3: %#v", len(saved.ImageSources), saved.ImageSources)
+	}
+	if saved.ImageSources[0].Name != "本机" {
+		t.Fatalf("本地来源名称未回填: %#v", saved.ImageSources[0])
+	}
+	if saved.ImageSources[1].SSHPort != 22 {
+		t.Fatalf("SSH 端口未回填为 22: %#v", saved.ImageSources[1])
+	}
+	if saved.ImageSources[2].RegistryURL != "https://registry.example" {
+		t.Fatalf("registry 地址未标准化: %q", saved.ImageSources[2].RegistryURL)
+	}
+	if saved.ImageSources[1].RegistryURL != "" || saved.ImageSources[2].SSHHost != "" {
+		t.Fatalf("无关字段未清空: %#v", saved.ImageSources)
+	}
+
+	b, err := os.ReadFile(service.path)
+	if err != nil {
+		t.Fatalf("读取保存后的配置失败: %v", err)
+	}
+	var disk Config
+	if err := json.Unmarshal(b, &disk); err != nil {
+		t.Fatalf("磁盘配置不是有效 JSON: %v", err)
+	}
+	if !imageSourcesEqual(disk.ImageSources, saved.ImageSources) {
+		t.Fatalf("磁盘与内存来源不一致: %#v vs %#v", disk.ImageSources, saved.ImageSources)
+	}
+}
+
+func TestConfigServiceLoadsDropsInvalidImageSource(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("HOME", root)
+	path := configPath()
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatalf("创建配置目录失败: %v", err)
+	}
+	legacy := `{"imageSources":[{"id":"local","name":"本机","kind":"local"},{"id":"registry:bad","name":"坏仓库","kind":"registry","registryURL":"not a url"}]}`
+	if err := os.WriteFile(path, []byte(legacy), 0o600); err != nil {
+		t.Fatalf("写入含无效来源的旧配置失败: %v", err)
+	}
+
+	service := NewConfigService()
+	cfg := service.Get()
+	if len(cfg.ImageSources) != 1 || cfg.ImageSources[0].ID != localImageSourceID {
+		t.Fatalf("加载应静默丢弃无效来源并保留本地来源: %#v", cfg.ImageSources)
 	}
 }
