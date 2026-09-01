@@ -11,7 +11,13 @@ Be precise; never guess a mapping. When a prop or part is not in these
 reference files, check `node_modules/@base-ui/react/**/*.d.ts` before
 transforming, and record gaps in the report.
 
-## Preflight (always)
+## 范围判定与单组件快速路径
+
+- 全量迁移，或用户明确要求干净工作区、创建分支、每组件独立 commit、全量基线构建或安装依赖时，执行严格的完整 Preflight 和全量验证；下方这些要求不得省略。
+- 单组件迁移默认只检查目标组件、直接消费者和实际变更边界；不主动要求干净工作区、创建分支、独立 commit 或全量基线构建/安装依赖。沿用现有工作区和依赖，按需要执行针对性检查。
+- 只有发现依赖/API 变化、共享 wrapper 或其他跨组件证据时，才扩展检查范围并升级到相应的完整清单。不得因快速路径跳过映射核对、行为差异记录或非 Radix 库隔离。
+
+## Preflight（按范围执行）
 
 1. `npx shadcn@latest info --json` (or the project's runner): gives the
    current base, STYLE (e.g. `radix-lyra`), tailwind version, aliases,
@@ -19,11 +25,9 @@ transforming, and record gaps in the report.
 2. Detect the package manager (packageManager field / lockfile:
    pnpm-lock.yaml, bun.lock, yarn.lock, package-lock.json) and use IT for
    every install. Never leave a stale lockfile.
-3. Require a clean git tree; work on a branch; one commit per component.
-4. Baseline check BEFORE touching dependencies: run the project's
-   typecheck/build so pre-existing failures are never attributed to you.
-5. Install `@base-ui/react` alongside radix. Radix packages are removed only
-   after the LAST component is migrated (both coexist fine).
+3. 全量迁移或用户明确要求时，要求 clean git tree、在分支上工作并每个组件一个 commit；单组件快速路径不启用这些重型要求。
+4. 全量迁移或用户明确要求时，在触碰依赖前运行项目的 typecheck/build，避免把已有失败归因于本次修改；单组件默认按实际变更边界做针对性检查。
+5. 全量迁移或用户明确要求时，将 `@base-ui/react` 与 radix 并存安装；单组件仅在当前变更实际缺少该依赖时，使用项目包管理器安装必要依赖。Radix 包仅在 LAST component 迁移完成后移除（两者可以共存）。
 
 ## Strategy: golden pair first, transformation engine second
 
@@ -54,11 +58,7 @@ transforming, and record gaps in the report.
      `git merge-file user.tsx radix-golden.tsx base-golden.tsx` (three-way
      merge, radix golden as ancestor) auto-resolves most files; hand-resolve
      conflicts with the reference tables.
-  5. MANDATORY leftover sweep on EVERY golden-pair file, including ones that
-     merged "clean": `grep -n "radix-ui\|@radix-ui\|IconPlaceholder"` per
-     file. The registry sometimes reorders functions between variants, which
-     makes three-way merges report zero conflicts while leaving stale radix
-     hunks in place. A clean merge is NOT proof of a clean file.
+   5. 合并结果为 clean 也不是文件干净的证明；leftover sweep 的执行范围和频率遵循 Verify and report，registry 重排函数时尤其要实际检查文件是否仍有过时的 radix hunk。
   This is more reliable than reconstructing transforms; use it whenever the
   pair exists. Consumer/app code has no CLI mechanism: always hand-migrate it
   against `consumer-props.md`.
@@ -90,11 +90,13 @@ transforming, and record gaps in the report.
    button), STOP and recommend migrating those first, bottom-up.
 3. Write the migrated version to `<component>-base.tsx` (original untouched;
    golden-pair content fetched by URL, or transformed by hand, per the
-   strategy above); typecheck. Repoint consumers ONE AT A TIME (imports + the
-   call-site props in `consumer-props.md`); typecheck each. When no consumer
-   imports the original: delete it, rename `-base` -> original, flip imports
-   back, final check, commit. When the LAST radix wrapper in the project is
-   finalized, flip `components.json` to `base-<style>` and remove radix deps.
+   strategy above). Repoint consumers ONE AT A TIME (imports + the call-site
+   props in `consumer-props.md`), then follow the single-component or batch
+   typecheck rule in Verify and report; do not repeat an expensive typecheck
+   for every consumer. When no consumer imports the original: delete it,
+   rename `-base` -> original, and flip imports back. When the LAST radix
+   wrapper in the project is finalized, flip `components.json` to `base-<style>`
+   and remove radix deps.
 
 **Whole project** (only when explicitly asked): same per-component work in
 dependency order (leaf/shared wrappers like button and label first). After
@@ -121,7 +123,12 @@ full build.
 
 ## Verify and report
 
-Typecheck per file, build per batch, full build at the end vs the baseline.
+For a single component or migration batch, run one targeted leftover sweep and
+typecheck for the target, direct consumers, and actual changed boundary; build
+once per batch when the change requires it, not once per consumer. For a whole
+project, an explicitly requested full validation, or a targeted sweep that
+finds a Radix import, run the full sweep. Run the full build against the
+baseline only for a whole project or explicitly requested full validation.
 
 Reports live in a `.migration/` directory at the project root, ONE FILE PER
 COMPONENT: `.migration/<component>.md` (e.g. `.migration/accordion.md`).
@@ -130,8 +137,9 @@ Rules:
   migrated. Re-running a component replaces its report; never touch other
   components' files.
 - A multi-component run ("migrate alert-dialog and dropdown-menu") writes one
-  file per component, each self-contained; shared consumer-sweep notes are
-  repeated in every affected file.
+  file per component, each self-contained; shared consumer-sweep results may be
+  referenced in each affected file, but the sweep and typecheck run only once
+  per batch.
 - Whole-project mode writes the per-component files plus
   `.migration/project.md` (dependency swap, app-code sweep summary, final
   build result).
@@ -152,8 +160,10 @@ documented publicly; reports must match it):
 ## Changed
 
 <every file touched, with what changed and why; include file:line for
-anything notable. Confirm the leftover scan is clean:
-grep -n "radix-ui\|@radix-ui" on this component's files>
+anything notable. Confirm the targeted leftover scan for this component or
+batch is clean:
+grep -n "radix-ui\|@radix-ui\|IconPlaceholder" on the changed files and
+direct consumers>
 
 ## Left alone
 

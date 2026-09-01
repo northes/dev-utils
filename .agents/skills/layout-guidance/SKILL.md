@@ -54,4 +54,9 @@ user-invocable: false
 
 ## 回归
 
-本项目禁止使用 Playwright 或 Computer Use 验证。修改后至少运行 `npm run build` 和 `git diff --check`，并静态检查单轴/双轴、嵌套滚动、CodeMirror、隐藏页面、Popover/Select Portal、Dialog 内浮层、窗口失焦和动态内容变化。
+本项目禁止使用 Playwright 或 Computer Use 验证。回归按变更类型分层触发，跨多个边界时组合对应层级；本节中的命令由 `project-validation` 聚合执行，同一轮不重复要求运行：
+
+- **普通布局**（布局、间距或尺寸）：静态检查直接尺寸链、响应式切换和受影响页面，不扩大为无关工具页回归。
+- **滚动容器**（真实滚动容器或 `OverlayScrollbar`）：静态检查横纵轴资格、嵌套滚动、动态内容/尺寸变化、失焦清理，以及滚动条的可访问性和命中区预留。
+- **浮层**（`Popover`、`Select`、`Dialog` 等）：静态检查 Portal 挂载位置、实际滚动层和 Dialog 内浮层的滚动与定位关系。
+- **CodeMirror/常驻工具页**：静态检查隐藏页面不卸载、状态（撤销历史和滚动位置）保留、尺寸链，以及编辑器自身滚动责任。

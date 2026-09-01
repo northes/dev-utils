@@ -12,6 +12,13 @@
 
 ## 强制 Skill 路由
 
+### 范围判定
+
+- 只加载直接命中当前变更边界的 skill；`project-validation` 用于实现完成后的验证，不在任务开始时展开完整验证矩阵。
+- 修改现有工具的局部行为或样式，且不改变工具 ID、注册、导航、历史、托盘、配置、事件或 bindings 时，不执行新增工具的完整接线清单。
+- 仅在持久化 Config、Wails 事件、托盘、Go 服务或 bindings 边界实际受影响时，才梳理前后端接线。
+- 先检查直接生产者和消费者；发现跨界证据后再扩展检查范围，不做无依据的全仓扫描。
+
 - 主题实现与接线：`.agents/skills/theme-customization/SKILL.md`
 - 主题回归验证：`.agents/skills/theme-validation/SKILL.md`
 - 工具页、编辑器、浮层或滚动条：`.agents/skills/layout-guidance/SKILL.md`
