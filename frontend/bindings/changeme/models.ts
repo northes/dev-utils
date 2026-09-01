@@ -19,6 +19,53 @@ export interface Config {
     "hiddenTimeResults": string[] | null;
     "jsonAutoFormatOnFill": boolean;
     "jsonAutoFormatOnFillMigrated": boolean;
+    "dockerCLIPath": string;
+    "imageSources": ImageSource[] | null;
+}
+
+export interface DockerDeleteFailure {
+    "imageID": string;
+    "error": string;
+}
+
+export interface DockerDeleteResult {
+    "deleted": string[] | null;
+    "failed": DockerDeleteFailure[] | null;
+}
+
+export interface DockerImage {
+    "id": string;
+    "name": string;
+    "size": string;
+    "sizeBytes": number;
+    "createdAt": string;
+}
+
+export interface DockerImageDetail {
+    "id": string;
+    "name": string;
+    "tags": string[] | null;
+    "size": number;
+    "createdAt": string;
+    "architecture": string;
+    "os": string;
+    "labels": { [_ in string]?: string } | null;
+    "command": string[] | null;
+    "entrypoint": string[] | null;
+}
+
+export interface DockerOperationResult {
+    "success": boolean;
+    "image": string;
+    "output": string;
+    "error": string;
+}
+
+export interface DockerStatus {
+    "available": boolean;
+    "cliPath": string;
+    "version": string;
+    "error": string;
 }
 
 export interface HistoryContent {
@@ -59,6 +106,20 @@ export interface HistoryItem {
 export interface HistoryPage {
     "items": HistoryItem[] | null;
     "total": number;
+}
+
+export interface ImageSource {
+    "id": string;
+    "name": string;
+    "kind": string;
+    "sshHost": string;
+}
+
+/**
+ * SSHConfigHost 是 ~/.ssh/config 中可以直接交给系统 ssh 的 Host 别名。
+ */
+export interface SSHConfigHost {
+    "alias": string;
 }
 
 export interface SidebarToolConfig {

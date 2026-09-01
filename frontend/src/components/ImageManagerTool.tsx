@@ -1,0 +1,1044 @@
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import {
+  ArrowsClockwise,
+  CaretDown,
+  CaretLeft,
+  CaretUp,
+  HardDrives,
+  MagnifyingGlass,
+} from '@phosphor-icons/react';
+import {
+  DeleteDockerImages,
+  GetDockerStatus,
+  GetSSHConfigHosts,
+  InspectDockerImage,
+  ListDockerImages,
+  PushDockerImage,
+} from '../../bindings/changeme/imageservice';
+import type {
+  Config as Settings,
+  DockerImage,
+  DockerImageDetail,
+  DockerStatus,
+  ImageSource,
+} from '../../bindings/changeme/models';
+import {
+  Reveal,
+  ToolLayout,
+  ToolLayoutContent,
+  ToolLayoutFooter,
+  ToolLayoutHeader,
+  ToolLayoutToolbar,
+  type PendingAction,
+  type ToolId,
+} from './shared';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from './ui/alert-dialog';
+import { Button } from './ui/button';
+import { ButtonGroup } from './ui/button-group';
+import { Checkbox } from './ui/checkbox';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from './ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from './ui/dropdown-menu';
+import { Input } from './ui/input';
+import { Label } from './ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { Spinner } from './ui/spinner';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
+import { toast } from './ui/toast';
+
+const LOCAL_SOURCE_ID = 'local';
+const LOCAL_SOURCE: ImageSource = {
+  id: LOCAL_SOURCE_ID,
+  name: '本机',
+  kind: 'local',
+  sshHost: '',
+};
+
+type ConfirmState =
+  { type: 'push'; image: DockerImage } | { type: 'delete'; ids: string[]; name: string } | null;
+
+function errorMessage(error: unknown) {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === 'string' && error) return error;
+  if (error && typeof error === 'object') {
+    const value = error as { message?: unknown; error?: unknown };
+    if (typeof value.message === 'string' && value.message) return value.message;
+    if (typeof value.error === 'string' && value.error) return value.error;
+  }
+  return '';
+}
+
+function sshSourceId(alias: string) {
+  return `ssh:${alias}`;
+}
+
+function isLocalSource(source: ImageSource) {
+  return source.id === LOCAL_SOURCE_ID || source.kind === 'local';
+}
+
+function resolveSources(sources: ImageSource[] | null | undefined): ImageSource[] {
+  const list = (sources ?? []).filter((source) => source.id);
+  if (list.some(isLocalSource)) return list;
+  return [LOCAL_SOURCE, ...list];
+}
+
+function sourceDisplayName(source: ImageSource, t: (key: string) => string) {
+  return isLocalSource(source) ? t('imageManagerTool.localSource') : source.name || source.sshHost;
+}
+
+function asStringList(value: string[] | string | null | undefined) {
+  if (!value) return [];
+  return (Array.isArray(value) ? value : [value]).map((item) => item.trim()).filter(Boolean);
+}
+
+function labelEntries(labels: DockerImageDetail['labels']) {
+  if (!labels) return [];
+  return Object.entries(labels).filter((entry): entry is [string, string] =>
+    Boolean(entry[0] && entry[1] != null && entry[1] !== ''),
+  );
+}
+
+function formatBytes(bytes: number, locale: string) {
+  if (!Number.isFinite(bytes) || bytes < 0) return '';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return `${value.toLocaleString(locale, {
+    maximumFractionDigits: unit === 0 ? 0 : 1,
+  })} ${units[unit]}`;
+}
+
+function formatCreatedAt(value: string, locale: string) {
+  if (!value) return '';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString(locale);
+}
+
+function shortId(id: string) {
+  const value = id.replace(/^sha256:/, '');
+  return value.length > 12 ? value.slice(0, 12) : value;
+}
+
+function imageLabel(image: DockerImage, unnamed: string) {
+  return image.name?.trim() || unnamed;
+}
+
+type ImageWithSizeBytes = DockerImage & { sizeBytes?: number | null };
+type SortKey = 'name' | 'size' | 'createdAt';
+type SortDirection = 'asc' | 'desc';
+
+function imageSizeBytes(image: DockerImage) {
+  const sizeBytes = (image as ImageWithSizeBytes).sizeBytes;
+  if (typeof sizeBytes === 'number' && Number.isFinite(sizeBytes)) return Math.max(0, sizeBytes);
+  const match = String(image.size ?? '')
+    .trim()
+    .match(/^([\d.,]+)\s*(B|KB|MB|GB|TB|KiB|MiB|GiB|TiB)?$/i);
+  if (!match) return 0;
+  const value = Number(match[1].replace(/,/g, ''));
+  if (!Number.isFinite(value)) return 0;
+  const unit = (match[2] ?? 'B').toLowerCase();
+  const exponent =
+    unit.startsWith('ki') || unit.startsWith('mi') || unit.startsWith('gi') || unit.startsWith('ti')
+      ? ({ b: 0, kib: 1, mib: 2, gib: 3, tib: 4 }[unit] ?? 0)
+      : ({ b: 0, kb: 1, mb: 2, gb: 3, tb: 4 }[unit] ?? 0);
+  return value * (unit.endsWith('i') || unit.includes('ib') ? 1024 ** exponent : 1000 ** exponent);
+}
+
+export default function ImageManagerTool({
+  active,
+  settings,
+  onSettingsChange,
+  record,
+  pending,
+  clearPending,
+}: {
+  active: boolean;
+  settings: Settings;
+  onSettingsChange: (patch: Pick<Settings, 'dockerCLIPath' | 'imageSources'>) => void;
+  record: (tool: ToolId, action: string, detail: string, input: string, output?: string) => void;
+  pending: PendingAction | null;
+  clearPending: () => void;
+}) {
+  const { t, i18n } = useTranslation();
+  const consumed = useRef<PendingAction | null>(null);
+  const sourceLabelId = useId();
+  const cliPathId = useId();
+  const sources = useMemo(() => resolveSources(settings.imageSources), [settings.imageSources]);
+  const cliPath = settings.dockerCLIPath ?? '';
+  const [sourceId, setSourceId] = useState(LOCAL_SOURCE_ID);
+  const source = sources.find((item) => item.id === sourceId) ?? sources[0] ?? LOCAL_SOURCE;
+  const [reloadNonce, setReloadNonce] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState('');
+  const [status, setStatus] = useState<DockerStatus | null>(null);
+  const [images, setImages] = useState<DockerImage[]>([]);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [detail, setDetail] = useState<DockerImageDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [busy, setBusy] = useState<'push' | 'delete' | null>(null);
+  const [manageOpen, setManageOpen] = useState(false);
+  const [draftCliPath, setDraftCliPath] = useState(cliPath);
+  const [hostOptions, setHostOptions] = useState<Array<{ alias: string; selected: boolean }>>([]);
+  const [hostsLoading, setHostsLoading] = useState(false);
+  const [hostsError, setHostsError] = useState('');
+  const [confirm, setConfirm] = useState<ConfirmState>(null);
+  const [search, setSearch] = useState('');
+  const [sortKey, setSortKey] = useState<SortKey>('name');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+
+  useEffect(() => {
+    if (!sources.some((item) => item.id === sourceId))
+      setSourceId(sources[0]?.id ?? LOCAL_SOURCE_ID);
+  }, [sourceId, sources]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setLoadError('');
+    setSelected(new Set());
+    let completed = 0;
+    const finishLoading = () => {
+      completed += 1;
+      if (completed === 2 && !cancelled) setLoading(false);
+    };
+    void GetDockerStatus(source.id)
+      .then((nextStatus) => {
+        if (!cancelled) setStatus(nextStatus);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setStatus(null);
+          setLoadError(errorMessage(error) || t('imageManagerTool.loadFailed'));
+        }
+      })
+      .finally(finishLoading);
+    void ListDockerImages(source.id)
+      .then((nextImages) => {
+        if (!cancelled) setImages(nextImages ?? []);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setImages([]);
+          setLoadError(errorMessage(error) || t('imageManagerTool.loadFailed'));
+        }
+      })
+      .finally(finishLoading);
+    return () => {
+      cancelled = true;
+    };
+  }, [cliPath, reloadNonce, source, t]);
+
+  useEffect(() => {
+    if (!pending || pending.tool !== 'image-manager' || consumed.current === pending) return;
+    consumed.current = pending;
+    clearPending();
+    if (pending.action === 'refresh') {
+      setDetail(null);
+      setReloadNonce((value) => value + 1);
+      record(
+        'image-manager',
+        t('imageManagerTool.refreshed'),
+        sourceDisplayName(source, t),
+        source.id,
+      );
+    }
+  }, [clearPending, pending, record, source, t]);
+
+  const unnamed = t('imageManagerTool.unnamed');
+  const filteredImages = useMemo(() => {
+    const query = search.trim().toLocaleLowerCase();
+    const next = query
+      ? images.filter(
+          (image) =>
+            image.id.toLocaleLowerCase().includes(query) ||
+            imageLabel(image, '').toLocaleLowerCase().includes(query),
+        )
+      : [...images];
+    next.sort((left, right) => {
+      const comparison =
+        sortKey === 'name'
+          ? imageLabel(left, '').localeCompare(imageLabel(right, ''), i18n.language, {
+              sensitivity: 'base',
+            })
+          : sortKey === 'size'
+            ? imageSizeBytes(left) - imageSizeBytes(right)
+            : new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+    return next;
+  }, [i18n.language, images, search, sortDirection, sortKey]);
+  const selectedCount = selected.size;
+  const allSelected =
+    filteredImages.length > 0 && filteredImages.every((image) => selected.has(image.id));
+  const someSelected = filteredImages.some((image) => selected.has(image.id)) && !allSelected;
+  const filteredTotalBytes = filteredImages.reduce(
+    (total, image) => total + imageSizeBytes(image),
+    0,
+  );
+  const working = loading || busy !== null || detailLoading;
+
+  useEffect(() => {
+    const visibleIds = new Set(filteredImages.map((image) => image.id));
+    setSelected((current) => {
+      const next = new Set([...current].filter((id) => visibleIds.has(id)));
+      return next.size === current.size ? current : next;
+    });
+  }, [filteredImages]);
+
+  const changeSort = (nextKey: SortKey) => {
+    if (sortKey === nextKey)
+      setSortDirection((direction) => (direction === 'asc' ? 'desc' : 'asc'));
+    else {
+      setSortKey(nextKey);
+      setSortDirection('asc');
+    }
+  };
+
+  const sortLabel = (key: SortKey) =>
+    t(
+      `imageManagerTool.sort${key === 'createdAt' ? 'Created' : key[0].toUpperCase() + key.slice(1)}`,
+    );
+
+  const sortableHeader = (key: SortKey, label: string) => {
+    const activeSort = sortKey === key;
+    const directionLabel = activeSort
+      ? sortDirection === 'asc'
+        ? t('imageManagerTool.sortAscending')
+        : t('imageManagerTool.sortDescending')
+      : t('imageManagerTool.sortNotActive');
+    return (
+      <Button
+        variant="ghost"
+        size="sm"
+        className="-ml-2 h-7 px-2 text-[11px] font-medium"
+        aria-label={t('imageManagerTool.sortBy', {
+          column: sortLabel(key),
+          direction: directionLabel,
+        })}
+        onClick={() => changeSort(key)}
+      >
+        {label}
+        {activeSort ? (
+          sortDirection === 'asc' ? (
+            <CaretUp data-icon="inline-end" aria-hidden="true" />
+          ) : (
+            <CaretDown data-icon="inline-end" aria-hidden="true" />
+          )
+        ) : null}
+      </Button>
+    );
+  };
+
+  const openManage = () => {
+    setDraftCliPath(cliPath);
+    setHostsError('');
+    setHostOptions([]);
+    setManageOpen(true);
+    setHostsLoading(true);
+    void GetSSHConfigHosts()
+      .then((hosts) => {
+        const aliases = new Map<string, string>();
+        for (const host of hosts ?? []) {
+          const alias = host.alias?.trim();
+          if (alias) aliases.set(alias, alias);
+        }
+        for (const item of sources) {
+          if (!isLocalSource(item) && item.sshHost && !aliases.has(item.sshHost)) {
+            aliases.set(item.sshHost, item.name || item.sshHost);
+          }
+        }
+        const selectedIds = new Set(
+          sources.filter((item) => !isLocalSource(item)).map((item) => item.id),
+        );
+        setHostOptions(
+          [...aliases.entries()].map(([alias]) => ({
+            alias,
+            selected: selectedIds.has(sshSourceId(alias)),
+          })),
+        );
+      })
+      .catch((error) => {
+        setHostsError(errorMessage(error) || t('imageManagerTool.sshHostsFailed'));
+      })
+      .finally(() => setHostsLoading(false));
+  };
+
+  const saveSources = () => {
+    const local = sources.find(isLocalSource) ?? LOCAL_SOURCE;
+    const nextSources: ImageSource[] = [
+      { ...local, id: LOCAL_SOURCE_ID, kind: 'local' },
+      ...hostOptions
+        .filter((host) => host.selected)
+        .map((host) => ({
+          id: sshSourceId(host.alias),
+          name: host.alias,
+          kind: 'ssh',
+          sshHost: host.alias,
+        })),
+    ];
+    onSettingsChange({ dockerCLIPath: draftCliPath.trim(), imageSources: nextSources });
+    setManageOpen(false);
+  };
+
+  const toggleAll = (checked: boolean) => {
+    setSelected(checked ? new Set(images.map((image) => image.id)) : new Set());
+  };
+
+  const toggleRow = (id: string, checked: boolean) => {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  const viewImage = async (image: DockerImage) => {
+    setDetailLoading(true);
+    try {
+      const next = await InspectDockerImage(source.id, image.id);
+      setDetail(next);
+      record(
+        'image-manager',
+        t('imageManagerTool.inspected'),
+        imageLabel(image, unnamed),
+        image.id,
+      );
+    } catch (error) {
+      toast.add({
+        title: t('imageManagerTool.actionFailed'),
+        description: errorMessage(error) || undefined,
+        type: 'error',
+      });
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const runPush = async (image: DockerImage) => {
+    setBusy('push');
+    try {
+      const result = await PushDockerImage(source.id, image.name || image.id);
+      if (!result.success) {
+        toast.add({
+          title: t('imageManagerTool.actionFailed'),
+          description: result.error || undefined,
+          type: 'error',
+        });
+        return;
+      }
+      toast.add({ title: t('imageManagerTool.pushed') });
+      record('image-manager', t('imageManagerTool.push'), imageLabel(image, unnamed), image.id);
+    } catch (error) {
+      toast.add({
+        title: t('imageManagerTool.actionFailed'),
+        description: errorMessage(error) || undefined,
+        type: 'error',
+      });
+    } finally {
+      setBusy(null);
+      setConfirm(null);
+    }
+  };
+
+  const runDelete = async (ids: string[], name: string) => {
+    setBusy('delete');
+    try {
+      const result = await DeleteDockerImages(source.id, ids);
+      const deleted = result.deleted?.length ?? 0;
+      const failed = result.failed?.length ?? 0;
+      if (failed > 0) {
+        toast.add({
+          title: t('imageManagerTool.deletePartial', { deleted, failed }),
+          type: 'warning',
+        });
+      } else {
+        toast.add({ title: t('imageManagerTool.deleted') });
+      }
+      record('image-manager', t('imageManagerTool.delete'), name, ids.join('\n'));
+      if (detail && ids.includes(detail.id)) setDetail(null);
+      setSelected(new Set());
+      setReloadNonce((value) => value + 1);
+    } catch (error) {
+      toast.add({
+        title: t('imageManagerTool.actionFailed'),
+        description: errorMessage(error) || undefined,
+        type: 'error',
+      });
+    } finally {
+      setBusy(null);
+      setConfirm(null);
+    }
+  };
+
+  const confirmAction = () => {
+    if (!confirm || busy) return;
+    if (confirm.type === 'push') void runPush(confirm.image);
+    else void runDelete(confirm.ids, confirm.name);
+  };
+
+  const statusText = loading
+    ? t('imageManagerTool.statusChecking')
+    : status?.available
+      ? t('imageManagerTool.statusAvailable', {
+          version: status.version || t('imageManagerTool.emptyValue'),
+        })
+      : status?.error || t('imageManagerTool.statusUnavailable');
+
+  const detailRows = detail
+    ? [
+        { key: 'id', label: t('imageManagerTool.detailId'), value: detail.id },
+        {
+          key: 'names',
+          label: t('imageManagerTool.detailNames'),
+          value: [detail.name, ...asStringList(detail.tags)].filter(Boolean).join(', ') || unnamed,
+        },
+        {
+          key: 'size',
+          label: t('imageManagerTool.detailSize'),
+          value: formatBytes(detail.size, i18n.language),
+        },
+        {
+          key: 'createdAt',
+          label: t('imageManagerTool.detailCreated'),
+          value: formatCreatedAt(detail.createdAt, i18n.language),
+        },
+        {
+          key: 'architecture',
+          label: t('imageManagerTool.detailArchitecture'),
+          value: detail.architecture,
+        },
+        { key: 'os', label: t('imageManagerTool.detailOs'), value: detail.os },
+        {
+          key: 'command',
+          label: t('imageManagerTool.detailCommand'),
+          value: asStringList(detail.command).join(' '),
+        },
+        {
+          key: 'entrypoint',
+          label: t('imageManagerTool.detailEntrypoint'),
+          value: asStringList(detail.entrypoint).join(' '),
+        },
+      ]
+    : [];
+
+  return (
+    <Reveal index={0} fill active={active}>
+      <ToolLayout>
+        <ToolLayoutHeader
+          title={t('imageManagerTool.title')}
+          subtitle={t('imageManagerTool.subtitle')}
+        />
+        {detail ? (
+          <ToolLayoutToolbar
+            left={
+              <Button
+                variant="ghost"
+                onClick={() => setDetail(null)}
+                className="h-[32px] flex-none text-[11px]"
+              >
+                <CaretLeft data-icon="inline-start" weight="duotone" />
+                {t('imageManagerTool.back')}
+              </Button>
+            }
+          />
+        ) : (
+          <ToolLayoutToolbar
+            left={
+              <div className="flex min-w-0 flex-wrap items-end gap-4 max-[700px]:w-full">
+                <div className="flex min-w-0 flex-col gap-1 text-[10px] font-medium text-muted-foreground max-[700px]:w-full">
+                  <span id={sourceLabelId}>{t('imageManagerTool.source')}</span>
+                  <Select
+                    items={sources.map((item) => ({
+                      value: item.id,
+                      label: sourceDisplayName(item, t),
+                    }))}
+                    value={source.id}
+                    onValueChange={(value) => {
+                      if (value) {
+                        setDetail(null);
+                        setSourceId(value);
+                      }
+                    }}
+                  >
+                    <SelectTrigger
+                      className="w-[220px] max-w-full max-[700px]:w-full"
+                      aria-labelledby={sourceLabelId}
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent alignItemWithTrigger={false}>
+                      {sources.map((item) => (
+                        <SelectItem key={item.id} value={item.id}>
+                          {sourceDisplayName(item, t)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <p
+                  className={`max-w-full text-[11px] leading-[1.4] ${status?.available ? 'text-muted-foreground' : 'text-destructive'}`}
+                  title={status?.cliPath || undefined}
+                >
+                  {statusText}
+                </p>
+                <div className="flex min-w-0 flex-col gap-1 text-[10px] font-medium text-muted-foreground max-[700px]:w-full">
+                  <Label htmlFor="image-manager-search">{t('imageManagerTool.search')}</Label>
+                  <div className="relative flex w-[220px] max-w-full items-center max-[700px]:w-full">
+                    <MagnifyingGlass
+                      size={14}
+                      weight="duotone"
+                      aria-hidden="true"
+                      className="pointer-events-none absolute left-2.5 text-muted-foreground"
+                    />
+                    <Input
+                      id="image-manager-search"
+                      value={search}
+                      onChange={(event) => setSearch(event.target.value)}
+                      placeholder={t('imageManagerTool.searchPlaceholder')}
+                      className="pl-8 text-[11px]"
+                    />
+                  </div>
+                </div>
+              </div>
+            }
+            right={
+              <div className="flex min-w-0 flex-wrap items-end gap-2 max-[700px]:w-full max-[700px]:justify-end">
+                <Button
+                  variant="outline"
+                  className="h-[32px] min-w-[32px] flex-none text-[11px]"
+                  disabled={working}
+                  onClick={() => {
+                    setDetail(null);
+                    setReloadNonce((value) => value + 1);
+                    record(
+                      'image-manager',
+                      t('imageManagerTool.refreshed'),
+                      sourceDisplayName(source, t),
+                      source.id,
+                    );
+                  }}
+                >
+                  {loading ? (
+                    <Spinner data-icon="inline-start" />
+                  ) : (
+                    <ArrowsClockwise data-icon="inline-start" weight="duotone" />
+                  )}
+                  {t('imageManagerTool.refresh')}
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="h-[32px] flex-none text-[11px]"
+                  onClick={openManage}
+                >
+                  {t('imageManagerTool.manageSources')}
+                </Button>
+              </div>
+            }
+          />
+        )}
+        <ToolLayoutContent className="flex min-h-0 flex-col">
+          {detail ? (
+            <div className="h-full min-h-0 overflow-x-hidden overflow-y-auto [padding-inline-end:var(--overlay-scrollbar-hit-size)]">
+              <h2 className="m-0 text-sm font-medium text-foreground">
+                {t('imageManagerTool.detailTitle')}
+              </h2>
+              <dl className="mt-3 divide-y divide-border">
+                {detailRows.map((row) => (
+                  <div
+                    key={row.key}
+                    className="grid grid-cols-1 gap-1 py-2.5 sm:grid-cols-[8.5rem_minmax(0,1fr)] sm:gap-4"
+                  >
+                    <dt className="text-[11px] font-medium text-muted-foreground">{row.label}</dt>
+                    <dd className="m-0 min-w-0 break-words text-[13px] text-foreground">
+                      {row.value || t('imageManagerTool.emptyValue')}
+                    </dd>
+                  </div>
+                ))}
+                <div className="grid grid-cols-1 gap-1 py-2.5 sm:grid-cols-[8.5rem_minmax(0,1fr)] sm:gap-4">
+                  <dt className="text-[11px] font-medium text-muted-foreground">
+                    {t('imageManagerTool.detailLabels')}
+                  </dt>
+                  <dd className="m-0 min-w-0">
+                    {labelEntries(detail.labels).length === 0 ? (
+                      <p className="m-0 text-[13px] text-muted-foreground">
+                        {t('imageManagerTool.labelsEmpty')}
+                      </p>
+                    ) : (
+                      <div className="divide-y divide-border">
+                        {labelEntries(detail.labels).map(([key, value]) => (
+                          <div
+                            key={key}
+                            className="flex flex-col gap-0.5 py-1.5 first:pt-0 last:pb-0"
+                          >
+                            <span className="font-mono text-[11px] text-muted-foreground">
+                              {key}
+                            </span>
+                            <span className="break-words text-[13px] text-foreground">{value}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </dd>
+                </div>
+              </dl>
+            </div>
+          ) : loadError ? (
+            <Button
+              variant="ghost"
+              className="flex h-auto min-h-0 flex-1 flex-col items-center justify-center gap-2 text-muted-foreground [&_svg]:size-7"
+              onClick={() => setReloadNonce((value) => value + 1)}
+            >
+              <HardDrives data-icon="inline-start" weight="duotone" />
+              <span className="text-sm font-medium text-foreground">
+                {t('imageManagerTool.loadFailed')}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {loadError || t('imageManagerTool.loadFailedHint')}
+              </span>
+            </Button>
+          ) : loading || images.length === 0 || filteredImages.length === 0 ? (
+            <div className="flex h-auto min-h-0 flex-1 flex-col items-center justify-center gap-2 text-center">
+              {loading ? (
+                <Spinner />
+              ) : (
+                <>
+                  <HardDrives size={28} weight="duotone" className="text-muted-foreground" />
+                  <div className="text-sm font-medium text-foreground">
+                    {images.length > 0
+                      ? t('imageManagerTool.searchNoResults')
+                      : t('imageManagerTool.emptyTitle')}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {images.length > 0
+                      ? t('imageManagerTool.searchNoResultsHint')
+                      : t('imageManagerTool.emptyHint')}
+                  </div>
+                </>
+              )}
+            </div>
+          ) : (
+            <div className="min-h-0 flex-1 overflow-auto [padding-inline-end:var(--overlay-scrollbar-hit-size)]">
+              <Table containerClassName="overflow-visible">
+                <TableHeader className="sticky top-0 z-10 bg-background">
+                  <TableRow>
+                    <TableHead className="w-10">
+                      <Checkbox
+                        checked={allSelected}
+                        indeterminate={someSelected}
+                        onCheckedChange={(checked) => toggleAll(checked === true)}
+                        aria-label={t('imageManagerTool.selectAll')}
+                      />
+                    </TableHead>
+                    <TableHead>{t('imageManagerTool.columnId')}</TableHead>
+                    <TableHead
+                      aria-sort={
+                        sortKey === 'name'
+                          ? sortDirection === 'asc'
+                            ? 'ascending'
+                            : 'descending'
+                          : 'none'
+                      }
+                    >
+                      {sortableHeader('name', t('imageManagerTool.columnName'))}
+                    </TableHead>
+                    <TableHead
+                      aria-sort={
+                        sortKey === 'size'
+                          ? sortDirection === 'asc'
+                            ? 'ascending'
+                            : 'descending'
+                          : 'none'
+                      }
+                    >
+                      {sortableHeader('size', t('imageManagerTool.columnSize'))}
+                    </TableHead>
+                    <TableHead
+                      aria-sort={
+                        sortKey === 'createdAt'
+                          ? sortDirection === 'asc'
+                            ? 'ascending'
+                            : 'descending'
+                          : 'none'
+                      }
+                    >
+                      {sortableHeader('createdAt', t('imageManagerTool.columnCreated'))}
+                    </TableHead>
+                    <TableHead className="text-right">
+                      {t('imageManagerTool.columnActions')}
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredImages.map((image) => (
+                    <TableRow
+                      key={image.id}
+                      data-state={selected.has(image.id) ? 'selected' : undefined}
+                    >
+                      <TableCell
+                        onClick={(event) => event.stopPropagation()}
+                        onKeyDown={(event) => event.stopPropagation()}
+                      >
+                        <Checkbox
+                          checked={selected.has(image.id)}
+                          onCheckedChange={(checked) => toggleRow(image.id, checked === true)}
+                          aria-label={t('imageManagerTool.selectRow')}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <span className="font-mono text-[12px]" title={image.id}>
+                          {shortId(image.id)}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <span className="max-w-[28rem] truncate" title={image.name}>
+                          {imageLabel(image, unnamed)}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {image.size || t('imageManagerTool.emptyValue')}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {formatCreatedAt(image.createdAt, i18n.language)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <ButtonGroup
+                          className="ml-auto"
+                          aria-label={t('imageManagerTool.rowActions')}
+                        >
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={working}
+                            onClick={() => void viewImage(image)}
+                          >
+                            {t('imageManagerTool.view')}
+                          </Button>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger
+                              disabled={working}
+                              render={
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  aria-label={t('imageManagerTool.moreActions')}
+                                />
+                              }
+                            >
+                              <CaretDown weight="duotone" />
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="min-w-32">
+                              <DropdownMenuGroup>
+                                <DropdownMenuItem
+                                  onClick={() => setConfirm({ type: 'push', image })}
+                                >
+                                  {t('imageManagerTool.push')}
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  variant="destructive"
+                                  onClick={() =>
+                                    setConfirm({
+                                      type: 'delete',
+                                      ids: [image.id],
+                                      name: imageLabel(image, unnamed),
+                                    })
+                                  }
+                                >
+                                  {t('imageManagerTool.delete')}
+                                </DropdownMenuItem>
+                              </DropdownMenuGroup>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </ButtonGroup>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </ToolLayoutContent>
+        <ToolLayoutFooter>
+          {!detail ? (
+            <div className="flex items-center justify-between gap-3 border-t border-border pt-3">
+              <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
+                <span>
+                  {t('imageManagerTool.filteredSummary', { count: filteredImages.length })}
+                </span>
+                <span>
+                  {t('imageManagerTool.filteredSize', {
+                    size:
+                      formatBytes(filteredTotalBytes, i18n.language) ||
+                      t('imageManagerTool.emptyValue'),
+                  })}
+                </span>
+                {selectedCount > 0 ? (
+                  <span>{t('imageManagerTool.selectedCount', { count: selectedCount })}</span>
+                ) : null}
+              </div>
+              {selectedCount > 0 ? (
+                <Button
+                  variant="destructive"
+                  className="h-[30px] flex-none px-[11px] text-[11px]"
+                  disabled={working}
+                  onClick={() =>
+                    setConfirm({
+                      type: 'delete',
+                      ids: [...selected],
+                      name: t('imageManagerTool.selectedCount', { count: selectedCount }),
+                    })
+                  }
+                >
+                  {busy === 'delete' ? <Spinner data-icon="inline-start" /> : null}
+                  {t('imageManagerTool.batchDelete')}
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
+        </ToolLayoutFooter>
+      </ToolLayout>
+      <Dialog open={manageOpen} onOpenChange={setManageOpen}>
+        <DialogContent className="sm:max-w-lg" showCloseButton>
+          <DialogHeader>
+            <DialogTitle>{t('imageManagerTool.manageSourcesTitle')}</DialogTitle>
+            <DialogDescription>{t('imageManagerTool.manageSourcesDesc')}</DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor={cliPathId}>{t('imageManagerTool.dockerCliPath')}</Label>
+              <Input
+                id={cliPathId}
+                value={draftCliPath}
+                onChange={(event) => setDraftCliPath(event.target.value)}
+                placeholder={t('imageManagerTool.dockerCliPathPlaceholder')}
+              />
+              <p className="text-[10px] leading-[1.4] text-muted-foreground">
+                {t('imageManagerTool.dockerCliPathHint')}
+              </p>
+            </div>
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between gap-3 border-b border-border py-2">
+                <span className="text-sm text-foreground">{t('imageManagerTool.localSource')}</span>
+                <span className="text-[10px] text-muted-foreground">
+                  {t('imageManagerTool.localSourceHint')}
+                </span>
+              </div>
+              <span className="text-[10px] font-medium text-muted-foreground">
+                {t('imageManagerTool.sshHosts')}
+              </span>
+              {hostsLoading ? (
+                <div className="flex justify-center py-3">
+                  <Spinner />
+                </div>
+              ) : hostsError ? (
+                <p className="m-0 text-sm text-destructive">{hostsError}</p>
+              ) : hostOptions.length === 0 ? (
+                <p className="m-0 text-sm text-muted-foreground">
+                  {t('imageManagerTool.sshHostsEmpty')}
+                </p>
+              ) : (
+                <div className="max-h-56 overflow-y-auto [padding-inline-end:var(--overlay-scrollbar-hit-size)]">
+                  {hostOptions.map((host, index) => {
+                    const id = sshSourceId(host.alias);
+                    return (
+                      <label
+                        key={id}
+                        className="flex items-center gap-2 border-b border-border py-2 last:border-b-0"
+                      >
+                        <Checkbox
+                          checked={host.selected}
+                          onCheckedChange={(checked) =>
+                            setHostOptions((current) =>
+                              current.map((item, itemIndex) =>
+                                itemIndex === index
+                                  ? { ...item, selected: checked === true }
+                                  : item,
+                              ),
+                            )
+                          }
+                        />
+                        <span className="min-w-0 truncate font-mono text-[13px]">{host.alias}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setManageOpen(false)}>
+              {t('imageManagerTool.cancel')}
+            </Button>
+            <Button onClick={saveSources}>{t('imageManagerTool.saveSources')}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <AlertDialog
+        open={confirm !== null}
+        onOpenChange={(open) => {
+          if (!open && !busy) setConfirm(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {confirm?.type === 'push'
+                ? t('imageManagerTool.pushConfirmTitle')
+                : t('imageManagerTool.deleteConfirmTitle')}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirm?.type === 'push'
+                ? t('imageManagerTool.pushConfirmBody', {
+                    name: imageLabel(confirm.image, unnamed),
+                  })
+                : confirm?.type === 'delete'
+                  ? confirm.ids.length > 1
+                    ? t('imageManagerTool.deleteConfirmManyBody', { count: confirm.ids.length })
+                    : t('imageManagerTool.deleteConfirmBody', { name: confirm.name })
+                  : null}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={busy !== null}>
+              {t('imageManagerTool.cancel')}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              variant={confirm?.type === 'delete' ? 'destructive' : 'default'}
+              disabled={busy !== null}
+              onClick={confirmAction}
+            >
+              {busy ? <Spinner data-icon="inline-start" /> : null}
+              {t('imageManagerTool.confirm')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </Reveal>
+  );
+}

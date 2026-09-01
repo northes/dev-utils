@@ -65,6 +65,7 @@ import {
   GearSix,
   GitDiff,
   Key,
+  HardDrives,
   Image as ImageIcon,
   LinkSimple,
   SidebarSimple,
@@ -148,6 +149,7 @@ const defaultSettings: Settings = {
     { id: 'diff', enabled: true },
     { id: 'jwt', enabled: true },
     { id: 'url', enabled: true },
+    { id: 'image-manager', enabled: true },
   ],
   themeMode: 'dark',
   lightTheme: 'default-light',
@@ -170,6 +172,8 @@ const defaultSettings: Settings = {
   hiddenTimeResults: [],
   jsonAutoFormatOnFill: true,
   jsonAutoFormatOnFillMigrated: true,
+  dockerCLIPath: '',
+  imageSources: [{ id: 'local', name: '本机', kind: 'local', sshHost: '' }],
 };
 const JsonTool = lazy(() => import('./components/JsonTool'));
 const TimeTool = lazy(() => import('./components/TimeTool'));
@@ -179,6 +183,7 @@ const DiffTool = lazy(() => import('./components/DiffTool'));
 const JwtTool = lazy(() => import('./components/JwtTool'));
 const UrlTool = lazy(() => import('./components/UrlTool'));
 const ImageTool = lazy(() => import('./components/ImageTool'));
+const ImageManagerTool = lazy(() => import('./components/ImageManagerTool'));
 const SettingsPage = lazy(() => import('./components/SettingsPage'));
 const HistoryPage = lazy(() => import('./components/HistoryPage'));
 const tools: ToolDefinition[] = [
@@ -237,6 +242,13 @@ const tools: ToolDefinition[] = [
     descriptionKey: 'tools.image.description',
     icon: ImageIcon,
     keywords: 'image picture crop expand quality png jpg jpeg svg webp 图片 裁剪 扩充 质量 导出',
+  },
+  {
+    id: 'image-manager' as const,
+    nameKey: 'tools.image-manager.name',
+    descriptionKey: 'tools.image-manager.description',
+    icon: HardDrives,
+    keywords: 'docker image manager ssh container 镜像 管理 容器 推送 删除',
   },
 ];
 const paletteItems: PaletteItem[] = [
@@ -319,6 +331,14 @@ const paletteItems: PaletteItem[] = [
     icon: ImageIcon,
     keywords: 'image picture crop expand 图片 裁剪 扩充 打开工具',
     page: 'image',
+  },
+  {
+    id: 'open:image-manager',
+    labelKey: 'commands.openImageManager',
+    groupKey: 'groups.tools',
+    icon: HardDrives,
+    keywords: 'docker image manager ssh 镜像 管理 容器 打开工具',
+    page: 'image-manager',
   },
   {
     id: 'paste',
@@ -704,6 +724,15 @@ const paletteItems: PaletteItem[] = [
     keywords: 'export save download 导出 保存 下载',
     tool: 'image',
     action: 'export',
+  },
+  {
+    id: 'image-manager:refresh',
+    labelKey: 'imageManagerTool.refresh',
+    groupKey: 'tools.image-manager.name',
+    icon: HardDrives,
+    keywords: 'refresh reload docker images 刷新 镜像 列表',
+    tool: 'image-manager',
+    action: 'refresh',
   },
   {
     id: 'diff:swap',
@@ -1667,6 +1696,24 @@ function AppShell() {
                 <Suspense fallback={null}>
                   <ImageTool
                     active={page === 'image'}
+                    record={record}
+                    pending={pending}
+                    clearPending={() => setPending(null)}
+                  />
+                </Suspense>
+              )}
+            </div>
+            <div
+              className={`tool-slot h-full min-h-0 overflow-hidden${page === 'image-manager' ? '' : ' is-hidden absolute inset-0 invisible pointer-events-none'}`}
+            >
+              {visited.has('image-manager') && (
+                <Suspense fallback={null}>
+                  <ImageManagerTool
+                    active={page === 'image-manager'}
+                    settings={settings}
+                    onSettingsChange={(patch) =>
+                      setSettings((current) => ({ ...current, ...patch }))
+                    }
                     record={record}
                     pending={pending}
                     clearPending={() => setPending(null)}

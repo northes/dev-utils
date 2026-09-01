@@ -32,6 +32,8 @@ type Config struct {
 	HiddenTimeResults            []string            `json:"hiddenTimeResults"`
 	JsonAutoFormatOnFill         bool                `json:"jsonAutoFormatOnFill"`
 	JsonAutoFormatOnFillMigrated bool                `json:"jsonAutoFormatOnFillMigrated"`
+	DockerCLIPath                string              `json:"dockerCLIPath"`
+	ImageSources                 []ImageSource       `json:"imageSources"`
 }
 
 type SidebarToolConfig struct {
@@ -39,7 +41,20 @@ type SidebarToolConfig struct {
 	Enabled bool   `json:"enabled"`
 }
 
-var defaultSidebarToolIDs = []string{"json", "time", "text", "base64", "diff", "jwt", "url"}
+var defaultSidebarToolIDs = []string{"json", "time", "text", "base64", "diff", "jwt", "url", "image-manager"}
+
+type ImageSource struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Kind    string `json:"kind"`
+	SSHHost string `json:"sshHost"`
+}
+
+const localImageSourceID = "local"
+
+func defaultImageSources() []ImageSource {
+	return []ImageSource{{ID: localImageSourceID, Name: "本机", Kind: "local"}}
+}
 
 func defaultSidebarTools() []SidebarToolConfig {
 	tools := make([]SidebarToolConfig, 0, len(defaultSidebarToolIDs))
@@ -81,7 +96,7 @@ type historyStored struct {
 }
 
 func defaultConfig() Config {
-	return Config{TrayMatchEnabled: true, TrayMatchTools: []string{"json", "time", "text", "base64", "diff", "jwt", "url"}, AutoOverwrite: true, AutoCheckUpdates: true, Language: "zh-CN", SidebarMode: "full", SidebarTools: defaultSidebarTools(), ThemeMode: "dark", LightTheme: "default-light", DarkTheme: "default-dark", DiffClipboardTargetMode: "alternate", CodeEditorFontSize: 16, TimeResultOrder: []string{"local", "dateTime", "dateOnly", "timeOnly", "zonedIso8601", "rfc3339", "utc", "compact", "underscore", "unixSeconds", "unixMilliseconds", "unixNanoseconds"}, JsonAutoFormatOnFill: true, JsonAutoFormatOnFillMigrated: true}
+	return Config{TrayMatchEnabled: true, TrayMatchTools: []string{"json", "time", "text", "base64", "diff", "jwt", "url"}, AutoOverwrite: true, AutoCheckUpdates: true, Language: "zh-CN", SidebarMode: "full", SidebarTools: defaultSidebarTools(), ThemeMode: "dark", LightTheme: "default-light", DarkTheme: "default-dark", DiffClipboardTargetMode: "alternate", CodeEditorFontSize: 16, TimeResultOrder: []string{"local", "dateTime", "dateOnly", "timeOnly", "zonedIso8601", "rfc3339", "utc", "compact", "underscore", "unixSeconds", "unixMilliseconds", "unixNanoseconds"}, JsonAutoFormatOnFill: true, JsonAutoFormatOnFillMigrated: true, ImageSources: defaultImageSources()}
 }
 
 func normalizeThemeID(theme string, defaultID string, legacyID string) string {
@@ -106,7 +121,112 @@ func stringSlicesEqual(a []string, b []string) bool {
 	return true
 }
 
+func sidebarToolsEqual(a []SidebarToolConfig, b []SidebarToolConfig) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func imageSourcesEqual(a []ImageSource, b []ImageSource) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func validConfigValue(value string, maxLength int) bool {
+	if value == "" || len(value) > maxLength {
+		return false
+	}
+	for _, r := range value {
+		if r == '\x00' || r == '\n' || r == '\r' || r == '\t' || r == ' ' || r < 0x20 || r == 0x7f {
+			return false
+		}
+	}
+	return true
+}
+
+func validTextValue(value string, maxLength int) bool {
+	if value == "" || len(value) > maxLength {
+		return false
+	}
+	for _, r := range value {
+		if r == '\x00' || r == '\n' || r == '\r' || r < 0x20 || r == 0x7f {
+			return false
+		}
+	}
+	return true
+}
+
+func normalizeImageSources(sources []ImageSource) []ImageSource {
+	result := make([]ImageSource, 0, len(sources)+1)
+	seen := make(map[string]bool, len(sources)+1)
+	hasLocal := false
+	for _, source := range sources {
+		source.ID = strings.TrimSpace(source.ID)
+		source.Name = strings.TrimSpace(source.Name)
+		source.Kind = strings.TrimSpace(strings.ToLower(source.Kind))
+		source.SSHHost = strings.TrimSpace(source.SSHHost)
+		if source.Kind == "" && (source.ID == "" || source.ID == localImageSourceID) {
+			source.Kind = "local"
+		}
+		switch source.Kind {
+		case "local":
+			if source.ID != localImageSourceID || seen[source.ID] {
+				continue
+			}
+			if source.Name == "" {
+				source.Name = "本机"
+			}
+			if !validTextValue(source.Name, 128) {
+				continue
+			}
+			source.SSHHost = ""
+			hasLocal = true
+		case "ssh":
+			if source.ID == localImageSourceID || !validConfigValue(source.ID, 64) || seen[source.ID] || !validSSHHost(source.SSHHost) {
+				continue
+			}
+			if source.Name == "" {
+				source.Name = source.SSHHost
+			}
+			if !validTextValue(source.Name, 128) {
+				continue
+			}
+		default:
+			continue
+		}
+		result = append(result, source)
+		seen[source.ID] = true
+	}
+	if !hasLocal {
+		result = append([]ImageSource{{ID: localImageSourceID, Name: "本机", Kind: "local"}}, result...)
+	}
+	return result
+}
+
+func normalizeDockerCLIPath(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" || !validPathValue(path, 4096) || strings.HasPrefix(path, "-") {
+		return ""
+	}
+	return path
+}
+
 func normalizeConfig(cfg Config) Config {
+	cfg.DockerCLIPath = normalizeDockerCLIPath(cfg.DockerCLIPath)
+	cfg.ImageSources = normalizeImageSources(cfg.ImageSources)
 	validSidebarTool := make(map[string]bool, len(defaultSidebarToolIDs))
 	for _, id := range defaultSidebarToolIDs {
 		validSidebarTool[id] = true
@@ -273,10 +393,12 @@ func NewConfigService() *ConfigService {
 			_ = json.Unmarshal(b, &legacy)
 			_, hasThemeMode := raw["themeMode"]
 			_, hasLegacyTheme := raw["theme"]
+			_, hasDockerCLIPath := raw["dockerCLIPath"]
+			_, hasImageSources := raw["imageSources"]
 			cfg = migrateLegacyTheme(cfg, legacy.Theme, hasThemeMode)
 
 			cfg = normalizeConfig(cfg)
-			if hasLegacyTheme || beforeNormalize.ThemeMode != cfg.ThemeMode || beforeNormalize.LightTheme != cfg.LightTheme || beforeNormalize.DarkTheme != cfg.DarkTheme || !stringSlicesEqual(beforeNormalize.TrayMatchTools, cfg.TrayMatchTools) || beforeNormalize.CodeEditorFontSize != cfg.CodeEditorFontSize {
+			if hasLegacyTheme || !hasDockerCLIPath || !hasImageSources || beforeNormalize.ThemeMode != cfg.ThemeMode || beforeNormalize.LightTheme != cfg.LightTheme || beforeNormalize.DarkTheme != cfg.DarkTheme || !stringSlicesEqual(beforeNormalize.TrayMatchTools, cfg.TrayMatchTools) || beforeNormalize.CodeEditorFontSize != cfg.CodeEditorFontSize || !sidebarToolsEqual(beforeNormalize.SidebarTools, cfg.SidebarTools) || !imageSourcesEqual(beforeNormalize.ImageSources, cfg.ImageSources) || beforeNormalize.DockerCLIPath != cfg.DockerCLIPath {
 				if normalized, marshalErr := json.Marshal(cfg); marshalErr == nil {
 					_ = writeConfigAtomically(path, normalized)
 				}
