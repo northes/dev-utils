@@ -76,6 +76,19 @@ type DockerImage struct {
 	CreatedAt  string   `json:"createdAt"`
 }
 
+const registryImageMetadataEventName = "image-manager:registry-metadata"
+
+type registryImageMetadataEvent struct {
+	SourceID  string `json:"sourceID"`
+	ImageID   string `json:"imageID"`
+	Digest    string `json:"digest"`
+	MediaType string `json:"mediaType"`
+	SizeType  string `json:"sizeType"`
+	Size      string `json:"size"`
+	SizeBytes int64  `json:"sizeBytes"`
+	CreatedAt string `json:"createdAt"`
+}
+
 type DockerImageDetail struct {
 	ID           string            `json:"id"`
 	Name         string            `json:"name"`
@@ -150,6 +163,7 @@ type ImageService struct {
 	cacheCalls            map[string]*imageCacheCall
 	cacheDir              string
 	registryTransport     http.RoundTripper
+	eventEmitter          func(string, any)
 	registrySem           chan struct{}
 	detailSem             chan struct{}
 	inventory             map[string]imageInventory
@@ -198,6 +212,18 @@ func NewImageService(config *ConfigService) *ImageService {
 }
 
 func (s *ImageService) ServiceName() string { return "ImageService" }
+
+func (s *ImageService) setEventEmitter(emitter func(string, any)) {
+	if s != nil {
+		s.eventEmitter = emitter
+	}
+}
+
+func (s *ImageService) emitEvent(name string, data any) {
+	if s != nil && s.eventEmitter != nil {
+		s.eventEmitter(name, data)
+	}
+}
 
 func runImageCommand(ctx context.Context, name string, args ...string) ([]byte, error) {
 	command := exec.CommandContext(ctx, name, args...)
@@ -808,8 +834,17 @@ func (s *ImageService) pingRegistry(ctx context.Context, source ImageSource) err
 		return fmt.Errorf("Registry 不可达: %w", redactRegistryError(err, source))
 	}
 	defer response.Body.Close()
-	if response.StatusCode >= 200 && response.StatusCode < 300 || response.StatusCode == http.StatusUnauthorized || response.StatusCode == http.StatusForbidden {
+	if response.StatusCode >= 200 && response.StatusCode < 300 {
 		return nil
+	}
+	if response.StatusCode == http.StatusUnauthorized {
+		if source.RegistryUsername == "" {
+			return errors.New("Registry 需要认证：请填写用户名和密码")
+		}
+		return errors.New("Registry 认证失败：用户名或密码错误，或账号无权访问")
+	}
+	if response.StatusCode == http.StatusForbidden {
+		return errors.New("Registry 认证成功但没有访问权限")
 	}
 	return fmt.Errorf("Registry 探测返回 HTTP %d", response.StatusCode)
 }
@@ -1015,6 +1050,10 @@ func registryImageID(repository, digest string) string {
 	return repository + "@" + digest
 }
 
+func registryTagImageID(repository, tag string) string {
+	return repository + ":" + tag
+}
+
 func validRegistryTag(tag string) bool {
 	if len(tag) == 0 || len(tag) > 128 {
 		return false
@@ -1049,11 +1088,74 @@ func parseRegistryImageID(imageID string) (string, string, error) {
 	return repository, digest, nil
 }
 
+func parseRegistryImageReference(imageID string) (repository, tag, digest string, err error) {
+	if separator := strings.LastIndexByte(imageID, '@'); separator > 0 {
+		repository, digest, err = parseRegistryImageID(imageID)
+		return repository, "", digest, err
+	}
+	separator := strings.LastIndexByte(imageID, ':')
+	if separator <= 0 || separator == len(imageID)-1 {
+		return "", "", "", errors.New("Registry 镜像引用必须包含标签或 digest")
+	}
+	repository, tag = imageID[:separator], imageID[separator+1:]
+	if _, err := registryRepository(ImageSource{RegistryURL: "https://placeholder.invalid"}, repository); err != nil {
+		return "", "", "", errors.New("Registry 镜像仓库名称无效")
+	}
+	if !validRegistryTag(tag) {
+		return "", "", "", errors.New("Registry 镜像标签无效")
+	}
+	return repository, tag, "", nil
+}
+
 func formatRegistrySize(size int64) string {
 	if size <= 0 {
 		return ""
 	}
 	return strconv.FormatInt(size, 10) + " B"
+}
+
+func addRegistrySize(total, size int64) int64 {
+	if size < 0 || total > math.MaxInt64-size {
+		return 0
+	}
+	return total + size
+}
+
+func registryManifestSize(manifest *v1.Manifest) int64 {
+	if manifest == nil {
+		return 0
+	}
+	total := addRegistrySize(0, manifest.Config.Size)
+	if total == 0 && manifest.Config.Size != 0 {
+		return 0
+	}
+	for _, layer := range manifest.Layers {
+		total = addRegistrySize(total, layer.Size)
+		if total == 0 && layer.Size != 0 {
+			return 0
+		}
+	}
+	return total
+}
+
+func registryImageSize(descriptor *remote.Descriptor, image v1.Image) int64 {
+	if image != nil {
+		if manifest, err := image.Manifest(); err == nil {
+			if size := registryManifestSize(manifest); size > 0 {
+				return size
+			}
+		}
+	}
+	var manifest v1.Manifest
+	if descriptor != nil && json.Unmarshal(descriptor.Manifest, &manifest) == nil {
+		if size := registryManifestSize(&manifest); size > 0 {
+			return size
+		}
+	}
+	if descriptor == nil {
+		return 0
+	}
+	return descriptor.Size
 }
 
 func (s *ImageService) listRegistryImages(sourceID string, source ImageSource, token uint64, requestCtx context.Context) ([]DockerImage, error) {
@@ -1070,6 +1172,10 @@ func (s *ImageService) listRegistryImages(sourceID string, source ImageSource, t
 		return nil, err
 	}
 	options := s.registryOptions(ctx, source)
+	puller, err := remote.NewPuller(options...)
+	if err != nil {
+		return nil, fmt.Errorf("创建 Registry 客户端失败: %w", redactRegistryError(err, source))
+	}
 	const pageSize = 1000
 	repositories := make([]string, 0)
 	last := ""
@@ -1101,7 +1207,7 @@ func (s *ImageService) listRegistryImages(sourceID string, source ImageSource, t
 		if err != nil {
 			continue
 		}
-		tags, err := remote.ListWithContext(ctx, repository, options...)
+		tags, err := puller.List(ctx, repository)
 		if err != nil {
 			return nil, fmt.Errorf("枚举 Registry 仓库 %q 的标签失败: %w", repositoryName, redactRegistryError(err, source))
 		}
@@ -1112,25 +1218,16 @@ func (s *ImageService) listRegistryImages(sourceID string, source ImageSource, t
 			if !validRegistryTag(tag) {
 				continue
 			}
-			ref := repository.Tag(tag)
-			descriptor, err := remote.Head(ref, options...)
-			if err != nil {
-				return nil, fmt.Errorf("解析 Registry 镜像 %q:%q 的 digest 失败: %w", repositoryName, tag, redactRegistryError(err, source))
-			}
-			digest := descriptor.Digest.String()
-			if _, err := v1.NewHash(digest); err != nil || !strings.HasPrefix(digest, "sha256:") {
-				return nil, fmt.Errorf("Registry 镜像 %q:%q 返回了无效 digest", repositoryName, tag)
-			}
-			id := registryImageID(repositoryName, digest)
+			fullTag := registryTagImageID(repositoryName, tag)
+			id := fullTag
 			if index, ok := byID[id]; ok {
-				fullTag := repositoryName + ":" + tag
 				if !containsString(images[index].Tags, fullTag) {
 					images[index].Tags = append(images[index].Tags, fullTag)
 				}
 				continue
 			}
 			byID[id] = len(images)
-			images = append(images, DockerImage{ID: id, Name: repositoryName, Tags: []string{repositoryName + ":" + tag}, Repository: repositoryName, Digest: digest, MediaType: string(descriptor.MediaType), SizeType: "manifest", Size: formatRegistrySize(descriptor.Size), SizeBytes: descriptor.Size})
+			images = append(images, DockerImage{ID: id, Name: fullTag, Tags: []string{fullTag}, Repository: repositoryName})
 		}
 	}
 	sort.Slice(images, func(i, j int) bool { return images[i].ID < images[j].ID })
@@ -1139,7 +1236,129 @@ func (s *ImageService) listRegistryImages(sourceID string, source ImageSource, t
 		return images, requestCtx.Err()
 	}
 	s.schedulePrewarm(sourceID, source, "", fingerprint, images, token, requestCtx)
+	s.scheduleRegistryMetadata(sourceID, source, images, token, fingerprint, requestCtx)
 	return images, nil
+}
+
+func (s *ImageService) resolveRegistryTagDigest(ctx context.Context, source ImageSource, repositoryName, tag string) (string, error) {
+	repository, err := registryRepository(source, repositoryName)
+	if err != nil {
+		return "", err
+	}
+	puller, err := remote.NewPuller(s.registryOptions(ctx, source)...)
+	if err != nil {
+		return "", fmt.Errorf("创建 Registry 客户端失败: %w", redactRegistryError(err, source))
+	}
+	descriptor, err := puller.Head(ctx, repository.Tag(tag))
+	if err != nil {
+		return "", redactRegistryError(err, source)
+	}
+	digest := descriptor.Digest.String()
+	if !canonicalSHA256Digest(digest) {
+		return "", fmt.Errorf("Registry 镜像 %q:%q 返回了无效 digest", repositoryName, tag)
+	}
+	return digest, nil
+}
+
+func (s *ImageService) fetchRegistryImageMetadata(ctx context.Context, source ImageSource, imageID string, puller *remote.Puller) (registryImageMetadataEvent, error) {
+	repositoryName, tag, digest, err := parseRegistryImageReference(imageID)
+	if err != nil {
+		return registryImageMetadataEvent{}, err
+	}
+	repository, err := registryRepository(source, repositoryName)
+	if err != nil {
+		return registryImageMetadataEvent{}, err
+	}
+	itemCtx, cancel := context.WithTimeout(ctx, imageCommandTimeout)
+	defer cancel()
+	release, err := s.registryPermit(itemCtx)
+	if err != nil {
+		return registryImageMetadataEvent{}, err
+	}
+	defer release()
+	var descriptor *remote.Descriptor
+	if tag != "" {
+		descriptor, err = puller.Get(itemCtx, repository.Tag(tag))
+	} else {
+		descriptor, err = puller.Get(itemCtx, repository.Digest(digest))
+	}
+	if err != nil {
+		return registryImageMetadataEvent{}, redactRegistryError(err, source)
+	}
+	resolvedDigest := descriptor.Digest.String()
+	if !canonicalSHA256Digest(resolvedDigest) {
+		return registryImageMetadataEvent{}, errors.New("Registry 返回了无效 manifest digest")
+	}
+	if digest != "" && digest != resolvedDigest {
+		return registryImageMetadataEvent{}, errors.New("Registry 返回的 manifest digest 与请求不一致")
+	}
+	var image v1.Image
+	if resolvedImage, imageErr := descriptor.Image(); imageErr == nil {
+		image = resolvedImage
+	}
+	sizeType := "manifest"
+	if descriptor.MediaType == types.OCIImageIndex || descriptor.MediaType == types.DockerManifestList {
+		sizeType = "manifest-index"
+	}
+	metadata := registryImageMetadataEvent{
+		ImageID:   imageID,
+		Digest:    resolvedDigest,
+		MediaType: string(descriptor.MediaType),
+		SizeType:  sizeType,
+		SizeBytes: registryImageSize(descriptor, image),
+	}
+	metadata.Size = formatRegistrySize(metadata.SizeBytes)
+	if image != nil {
+		if config, configErr := image.ConfigFile(); configErr == nil && config != nil && !config.Created.Time.IsZero() {
+			metadata.CreatedAt = config.Created.Time.UTC().Format(time.RFC3339Nano)
+		}
+	}
+	return metadata, nil
+}
+
+func (s *ImageService) scheduleRegistryMetadata(sourceID string, source ImageSource, images []DockerImage, token uint64, fingerprint string, requestCtx context.Context) {
+	if s == nil || source.Kind != "registry" || len(images) == 0 || s.eventEmitter == nil {
+		return
+	}
+	puller, err := remote.NewPuller(s.registryOptions(requestCtx, source)...)
+	if err != nil {
+		log.Printf("创建 Registry 元数据客户端失败 source=%s: %v", sourceID, redactRegistryError(err, source))
+		return
+	}
+	jobs := make(chan DockerImage, len(images))
+	for _, image := range images {
+		jobs <- image
+	}
+	close(jobs)
+	workers := min(registryConcurrency, len(images))
+	for i := 0; i < workers; i++ {
+		go func() {
+			for {
+				select {
+				case <-requestCtx.Done():
+					return
+				case <-s.serviceContext().Done():
+					return
+				case image, ok := <-jobs:
+					if !ok {
+						return
+					}
+					metadata, err := s.fetchRegistryImageMetadata(requestCtx, source, image.ID, puller)
+					if err != nil {
+						if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+							log.Printf("Registry 镜像元数据加载失败 image=%s: %v", image.ID, redactRegistryError(err, source))
+						}
+						continue
+					}
+					metadata.SourceID = sourceID
+					if s.listRequestObsolete(token, requestCtx) || !s.sourceFingerprintCurrent(sourceID, fingerprint) {
+						return
+					}
+					s.emitEvent(registryImageMetadataEventName, metadata)
+				}
+			}
+		}()
+	}
 }
 
 func redactRegistryError(err error, source ImageSource) error {
@@ -1643,6 +1862,9 @@ func (s *ImageService) schedulePrewarm(sourceID string, source ImageSource, cliP
 	misses := make([]DockerImage, 0, len(images))
 	for _, image := range images {
 		digest, repository, ok := cacheIdentity(source, image.ID, image.Repository)
+		if !ok && source.Kind == "registry" {
+			continue
+		}
 		if ok {
 			if _, cached := s.loadImageCache(sourceID, fingerprint, digest, repository, image.ID); !cached {
 				misses = append(misses, image)
@@ -1779,7 +2001,7 @@ func registryDescriptor(value v1.Descriptor) RegistryDescriptor {
 }
 
 func (s *ImageService) inspectRegistryImage(ctx context.Context, source ImageSource, imageID, repository string) (DockerImageDetail, error) {
-	parsedRepository, digest, err := parseRegistryImageID(imageID)
+	parsedRepository, tag, digest, err := parseRegistryImageReference(imageID)
 	if err != nil {
 		return DockerImageDetail{}, err
 	}
@@ -1798,14 +2020,30 @@ func (s *ImageService) inspectRegistryImage(ctx context.Context, source ImageSou
 		return DockerImageDetail{}, err
 	}
 	defer release()
-	descriptor, err := remote.Get(repo.Digest(digest), s.registryOptions(ctx, source)...)
+	var descriptor *remote.Descriptor
+	if digest == "" {
+		descriptor, err = remote.Get(repo.Tag(tag), s.registryOptions(ctx, source)...)
+	} else {
+		descriptor, err = remote.Get(repo.Digest(digest), s.registryOptions(ctx, source)...)
+	}
 	if err != nil {
 		return DockerImageDetail{}, fmt.Errorf("读取 Registry manifest 失败: %w", redactRegistryError(err, source))
 	}
-	if descriptor.Digest.String() != digest {
+	resolvedDigest := descriptor.Digest.String()
+	if !canonicalSHA256Digest(resolvedDigest) {
+		return DockerImageDetail{}, errors.New("Registry 返回了无效 manifest digest")
+	}
+	if digest != "" && resolvedDigest != digest {
 		return DockerImageDetail{}, errors.New("Registry 返回的 manifest digest 与请求不一致")
 	}
-	detail := DockerImageDetail{ID: imageID, Name: repository, Repository: repository, Digest: digest, MediaType: string(descriptor.MediaType), Size: descriptor.Size, SizeType: "manifest"}
+	digest = resolvedDigest
+	detailName := repository
+	var detailTags []string
+	if tag != "" {
+		detailName = registryTagImageID(repository, tag)
+		detailTags = []string{detailName}
+	}
+	detail := DockerImageDetail{ID: imageID, Name: detailName, Tags: detailTags, Repository: repository, Digest: digest, MediaType: string(descriptor.MediaType), Size: registryImageSize(descriptor, nil), SizeType: "manifest"}
 	var envelope struct {
 		SchemaVersion int             `json:"schemaVersion"`
 		MediaType     string          `json:"mediaType"`
@@ -1831,6 +2069,7 @@ func (s *ImageService) inspectRegistryImage(ctx context.Context, source ImageSou
 		detail.Manifest = &RegistryManifest{SchemaVersion: envelope.SchemaVersion, MediaType: envelope.MediaType, Config: registryDescriptor(envelope.Config), Layers: layers}
 	}
 	if image, imageErr := descriptor.Image(); imageErr == nil {
+		detail.Size = registryImageSize(descriptor, image)
 		if config, configErr := image.ConfigFile(); configErr == nil && config != nil {
 			detail.CreatedAt = config.Created.Time.UTC().Format(time.RFC3339Nano)
 			detail.Architecture = config.Architecture
@@ -1865,7 +2104,7 @@ func (s *ImageService) InspectDockerImage(sourceID string, imageID string) (Dock
 	}
 	repository := ""
 	if source.Kind == "registry" {
-		repository, _, err = parseRegistryImageID(imageID)
+		repository, _, _, err = parseRegistryImageReference(imageID)
 		if err != nil {
 			return DockerImageDetail{}, err
 		}
@@ -1941,10 +2180,17 @@ func (s *ImageService) DeleteDockerImages(sourceID string, imageIDs []string) Do
 	}
 	for _, imageID := range ids {
 		if source.Kind == "registry" {
-			repository, digest, err := parseRegistryImageID(imageID)
+			repository, tag, digest, err := parseRegistryImageReference(imageID)
 			if err != nil {
 				result.Failed = append(result.Failed, DockerDeleteFailure{ImageID: imageID, Error: err.Error()})
 				continue
+			}
+			if digest == "" {
+				digest, err = s.resolveRegistryTagDigest(ctx, source, repository, tag)
+				if err != nil {
+					result.Failed = append(result.Failed, DockerDeleteFailure{ImageID: imageID, Error: fmt.Sprintf("解析 Registry 镜像 digest 失败: %v", redactRegistryError(err, source))})
+					continue
+				}
 			}
 			repo, err := registryRepository(source, repository)
 			if err != nil {

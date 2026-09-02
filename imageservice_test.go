@@ -336,7 +336,7 @@ func TestRegistryListDetailAndDeleteUseDigest(t *testing.T) {
 			w.Header().Set("Docker-Content-Digest", digest)
 			w.Header().Set("Content-Length", strconv.Itoa(len(manifest)))
 			w.Header().Set("Content-Type", "application/vnd.oci.image.manifest.v1+json")
-		case "GET /v2/repo/manifests/" + digest:
+		case "GET /v2/repo/manifests/latest", "GET /v2/repo/manifests/stable", "GET /v2/repo/manifests/" + digest:
 			w.Header().Set("Docker-Content-Digest", digest)
 			w.Header().Set("Content-Type", "application/vnd.oci.image.manifest.v1+json")
 			_, _ = w.Write(manifest)
@@ -355,16 +355,37 @@ func TestRegistryListDetailAndDeleteUseDigest(t *testing.T) {
 	service := NewImageService(config)
 	service.cacheDir = t.TempDir()
 	service.registryTransport = server.Client().Transport
+	metadataEvents := make(chan registryImageMetadataEvent, 2)
+	service.eventEmitter = func(name string, data any) {
+		if name == registryImageMetadataEventName {
+			metadataEvents <- data.(registryImageMetadataEvent)
+		}
+	}
 	images, err := service.ListDockerImages("reg")
-	if err != nil || len(images) != 1 || len(images[0].Tags) != 2 || images[0].Digest != digest {
+	if err != nil || len(images) != 2 || images[0].Digest != "" || images[1].Digest != "" {
 		t.Fatalf("Registry 列表为 %#v，错误 %v", images, err)
+	}
+	metadataByID := make(map[string]registryImageMetadataEvent, len(images))
+	for range images {
+		select {
+		case metadata := <-metadataEvents:
+			metadataByID[metadata.ImageID] = metadata
+		case <-time.After(2 * time.Second):
+			t.Fatalf("Registry 镜像元数据事件未收齐: %#v", metadataByID)
+		}
+	}
+	for _, image := range images {
+		metadata, ok := metadataByID[image.ID]
+		if !ok || metadata.Digest != digest || metadata.SizeBytes != int64(len(configBlob)) || metadata.CreatedAt != "2026-01-01T00:00:00Z" {
+			t.Fatalf("Registry 镜像元数据事件为 %#v", metadataByID)
+		}
 	}
 	status := service.GetDockerStatus("reg")
 	if !status.Available || status.Version != "Registry" {
 		t.Fatalf("Registry 状态为 %#v", status)
 	}
 	detail, err := service.InspectDockerImage("reg", images[0].ID)
-	if err != nil || detail.Manifest == nil || detail.Digest != digest || detail.Architecture != "amd64" || detail.Labels["app"] != "demo" {
+	if err != nil || detail.Manifest == nil || detail.Digest != digest || detail.Size != int64(len(configBlob)) || detail.Architecture != "amd64" || detail.Labels["app"] != "demo" {
 		t.Fatalf("Registry 详情为 %#v，错误 %v", detail, err)
 	}
 	result := service.DeleteDockerImages("reg", []string{images[0].ID})
@@ -398,6 +419,16 @@ func TestImageSourceConnectionTestsRegistryDraft(t *testing.T) {
 		RegistryPassword: "password",
 	}); err != nil {
 		t.Fatalf("Registry 草稿连接测试失败: %v", err)
+	}
+	err := service.TestImageSourceConnection(ImageSource{
+		ID:               "registry:connection-test",
+		Kind:             "registry",
+		RegistryURL:      server.URL,
+		RegistryUsername: "user",
+		RegistryPassword: "wrong-password",
+	})
+	if err == nil || !strings.Contains(err.Error(), "认证失败") {
+		t.Fatalf("错误 Registry 凭据应被拒绝，错误为 %v", err)
 	}
 	if got := config.Get().ImageSources; len(got) != 1 || got[0].ID != localImageSourceID {
 		t.Fatalf("连接测试不应写入配置: %#v", got)

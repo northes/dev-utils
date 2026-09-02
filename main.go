@@ -115,6 +115,9 @@ func main() {
 			ActivationPolicy: application.ActivationPolicyRegular,
 		},
 	})
+	imageService.setEventEmitter(func(name string, data any) {
+		_ = app.Event.Emit(name, data)
+	})
 
 	gh, err := githubprovider.New(githubprovider.Config{
 		Repository:    "northes/dev-utils",

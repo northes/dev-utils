@@ -1,5 +1,6 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useDeferredValue, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Events } from '@wailsio/runtime';
 // @ts-ignore -- 遵循明确要求: 用且只用 import { TbBrandDocker } from "react-icons/tb"
 import { TbBrandDocker } from 'react-icons/tb';
 import {
@@ -88,6 +89,7 @@ const LOCAL_SOURCE = {
   kind: 'local',
   sshHost: '',
 } as unknown as ImageSource;
+const IMAGE_SEARCH_DEBOUNCE_MS = 120;
 
 type SourceKind = 'local' | 'ssh' | 'registry';
 type ManagedImageSource = Omit<
@@ -116,6 +118,17 @@ type ManagedImageSource = Omit<
 type SourceDraft = Partial<ManagedImageSource> &
   Pick<ManagedImageSource, 'name' | 'kind' | 'sshHost'> & { id?: string };
 
+type RegistryImageMetadataEvent = {
+  sourceID: string;
+  imageID: string;
+  digest: string;
+  mediaType: string;
+  sizeType: string;
+  size: string;
+  sizeBytes: number;
+  createdAt: string;
+};
+
 type ConfirmState =
   | { type: 'push'; image: DockerImage }
   | {
@@ -124,8 +137,6 @@ type ConfirmState =
       name: string;
       sourceId: string;
       sourceKind: string;
-      digests: string[];
-      tags: string[];
     }
   | null;
 
@@ -286,6 +297,86 @@ function imageLabel(image: DockerImage, unnamed: string) {
   return image.name?.trim() || unnamed;
 }
 
+function registryImageIdentity(image: DockerImage) {
+  const digest = image.digest?.trim();
+  return digest ? `${image.repository}\u0000${digest}` : '';
+}
+
+function registryDeleteDigests(images: DockerImage[], ids: string[]) {
+  const selectedIds = new Set(ids);
+  return [
+    ...new Set(
+      images
+        .filter((image) => selectedIds.has(image.id))
+        .map((image) => image.digest?.trim() ?? '')
+        .filter(Boolean),
+    ),
+  ];
+}
+
+function associatedRegistryTags(images: DockerImage[], ids: string[]) {
+  const selectedIds = new Set(ids);
+  const selectedImages = images.filter((image) => selectedIds.has(image.id));
+  const identities = new Set(selectedImages.map(registryImageIdentity).filter(Boolean));
+  if (identities.size === 0) return [];
+  const selectedTags = new Set(selectedImages.flatMap((image) => asStringList(image.tags)));
+  return [
+    ...new Set(
+      images
+        .filter((image) => identities.has(registryImageIdentity(image)))
+        .flatMap((image) => asStringList(image.tags))
+        .filter((tag) => !selectedTags.has(tag)),
+    ),
+  ];
+}
+
+function ImageSearchField({
+  id,
+  label,
+  placeholder,
+  value,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  placeholder: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+
+  useEffect(() => {
+    if (draft === value) return;
+    const timer = window.setTimeout(() => onChange(draft), IMAGE_SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [draft, onChange, value]);
+
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+
+  return (
+    <div className="flex min-w-0 flex-col gap-1 text-[10px] font-medium text-muted-foreground max-[700px]:w-full">
+      <Label htmlFor={id}>{label}</Label>
+      <div className="relative flex w-[220px] max-w-full items-center max-[700px]:w-full">
+        <MagnifyingGlass
+          size={14}
+          weight="duotone"
+          aria-hidden="true"
+          className="pointer-events-none absolute left-2.5 text-muted-foreground"
+        />
+        <Input
+          id={id}
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          placeholder={placeholder}
+          className="h-[30px] pl-8 text-[11px]"
+        />
+      </div>
+    </div>
+  );
+}
+
 type ImageWithSizeBytes = DockerImage & { sizeBytes?: number | null };
 type SortKey = 'name' | 'size' | 'createdAt';
 type SortDirection = 'asc' | 'desc';
@@ -306,6 +397,19 @@ function imageSizeBytes(image: DockerImage) {
       : ({ b: 0, kb: 1, mb: 2, gb: 3, tb: 4 }[unit] ?? 0);
   return value * (unit.endsWith('i') || unit.includes('ib') ? 1024 ** exponent : 1000 ** exponent);
 }
+
+function imageCreatedAtMs(value: string) {
+  const date = parseDateSafe(value);
+  return date ? date.getTime() : null;
+}
+
+type IndexedImage = {
+  image: DockerImage;
+  searchId: string;
+  searchName: string;
+  sizeBytes: number;
+  createdAtMs: number | null;
+};
 
 export default function ImageManagerTool({
   active,
@@ -347,6 +451,7 @@ export default function ImageManagerTool({
   const [sourceDraftError, setSourceDraftError] = useState('');
   const [testingSource, setTestingSource] = useState(false);
   const [copiedName, setCopiedName] = useState<string | null>(null);
+  const [copiedDigest, setCopiedDigest] = useState<string | null>(null);
   const [hostOptions, setHostOptions] = useState<Array<{ alias: string; selected: boolean }>>([]);
   const [hostsLoading, setHostsLoading] = useState(false);
   const [hostsError, setHostsError] = useState('');
@@ -355,11 +460,42 @@ export default function ImageManagerTool({
   const [sortKey, setSortKey] = useState<SortKey>('name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const detailRequest = useRef(0);
+  const deferredSearch = useDeferredValue(search);
 
   useEffect(() => {
     if (!sources.some((item) => item.id === sourceId))
       setSourceId(sources[0]?.id ?? LOCAL_SOURCE_ID);
   }, [sourceId, sources]);
+
+  useEffect(() => {
+    setImages([]);
+    setStatus(null);
+    setDetail(null);
+    setSelected(new Set());
+  }, [source.id]);
+
+  useEffect(() => {
+    const off = Events.On('image-manager:registry-metadata', (event) => {
+      const payload = event.data as RegistryImageMetadataEvent | undefined;
+      if (!payload || payload.sourceID !== source.id) return;
+      setImages((current) =>
+        current.map((image) =>
+          image.id === payload.imageID
+            ? {
+                ...image,
+                digest: payload.digest || image.digest,
+                mediaType: payload.mediaType || image.mediaType,
+                sizeType: payload.sizeType || image.sizeType,
+                size: payload.size || image.size,
+                sizeBytes: payload.sizeBytes || image.sizeBytes,
+                createdAt: payload.createdAt || image.createdAt,
+              }
+            : image,
+        ),
+      );
+    });
+    return () => off();
+  }, [source.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -384,7 +520,8 @@ export default function ImageManagerTool({
       .finally(finishLoading);
     void ListDockerImages(source.id)
       .then((nextImages) => {
-        if (!cancelled) setImages(nextImages ?? []);
+        if (cancelled) return;
+        setImages(nextImages ?? []);
       })
       .catch((error) => {
         if (!cancelled) {
@@ -415,37 +552,60 @@ export default function ImageManagerTool({
   }, [clearPending, pending, record, source, t]);
 
   const unnamed = t('imageManagerTool.unnamed');
+  const indexedImages = useMemo<IndexedImage[]>(
+    () =>
+      images.map((image) => ({
+        image,
+        searchId: image.id.toLocaleLowerCase(),
+        searchName: imageLabel(image, '').toLocaleLowerCase(),
+        sizeBytes: imageSizeBytes(image),
+        createdAtMs: imageCreatedAtMs(image.createdAt),
+      })),
+    [images],
+  );
   const filteredImages = useMemo(() => {
-    const query = search.trim().toLocaleLowerCase();
+    const query = deferredSearch.trim().toLocaleLowerCase();
     const next = query
-      ? images.filter(
-          (image) =>
-            image.id.toLocaleLowerCase().includes(query) ||
-            imageLabel(image, '').toLocaleLowerCase().includes(query),
+      ? indexedImages.filter(
+          (item) => item.searchId.includes(query) || item.searchName.includes(query),
         )
-      : [...images];
+      : [...indexedImages];
+    const direction = sortDirection === 'asc' ? 1 : -1;
     next.sort((left, right) => {
+      if (sortKey === 'createdAt') {
+        if (left.createdAtMs === null || right.createdAtMs === null) {
+          if (left.createdAtMs === right.createdAtMs) return 0;
+          return left.createdAtMs === null ? 1 : -1;
+        }
+        return (left.createdAtMs - right.createdAtMs) * direction;
+      }
       const comparison =
         sortKey === 'name'
-          ? imageLabel(left, '').localeCompare(imageLabel(right, ''), i18n.language, {
+          ? left.searchName.localeCompare(right.searchName, i18n.language, {
               sensitivity: 'base',
             })
-          : sortKey === 'size'
-            ? imageSizeBytes(left) - imageSizeBytes(right)
-            : new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
-      return sortDirection === 'asc' ? comparison : -comparison;
+          : left.sizeBytes - right.sizeBytes;
+      return comparison * direction;
     });
-    return next;
-  }, [i18n.language, images, search, sortDirection, sortKey]);
+    return next.map((item) => item.image);
+  }, [deferredSearch, i18n.language, indexedImages, sortDirection, sortKey]);
   const selectedCount = selected.size;
   const allSelected =
     filteredImages.length > 0 && filteredImages.every((image) => selected.has(image.id));
   const someSelected = filteredImages.some((image) => selected.has(image.id)) && !allSelected;
-  const filteredTotalBytes = filteredImages.reduce(
-    (total, image) => total + imageSizeBytes(image),
-    0,
+  const filteredTotalBytes = useMemo(
+    () => filteredImages.reduce((total, image) => total + imageSizeBytes(image), 0),
+    [filteredImages],
   );
   const working = loading || busy !== null || detailLoading;
+  const registryConfirmDigests =
+    confirm?.type === 'delete' && confirm.sourceKind === 'registry'
+      ? registryDeleteDigests(images, confirm.ids)
+      : [];
+  const registryConfirmTags =
+    confirm?.type === 'delete' && confirm.sourceKind === 'registry'
+      ? associatedRegistryTags(images, confirm.ids)
+      : [];
 
   useEffect(() => {
     const visibleIds = new Set(filteredImages.map((image) => image.id));
@@ -852,6 +1012,20 @@ export default function ImageManagerTool({
     }
   };
 
+  const copyDigest = async (digest: string) => {
+    try {
+      await navigator.clipboard.writeText(digest);
+      setCopiedDigest(digest);
+      window.setTimeout(
+        () => setCopiedDigest((current) => (current === digest ? null : current)),
+        1400,
+      );
+      toast.add({ title: t('imageManagerTool.digestCopied') });
+    } catch {
+      toast.add({ title: t('imageManagerTool.copyFailed'), type: 'error' });
+    }
+  };
+
   const runPush = async (image: DockerImage) => {
     setBusy('push');
     try {
@@ -1070,24 +1244,13 @@ export default function ImageManagerTool({
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="flex min-w-0 flex-col gap-1 text-[10px] font-medium text-muted-foreground max-[700px]:w-full">
-                  <Label htmlFor="image-manager-search">{t('imageManagerTool.search')}</Label>
-                  <div className="relative flex w-[220px] max-w-full items-center max-[700px]:w-full">
-                    <MagnifyingGlass
-                      size={14}
-                      weight="duotone"
-                      aria-hidden="true"
-                      className="pointer-events-none absolute left-2.5 text-muted-foreground"
-                    />
-                    <Input
-                      id="image-manager-search"
-                      value={search}
-                      onChange={(event) => setSearch(event.target.value)}
-                      placeholder={t('imageManagerTool.searchPlaceholder')}
-                      className="h-[30px] pl-8 text-[11px]"
-                    />
-                  </div>
-                </div>
+                <ImageSearchField
+                  id="image-manager-search"
+                  label={t('imageManagerTool.search')}
+                  value={search}
+                  onChange={setSearch}
+                  placeholder={t('imageManagerTool.searchPlaceholder')}
+                />
               </div>
             }
             right={
@@ -1322,7 +1485,9 @@ export default function ImageManagerTool({
                       <TableCell className="whitespace-nowrap">
                         <span className="font-mono text-[12px]" title={image.id}>
                           {source.kind === 'registry'
-                            ? shortId(image.digest || image.id)
+                            ? image.digest
+                              ? shortId(image.digest)
+                              : t('imageManagerTool.emptyValue')
                             : shortId(image.id)}
                         </span>
                       </TableCell>
@@ -1347,7 +1512,8 @@ export default function ImageManagerTool({
                         </button>
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-muted-foreground">
-                        {image.size || t('imageManagerTool.emptyValue')}
+                        {formatBytes(imageSizeBytes(image), i18n.language) ||
+                          t('imageManagerTool.emptyValue')}
                       </TableCell>
                       <TableCell
                         className="whitespace-nowrap text-muted-foreground"
@@ -1402,8 +1568,6 @@ export default function ImageManagerTool({
                                         name: imageLabel(image, unnamed),
                                         sourceId: source.id,
                                         sourceKind: source.kind,
-                                        digests: [image.digest || image.id],
-                                        tags: asStringList(image.tags),
                                       })
                                     }
                                   >
@@ -1436,33 +1600,35 @@ export default function ImageManagerTool({
                       t('imageManagerTool.emptyValue'),
                   })}
                 </span>
+                {loading ? (
+                  <Badge variant="outline" className="gap-1 px-1.5 text-[10px]" aria-live="polite">
+                    <Spinner className="size-3" />
+                    {t('imageManagerTool.statusLoading')}
+                  </Badge>
+                ) : null}
                 {selectedCount > 0 ? (
                   <span>{t('imageManagerTool.selectedCount', { count: selectedCount })}</span>
                 ) : null}
               </div>
-              {selectedCount > 0 ? (
-                <Button
-                  variant="destructive"
-                  className="h-[30px] flex-none px-[11px] text-[11px]"
-                  disabled={working}
-                  onClick={() =>
-                    setConfirm({
-                      type: 'delete',
-                      ids: [...selected],
-                      name: t('imageManagerTool.selectedCount', { count: selectedCount }),
-                      sourceId: source.id,
-                      sourceKind: source.kind,
-                      digests: filteredImages
-                        .filter((image) => selected.has(image.id))
-                        .map((image) => image.digest || image.id),
-                      tags: filteredImages.flatMap((image) => asStringList(image.tags)),
-                    })
-                  }
-                >
-                  {busy === 'delete' ? <Spinner data-icon="inline-start" /> : null}
-                  {t('imageManagerTool.batchDelete')}
-                </Button>
-              ) : null}
+              <Button
+                variant="destructive"
+                className={`h-[30px] flex-none px-[11px] text-[11px]${selectedCount > 0 ? '' : ' invisible pointer-events-none'}`}
+                disabled={working || selectedCount === 0}
+                aria-hidden={selectedCount === 0}
+                tabIndex={selectedCount > 0 ? 0 : -1}
+                onClick={() =>
+                  setConfirm({
+                    type: 'delete',
+                    ids: [...selected],
+                    name: t('imageManagerTool.selectedCount', { count: selectedCount }),
+                    sourceId: source.id,
+                    sourceKind: source.kind,
+                  })
+                }
+              >
+                {busy === 'delete' ? <Spinner data-icon="inline-start" /> : null}
+                {t('imageManagerTool.batchDelete')}
+              </Button>
             </div>
           ) : null}
         </ToolLayoutFooter>
@@ -1659,28 +1825,91 @@ export default function ImageManagerTool({
           if (!open && !busy) setConfirm(null);
         }}
       >
-        <AlertDialogContent>
-          <AlertDialogHeader>
+        <AlertDialogContent className="min-w-0 max-w-[calc(100vw-2rem)] sm:max-w-md">
+          <AlertDialogHeader className="min-w-0">
             <AlertDialogTitle>
               {confirm?.type === 'push'
                 ? t('imageManagerTool.pushConfirmTitle')
                 : t('imageManagerTool.deleteConfirmTitle')}
             </AlertDialogTitle>
-            <AlertDialogDescription>
-              {confirm?.type === 'push'
-                ? t('imageManagerTool.pushConfirmBody', {
+            <AlertDialogDescription
+              render={<div />}
+              className="min-w-0 max-w-full space-y-3 text-left whitespace-normal break-words [overflow-wrap:anywhere]"
+            >
+              {confirm?.type === 'push' ? (
+                <p className="m-0">
+                  {t('imageManagerTool.pushConfirmBody', {
                     name: imageLabel(confirm.image, unnamed),
-                  })
-                : confirm?.type === 'delete'
-                  ? confirm.sourceKind === 'registry'
-                    ? t('imageManagerTool.registryDeleteConfirmBody', {
-                        digest: confirm.digests.join(', '),
-                        tags: confirm.tags.join(', ') || t('imageManagerTool.emptyValue'),
-                      })
-                    : confirm.ids.length > 1
+                  })}
+                </p>
+              ) : confirm?.type === 'delete' ? (
+                confirm.sourceKind === 'registry' ? (
+                  <>
+                    <p className="m-0">{t('imageManagerTool.registryDeleteConfirmSummary')}</p>
+                    <div className="min-w-0 rounded-md border border-border bg-muted/40 px-3 py-2">
+                      <div className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+                        {t('imageManagerTool.registryDeleteManifest')}
+                      </div>
+                      {registryConfirmDigests.length > 0 ? (
+                        <div className="mt-2 space-y-1.5">
+                          {registryConfirmDigests.map((digest) => (
+                            <div key={digest} className="flex min-w-0 items-start gap-2">
+                              <code className="min-w-0 flex-1 break-all font-mono text-xs leading-5 text-foreground">
+                                {digest}
+                              </code>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon-xs"
+                                className="flex-none"
+                                title={t('imageManagerTool.copyDigest')}
+                                aria-label={t('imageManagerTool.copyDigest')}
+                                onClick={() => void copyDigest(digest)}
+                              >
+                                {copiedDigest === digest ? (
+                                  <Check aria-hidden="true" />
+                                ) : (
+                                  <Copy aria-hidden="true" />
+                                )}
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="m-0 mt-2 text-xs text-muted-foreground">
+                          {t('imageManagerTool.registryDeleteDigestPending')}
+                        </p>
+                      )}
+                    </div>
+                    {registryConfirmTags.length > 0 ? (
+                      <div className="min-w-0">
+                        <div className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+                          {t('imageManagerTool.registryDeleteTags')}
+                        </div>
+                        <div className="mt-1.5 flex max-h-32 min-w-0 flex-wrap gap-1.5 overflow-y-auto pr-1">
+                          {registryConfirmTags.map((tag, index) => (
+                            <code
+                              key={`${tag}-${index}`}
+                              className="max-w-full break-all rounded-md border border-border bg-muted/40 px-1.5 py-0.5 font-mono text-xs leading-5 text-foreground"
+                            >
+                              {tag}
+                            </code>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                    <p className="m-0 text-xs text-muted-foreground">
+                      {t('imageManagerTool.registryDeleteGCHint')}
+                    </p>
+                  </>
+                ) : (
+                  <p className="m-0">
+                    {confirm.ids.length > 1
                       ? t('imageManagerTool.deleteConfirmManyBody', { count: confirm.ids.length })
-                      : t('imageManagerTool.deleteConfirmBody', { name: confirm.name })
-                  : null}
+                      : t('imageManagerTool.deleteConfirmBody', { name: confirm.name })}
+                  </p>
+                )
+              ) : null}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
