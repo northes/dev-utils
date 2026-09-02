@@ -188,6 +188,10 @@ type ImageService struct {
 	activeListFingerprint string
 	activeListSourceID    string
 	shutdownOnce          sync.Once
+	watchStartMu          sync.Mutex
+	watchWorker           *watchWorker
+	watchGeneration       uint64
+	watchSnapshots        map[string]*watchScan
 }
 
 type imageCacheCall struct {
@@ -795,11 +799,17 @@ func (s *ImageService) TestImageSourceConnection(source ImageSource) error {
 }
 
 func (s *ImageService) sourceConnectionStatus(source ImageSource, cliPath string) DockerStatus {
+	return s.sourceConnectionStatusContext(s.serviceContext(), source, cliPath)
+}
+
+// sourceConnectionStatusContext 从外部 ctx 派生连接探测（registry ping 与 CLI --version），
+// 保证所有 CLI/registry 状态操作随调用方 ctx（watch 循环/shutdown）取消。
+func (s *ImageService) sourceConnectionStatusContext(ctx context.Context, source ImageSource, cliPath string) DockerStatus {
 	status := DockerStatus{CLIPath: cliPath}
 	if source.Kind == "registry" {
-		ctx, cancel := context.WithTimeout(s.serviceContext(), imageCommandTimeout)
+		itemCtx, cancel := context.WithTimeout(ctx, imageCommandTimeout)
 		defer cancel()
-		if err := s.pingRegistry(ctx, source); err != nil {
+		if err := s.pingRegistry(itemCtx, source); err != nil {
 			status.Error = err.Error()
 			return status
 		}
@@ -807,7 +817,9 @@ func (s *ImageService) sourceConnectionStatus(source ImageSource, cliPath string
 		status.Version = "Registry"
 		return status
 	}
-	output, err := s.runDockerSnapshot(source, cliPath, []string{"--version"}, imageCommandTimeout)
+	itemCtx, cancel := context.WithTimeout(ctx, imageCommandTimeout)
+	defer cancel()
+	output, err := s.runDockerSnapshotContext(itemCtx, source, cliPath, []string{"--version"})
 	if err != nil {
 		status.Error = err.Error()
 		return status
@@ -1844,14 +1856,18 @@ func (s *ImageService) shutdown() {
 		return
 	}
 	s.shutdownOnce.Do(func() {
+		// 先取消根 ctx，使所有派生 context（watch run、prewarm、CLI 命令）立即收到取消，
+		// 再等待各 worker 退出。
 		if s.cancel != nil {
 			s.cancel()
 		}
+		s.stopWatch()
 		s.mu.Lock()
 		for _, generation := range s.prewarmGenerations {
 			generation.cancel()
 		}
 		s.prewarmGenerations = make(map[string]*prewarmGeneration)
+		s.watchSnapshots = make(map[string]*watchScan)
 		s.mu.Unlock()
 		s.prewarmWG.Wait()
 	})

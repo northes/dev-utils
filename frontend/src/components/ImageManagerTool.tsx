@@ -1,6 +1,6 @@
 import { useDeferredValue, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Events } from '@wailsio/runtime';
+import { CancelError, Events } from '@wailsio/runtime';
 // @ts-ignore -- 遵循明确要求: 用且只用 import { TbBrandDocker } from "react-icons/tb"
 import { TbBrandDocker } from 'react-icons/tb';
 import {
@@ -21,9 +21,9 @@ import {
   GetDockerStatus,
   GetSSHConfigHosts,
   InspectDockerImage,
-  ListDockerImages,
   PushDockerImage,
   TestImageSourceConnection,
+  WatchDockerImages,
 } from '../../bindings/changeme/imageservice';
 import { ValidateImageSource } from '../../bindings/changeme/configservice';
 import type {
@@ -118,20 +118,28 @@ type ManagedImageSource = Omit<
 type SourceDraft = Partial<ManagedImageSource> &
   Pick<ManagedImageSource, 'name' | 'kind' | 'sshHost'> & { id?: string };
 
-type RegistryImageMetadataEvent = {
-  sourceID: string;
-  imageID: string;
-  digest: string;
-  mediaType: string;
-  sizeType: string;
-  size: string;
-  sizeBytes: number;
-  createdAt: string;
+type WatchEventKind = 'snapshot' | 'create' | 'update' | 'delete';
+
+type WatchProgress = {
+  scanned?: number;
+  total?: number;
+  stage?: string;
 };
 
-type RegistryImageMetadataStateEvent = {
+type WatchDockerImagesEvent = {
+  clientID: string;
   sourceID: string;
-  state: 'loading' | 'complete';
+  generation?: number;
+  revision?: number;
+  kind?: WatchEventKind;
+  images?: DockerImage[];
+  image?: DockerImage;
+  imageID?: string;
+  imageIDs?: string[];
+  status?: DockerStatus;
+  progress?: WatchProgress;
+  isUpdating?: boolean;
+  error?: string;
 };
 
 type ConfirmState =
@@ -154,6 +162,10 @@ function errorMessage(error: unknown) {
     if (typeof value.error === 'string' && value.error) return value.error;
   }
   return '';
+}
+
+function isWatchCancelError(error: unknown) {
+  return error instanceof CancelError || (error instanceof Error && error.name === 'CancelError');
 }
 
 function sshSourceId(alias: string) {
@@ -468,6 +480,9 @@ export default function ImageManagerTool({
   const detailRequest = useRef(0);
   const deferredSearch = useDeferredValue(search);
   const [registryDetailsLoading, setRegistryDetailsLoading] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [updateProgress, setUpdateProgress] = useState<WatchProgress | null>(null);
+  const sourceConfigKey = JSON.stringify(source);
 
   useEffect(() => {
     if (!sources.some((item) => item.id === sourceId))
@@ -475,81 +490,156 @@ export default function ImageManagerTool({
   }, [sourceId, sources]);
 
   useEffect(() => {
+    let active = true;
+    const clientID = crypto.randomUUID();
+    const sourceID = source.id;
+    let maxRevision = -1;
+    let currentGeneration = -1;
+    let restarting = false;
+    const map = new Map<string, DockerImage>();
+
+    detailRequest.current += 1;
     setImages([]);
-    setStatus(null);
-    setDetail(null);
     setSelected(new Set());
-    setRegistryDetailsLoading(false);
-  }, [source.id]);
-
-  useEffect(() => {
-    const offMetadata = Events.On('image-manager:registry-metadata', (event) => {
-      const payload = event.data as RegistryImageMetadataEvent | undefined;
-      if (!payload || payload.sourceID !== source.id) return;
-      setImages((current) =>
-        current.map((image) =>
-          image.id === payload.imageID
-            ? {
-                ...image,
-                digest: payload.digest || image.digest,
-                mediaType: payload.mediaType || image.mediaType,
-                sizeType: payload.sizeType || image.sizeType,
-                size: payload.size || image.size,
-                sizeBytes: payload.sizeBytes || image.sizeBytes,
-                createdAt: payload.createdAt || image.createdAt,
-              }
-            : image,
-        ),
-      );
-    });
-    const offMetadataState = Events.On('image-manager:registry-metadata-state', (event) => {
-      const payload = event.data as RegistryImageMetadataStateEvent | undefined;
-      if (!payload || payload.sourceID !== source.id) return;
-      setRegistryDetailsLoading(payload.state === 'loading');
-    });
-    return () => {
-      offMetadata();
-      offMetadataState();
-    };
-  }, [source.id]);
-
-  useEffect(() => {
-    let cancelled = false;
+    setDetail(null);
+    setStatus(null);
     setLoading(true);
     setLoadError('');
-    setSelected(new Set());
-    let completed = 0;
-    const finishLoading = () => {
-      completed += 1;
-      if (completed === 2 && !cancelled) setLoading(false);
-    };
-    void GetDockerStatus(source.id)
+    setIsUpdating(false);
+    setUpdateProgress(null);
+    setRegistryDetailsLoading(false);
+
+    const offWatch = Events.On('image-manager:watch-docker-images', (event) => {
+      const payload = event.data as WatchDockerImagesEvent | undefined;
+      if (!active || !payload || payload.clientID !== clientID || payload.sourceID !== sourceID) {
+        return;
+      }
+
+      if (typeof payload.generation === 'number') {
+        if (payload.generation < currentGeneration) return;
+        if (payload.generation > currentGeneration) {
+          currentGeneration = payload.generation;
+          maxRevision = -1;
+          map.clear();
+          setImages([]);
+        }
+      }
+
+      if (typeof payload.revision === 'number') {
+        if (maxRevision >= 0 && payload.revision !== maxRevision + 1) {
+          if (!restarting) {
+            restarting = true;
+            setReloadNonce((value) => value + 1);
+          }
+          return;
+        }
+        if (payload.revision <= maxRevision) return;
+        maxRevision = payload.revision;
+      }
+
+      if (payload.status) {
+        setStatus(payload.status);
+      }
+      if (payload.isUpdating !== undefined) {
+        setIsUpdating(payload.isUpdating);
+      }
+      if (payload.progress) {
+        setUpdateProgress(payload.progress);
+        const stage = payload.progress.stage;
+        if (stage === 'scanning' || stage === 'done') {
+          setLoadError('');
+        }
+        if (stage === 'done' || stage === 'failed') {
+          setLoading(false);
+        }
+      }
+      if (payload.error) {
+        setLoadError(payload.error);
+      }
+
+      const kind =
+        payload.kind ?? (payload.images ? 'snapshot' : payload.image ? 'update' : undefined);
+
+      if (kind === 'snapshot') {
+        map.clear();
+        for (const img of payload.images ?? []) {
+          if (img && img.id) {
+            map.set(img.id, img);
+          }
+        }
+        setImages(Array.from(map.values()));
+        setLoading(false);
+      } else if (kind === 'create' || kind === 'update') {
+        if (payload.image && payload.image.id) {
+          const image = payload.image;
+          map.set(image.id, image);
+          setImages(Array.from(map.values()));
+          setDetail((current) =>
+            current && current.id === image.id
+              ? {
+                  ...current,
+                  name: image.name || current.name,
+                  tags: image.tags || current.tags,
+                  digest: image.digest || current.digest,
+                  mediaType: image.mediaType || current.mediaType,
+                  sizeType: image.sizeType || current.sizeType,
+                  size: image.sizeBytes || current.size,
+                  createdAt: image.createdAt || current.createdAt,
+                }
+              : current,
+          );
+        }
+        setLoading(false);
+      } else if (kind === 'delete') {
+        const idsToDelete = payload.imageIDs ?? (payload.imageID ? [payload.imageID] : []);
+        let changed = false;
+        for (const id of idsToDelete) {
+          if (map.delete(id)) {
+            changed = true;
+          }
+        }
+        if (changed) {
+          setImages(Array.from(map.values()));
+        }
+        setSelected((current) => {
+          const next = new Set(current);
+          let selChanged = false;
+          for (const id of idsToDelete) {
+            if (next.delete(id)) selChanged = true;
+          }
+          return selChanged ? next : current;
+        });
+        setDetail((current) => (current && idsToDelete.includes(current.id) ? null : current));
+        setLoading(false);
+      }
+    });
+
+    void GetDockerStatus(sourceID)
       .then((nextStatus) => {
-        if (!cancelled) setStatus(nextStatus);
+        if (active) setStatus(nextStatus);
       })
       .catch((error) => {
-        if (!cancelled) {
+        if (active) {
           setStatus(null);
           setLoadError(errorMessage(error) || t('imageManagerTool.loadFailed'));
         }
-      })
-      .finally(finishLoading);
-    void ListDockerImages(source.id)
-      .then((nextImages) => {
-        if (cancelled) return;
-        setImages(nextImages ?? []);
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          setImages([]);
-          setLoadError(errorMessage(error) || t('imageManagerTool.loadFailed'));
-        }
-      })
-      .finally(finishLoading);
+      });
+
+    const watchCall = WatchDockerImages(sourceID, clientID);
+    void watchCall.catch((error) => {
+      if (!active || isWatchCancelError(error)) return;
+      setLoading(false);
+      setLoadError(errorMessage(error) || t('imageManagerTool.loadFailed'));
+    });
+
     return () => {
-      cancelled = true;
+      active = false;
+      offWatch();
+      if (typeof watchCall?.cancel === 'function') {
+        watchCall.cancel();
+      }
     };
-  }, [cliPath, reloadNonce, source, t]);
+  }, [cliPath, reloadNonce, source.id, sourceConfigKey, t]);
 
   useEffect(() => {
     if (!pending || pending.tool !== 'image-manager' || consumed.current === pending) return;
@@ -1121,15 +1211,19 @@ export default function ImageManagerTool({
         ? t('imageManagerTool.statusCheckingRegistry')
         : loadError
           ? t('imageManagerTool.statusRegistryUnavailable')
-          : registryDetailsLoading
-            ? t('imageManagerTool.statusRegistryDetails')
-            : t('imageManagerTool.statusRegistryAvailable')
+          : isUpdating
+            ? t('imageManagerTool.statusBadgeRegistryUpdating')
+            : registryDetailsLoading
+              ? t('imageManagerTool.statusRegistryDetails')
+              : t('imageManagerTool.statusRegistryAvailable')
       : loading
         ? t('imageManagerTool.statusChecking')
         : status?.available
-          ? t('imageManagerTool.statusAvailable', {
-              version: status.version || t('imageManagerTool.emptyValue'),
-            })
+          ? isUpdating
+            ? t('imageManagerTool.statusBadgeUpdating')
+            : t('imageManagerTool.statusAvailable', {
+                version: status.version || t('imageManagerTool.emptyValue'),
+              })
           : status?.error || t('imageManagerTool.statusUnavailable');
 
   const statusBadgeLabel =
@@ -1138,13 +1232,17 @@ export default function ImageManagerTool({
         ? t('imageManagerTool.statusBadgeRegistryChecking')
         : loadError
           ? t('imageManagerTool.statusBadgeUnavailable')
-          : registryDetailsLoading
-            ? t('imageManagerTool.statusBadgeRegistryDetails')
-            : t('imageManagerTool.statusBadgeRegistryAvailable')
+          : isUpdating
+            ? t('imageManagerTool.statusBadgeRegistryUpdating')
+            : registryDetailsLoading
+              ? t('imageManagerTool.statusBadgeRegistryDetails')
+              : t('imageManagerTool.statusBadgeRegistryAvailable')
       : loading
         ? t('imageManagerTool.statusBadgeChecking')
         : status?.available
-          ? t('imageManagerTool.statusBadgeAvailable')
+          ? isUpdating
+            ? t('imageManagerTool.statusBadgeUpdating')
+            : t('imageManagerTool.statusBadgeAvailable')
           : t('imageManagerTool.statusBadgeUnavailable');
 
   const statusBadgeVariant =
@@ -1309,12 +1407,35 @@ export default function ImageManagerTool({
                     <div className="font-medium text-foreground">{sourceKindLabel}</div>
                     <div className="text-muted-foreground">{statusText}</div>
                     {source.kind !== 'registry' ? (
+                      <>
+                        <div className="flex items-center justify-between gap-2 border-t border-border pt-1.5 text-[11px]">
+                          <span className="text-muted-foreground">
+                            {t('imageManagerTool.statusDockerVersion')}
+                          </span>
+                          <span className="font-mono text-foreground">
+                            {status?.version || t('imageManagerTool.emptyValue')}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-2 border-t border-border pt-1.5 text-[11px]">
+                          <span className="text-muted-foreground">
+                            {t('imageManagerTool.dockerCliPath')}
+                          </span>
+                          <span className="font-mono text-foreground">
+                            {status?.cliPath || t('imageManagerTool.emptyValue')}
+                          </span>
+                        </div>
+                      </>
+                    ) : null}
+                    {isUpdating && updateProgress && typeof updateProgress.scanned === 'number' ? (
                       <div className="flex items-center justify-between gap-2 border-t border-border pt-1.5 text-[11px]">
                         <span className="text-muted-foreground">
-                          {t('imageManagerTool.dockerCliPath')}
+                          {t('imageManagerTool.statusUpdateProgress')}
                         </span>
                         <span className="font-mono text-foreground">
-                          {status?.cliPath || t('imageManagerTool.emptyValue')}
+                          {t('imageManagerTool.statusProgressScan', {
+                            scanned: updateProgress.scanned,
+                            total: updateProgress.total ?? '?',
+                          })}
                         </span>
                       </div>
                     ) : null}
