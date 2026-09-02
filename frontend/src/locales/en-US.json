@@ -659,6 +659,7 @@
     "pushed": "Pushed",
     "deleted": "Deleted",
     "deletePartial": "Deleted {{deleted}}, failed {{failed}}",
+    "deleteFailureReason": "{{image}}: {{reason}}",
     "actionFailed": "Action failed",
     "loadFailed": "Could not load images",
     "loadFailedHint": "Check the Docker CLI and source, then try again",

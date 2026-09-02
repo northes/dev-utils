@@ -1224,10 +1224,19 @@ export default function ImageManagerTool({
     try {
       const result = await DeleteDockerImages(sourceID, ids);
       const deleted = result.deleted?.length ?? 0;
-      const failed = result.failed?.length ?? 0;
+      const failures = result.failed ?? [];
+      const failed = failures.length;
       if (failed > 0) {
         toast.add({
           title: t('imageManagerTool.deletePartial', { deleted, failed }),
+          description: failures
+            .map((failure) =>
+              t('imageManagerTool.deleteFailureReason', {
+                image: failure.imageID,
+                reason: failure.error,
+              }),
+            )
+            .join('\n'),
           type: 'warning',
         });
       } else {

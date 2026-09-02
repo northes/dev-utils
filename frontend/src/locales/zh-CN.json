@@ -659,6 +659,7 @@
     "pushed": "已推送",
     "deleted": "已删除",
     "deletePartial": "已删除 {{deleted}} 个，失败 {{failed}} 个",
+    "deleteFailureReason": "{{image}}：{{reason}}",
     "actionFailed": "操作失败",
     "loadFailed": "无法载入镜像列表",
     "loadFailedHint": "检查 Docker CLI 与来源后重试",
