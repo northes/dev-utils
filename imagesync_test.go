@@ -227,11 +227,25 @@ func TestWatchDockerImagesEmitsSnapshotAndProgress(t *testing.T) {
 	if createEvent.Image.Name != "repo:latest" || createEvent.Image.SizeBytes != 10*1000*1000 {
 		t.Fatalf("基础行镜像错误: %#v", createEvent.Image)
 	}
+	initialProgress, ok := harness.waitFor(3*time.Second, func(event WatchDockerImagesEvent) bool {
+		return event.Progress != nil && event.Progress.Stage == watchStageScanning && event.Progress.Scanned == 0 && event.Progress.Total == 1
+	})
+	if !ok {
+		t.Fatal("image ls 完成后应先推送 0/1 进度")
+	}
+	if initialProgress.Revision <= createEvent.Revision {
+		t.Fatalf("0/1 进度应在基础行之后推送: create=%#v progress=%#v", createEvent, initialProgress)
+	}
 	updateEvent, ok := harness.waitFor(3*time.Second, func(event WatchDockerImagesEvent) bool {
 		return event.Kind == watchEventKindUpdate && event.Image != nil
 	})
 	if !ok || updateEvent.Revision <= createEvent.Revision || updateEvent.Image.SizeBytes != 10485760 {
 		t.Fatalf("详情 update 应在 create 后推送: create=%#v update=%#v", createEvent, updateEvent)
+	}
+	if !harness.waitEvent(3*time.Second, func(event WatchDockerImagesEvent) bool {
+		return event.Progress != nil && event.Progress.Stage == watchStageScanning && event.Progress.Scanned == 1 && event.Progress.Total == 1
+	}) {
+		t.Fatal("inspect 完成后应推送 1/1 进度")
 	}
 	if !harness.waitEvent(3*time.Second, func(event WatchDockerImagesEvent) bool {
 		return event.Progress != nil && event.Progress.Stage == watchStageDone

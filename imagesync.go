@@ -445,21 +445,30 @@ func (s *ImageService) scanDockerSource(ctx context.Context, worker *watchWorker
 			row := image
 			s.emitWatchEvent(worker, s.watchImageEvent(worker, watchEventKindCreate, &row))
 		}
-		s.emitWatchEvent(worker, s.watchProgressEvent(worker, len(images), total))
 	}
-	s.enrichDockerWatchImages(ctx, worker, source, cliPath, images)
+	// image ls 已完整返回，此时总数确定；后续 scanned 只统计已完成的 inspect。
+	s.emitWatchEvent(worker, s.watchProgressEvent(worker, 0, total))
+	s.enrichDockerWatchImages(ctx, worker, source, cliPath, images, total)
 	sort.Slice(images, func(i, j int) bool { return images[i].ID < images[j].ID })
 	return images, nil
 }
 
 // enrichDockerWatchImages 并发预热 Docker inspect 缓存；每条详情返回后立即
 // 推送 update，前端无需等待整批详情完成再刷新列表。
-func (s *ImageService) enrichDockerWatchImages(ctx context.Context, worker *watchWorker, source ImageSource, cliPath string, images []DockerImage) {
+func (s *ImageService) enrichDockerWatchImages(ctx context.Context, worker *watchWorker, source ImageSource, cliPath string, images []DockerImage, total int) {
 	if len(images) == 0 {
 		return
 	}
 	var wg sync.WaitGroup
 	var imagesMu sync.Mutex
+	var progressMu sync.Mutex
+	inspected := 0
+	reportProgress := func() {
+		progressMu.Lock()
+		defer progressMu.Unlock()
+		inspected++
+		s.emitWatchEvent(worker, s.watchProgressEvent(worker, inspected, total))
+	}
 	jobs := make(chan int)
 	workers := min(len(images), imageDetailConcurrency)
 	for range workers {
@@ -473,6 +482,9 @@ func (s *ImageService) enrichDockerWatchImages(ctx context.Context, worker *watc
 					if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 						s.logWatch(worker, "镜像详情加载失败 image="+base.ID+": "+redactImageError(err, source).Error())
 					}
+					if ctx.Err() == nil {
+						reportProgress()
+					}
 					continue
 				}
 				updated := dockerImageFromDetail(base, detail)
@@ -483,6 +495,7 @@ func (s *ImageService) enrichDockerWatchImages(ctx context.Context, worker *watc
 					eventImage := updated
 					s.emitWatchEvent(worker, s.watchImageEvent(worker, watchEventKindUpdate, &eventImage))
 				}
+				reportProgress()
 			}
 		}()
 	}
@@ -878,8 +891,8 @@ func (s *ImageService) watchScanningEvent(worker *watchWorker, status *DockerSta
 }
 
 // watchProgressEvent 推送扫描进度。Registry 的 scanned 是已成功获取
-// digest/size 的 tag 数量，total 随 tags list 返回动态增加；Docker 则使用
-// 本轮解析出的唯一镜像数。
+// digest/size 的 tag 数量，total 随 tags list 返回动态增加；Docker 的
+// total 是 image ls 返回的唯一镜像数，scanned 是已完成 inspect 的数量。
 func (s *ImageService) watchProgressEvent(worker *watchWorker, scanned, total int) WatchDockerImagesEvent {
 	return WatchDockerImagesEvent{
 		ClientID:   worker.clientID,
