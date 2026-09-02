@@ -76,7 +76,12 @@ type DockerImage struct {
 	CreatedAt  string   `json:"createdAt"`
 }
 
-const registryImageMetadataEventName = "image-manager:registry-metadata"
+const (
+	registryImageMetadataEventName      = "image-manager:registry-metadata"
+	registryImageMetadataStateEventName = "image-manager:registry-metadata-state"
+	registryImageMetadataStateLoading   = "loading"
+	registryImageMetadataStateComplete  = "complete"
+)
 
 type registryImageMetadataEvent struct {
 	SourceID  string `json:"sourceID"`
@@ -87,6 +92,11 @@ type registryImageMetadataEvent struct {
 	Size      string `json:"size"`
 	SizeBytes int64  `json:"sizeBytes"`
 	CreatedAt string `json:"createdAt"`
+}
+
+type registryImageMetadataStateEvent struct {
+	SourceID string `json:"sourceID"`
+	State    string `json:"state"`
 }
 
 type DockerImageDetail struct {
@@ -1325,14 +1335,21 @@ func (s *ImageService) scheduleRegistryMetadata(sourceID string, source ImageSou
 		log.Printf("创建 Registry 元数据客户端失败 source=%s: %v", sourceID, redactRegistryError(err, source))
 		return
 	}
+	s.emitEvent(registryImageMetadataStateEventName, registryImageMetadataStateEvent{
+		SourceID: sourceID,
+		State:    registryImageMetadataStateLoading,
+	})
 	jobs := make(chan DockerImage, len(images))
 	for _, image := range images {
 		jobs <- image
 	}
 	close(jobs)
 	workers := min(registryConcurrency, len(images))
+	var workerGroup sync.WaitGroup
+	workerGroup.Add(workers)
 	for i := 0; i < workers; i++ {
 		go func() {
+			defer workerGroup.Done()
 			for {
 				select {
 				case <-requestCtx.Done():
@@ -1359,6 +1376,16 @@ func (s *ImageService) scheduleRegistryMetadata(sourceID string, source ImageSou
 			}
 		}()
 	}
+	go func() {
+		workerGroup.Wait()
+		if s.listRequestObsolete(token, requestCtx) || !s.sourceFingerprintCurrent(sourceID, fingerprint) {
+			return
+		}
+		s.emitEvent(registryImageMetadataStateEventName, registryImageMetadataStateEvent{
+			SourceID: sourceID,
+			State:    registryImageMetadataStateComplete,
+		})
+	}()
 }
 
 func redactRegistryError(err error, source ImageSource) error {

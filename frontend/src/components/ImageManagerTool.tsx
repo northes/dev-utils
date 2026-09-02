@@ -129,6 +129,11 @@ type RegistryImageMetadataEvent = {
   createdAt: string;
 };
 
+type RegistryImageMetadataStateEvent = {
+  sourceID: string;
+  state: 'loading' | 'complete';
+};
+
 type ConfirmState =
   | { type: 'push'; image: DockerImage }
   | {
@@ -452,6 +457,7 @@ export default function ImageManagerTool({
   const [testingSource, setTestingSource] = useState(false);
   const [copiedName, setCopiedName] = useState<string | null>(null);
   const [copiedDigest, setCopiedDigest] = useState<string | null>(null);
+  const [copiedTag, setCopiedTag] = useState<string | null>(null);
   const [hostOptions, setHostOptions] = useState<Array<{ alias: string; selected: boolean }>>([]);
   const [hostsLoading, setHostsLoading] = useState(false);
   const [hostsError, setHostsError] = useState('');
@@ -461,6 +467,7 @@ export default function ImageManagerTool({
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const detailRequest = useRef(0);
   const deferredSearch = useDeferredValue(search);
+  const [registryDetailsLoading, setRegistryDetailsLoading] = useState(false);
 
   useEffect(() => {
     if (!sources.some((item) => item.id === sourceId))
@@ -472,10 +479,11 @@ export default function ImageManagerTool({
     setStatus(null);
     setDetail(null);
     setSelected(new Set());
+    setRegistryDetailsLoading(false);
   }, [source.id]);
 
   useEffect(() => {
-    const off = Events.On('image-manager:registry-metadata', (event) => {
+    const offMetadata = Events.On('image-manager:registry-metadata', (event) => {
       const payload = event.data as RegistryImageMetadataEvent | undefined;
       if (!payload || payload.sourceID !== source.id) return;
       setImages((current) =>
@@ -494,7 +502,15 @@ export default function ImageManagerTool({
         ),
       );
     });
-    return () => off();
+    const offMetadataState = Events.On('image-manager:registry-metadata-state', (event) => {
+      const payload = event.data as RegistryImageMetadataStateEvent | undefined;
+      if (!payload || payload.sourceID !== source.id) return;
+      setRegistryDetailsLoading(payload.state === 'loading');
+    });
+    return () => {
+      offMetadata();
+      offMetadataState();
+    };
   }, [source.id]);
 
   useEffect(() => {
@@ -1026,6 +1042,17 @@ export default function ImageManagerTool({
     }
   };
 
+  const copyTag = async (tag: string) => {
+    try {
+      await navigator.clipboard.writeText(tag);
+      setCopiedTag(tag);
+      window.setTimeout(() => setCopiedTag((current) => (current === tag ? null : current)), 1400);
+      toast.add({ title: t('imageManagerTool.tagCopied') });
+    } catch {
+      toast.add({ title: t('imageManagerTool.copyFailed'), type: 'error' });
+    }
+  };
+
   const runPush = async (image: DockerImage) => {
     setBusy('push');
     try {
@@ -1094,7 +1121,9 @@ export default function ImageManagerTool({
         ? t('imageManagerTool.statusCheckingRegistry')
         : loadError
           ? t('imageManagerTool.statusRegistryUnavailable')
-          : t('imageManagerTool.statusRegistryAvailable')
+          : registryDetailsLoading
+            ? t('imageManagerTool.statusRegistryDetails')
+            : t('imageManagerTool.statusRegistryAvailable')
       : loading
         ? t('imageManagerTool.statusChecking')
         : status?.available
@@ -1109,7 +1138,9 @@ export default function ImageManagerTool({
         ? t('imageManagerTool.statusBadgeRegistryChecking')
         : loadError
           ? t('imageManagerTool.statusBadgeUnavailable')
-          : t('imageManagerTool.statusBadgeRegistryAvailable')
+          : registryDetailsLoading
+            ? t('imageManagerTool.statusBadgeRegistryDetails')
+            : t('imageManagerTool.statusBadgeRegistryAvailable')
       : loading
         ? t('imageManagerTool.statusBadgeChecking')
         : status?.available
@@ -1600,12 +1631,6 @@ export default function ImageManagerTool({
                       t('imageManagerTool.emptyValue'),
                   })}
                 </span>
-                {loading ? (
-                  <Badge variant="outline" className="gap-1 px-1.5 text-[10px]" aria-live="polite">
-                    <Spinner className="size-3" />
-                    {t('imageManagerTool.statusLoading')}
-                  </Badge>
-                ) : null}
                 {selectedCount > 0 ? (
                   <span>{t('imageManagerTool.selectedCount', { count: selectedCount })}</span>
                 ) : null}
@@ -1834,7 +1859,7 @@ export default function ImageManagerTool({
             </AlertDialogTitle>
             <AlertDialogDescription
               render={<div />}
-              className="min-w-0 max-w-full space-y-3 text-left whitespace-normal break-words [overflow-wrap:anywhere]"
+              className="min-w-0 max-w-full text-left whitespace-normal break-words [overflow-wrap:anywhere]"
             >
               {confirm?.type === 'push' ? (
                 <p className="m-0">
@@ -1844,14 +1869,11 @@ export default function ImageManagerTool({
                 </p>
               ) : confirm?.type === 'delete' ? (
                 confirm.sourceKind === 'registry' ? (
-                  <>
+                  <div className="flex min-w-0 flex-col gap-3">
                     <p className="m-0">{t('imageManagerTool.registryDeleteConfirmSummary')}</p>
                     <div className="min-w-0 rounded-md border border-border bg-muted/40 px-3 py-2">
-                      <div className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
-                        {t('imageManagerTool.registryDeleteManifest')}
-                      </div>
                       {registryConfirmDigests.length > 0 ? (
-                        <div className="mt-2 space-y-1.5">
+                        <div className="space-y-1.5">
                           {registryConfirmDigests.map((digest) => (
                             <div key={digest} className="flex min-w-0 items-start gap-2">
                               <code className="min-w-0 flex-1 break-all font-mono text-xs leading-5 text-foreground">
@@ -1888,12 +1910,23 @@ export default function ImageManagerTool({
                         </div>
                         <div className="mt-1.5 flex max-h-32 min-w-0 flex-wrap gap-1.5 overflow-y-auto pr-1">
                           {registryConfirmTags.map((tag, index) => (
-                            <code
+                            <button
+                              type="button"
                               key={`${tag}-${index}`}
-                              className="max-w-full break-all rounded-md border border-border bg-muted/40 px-1.5 py-0.5 font-mono text-xs leading-5 text-foreground"
+                              className="group inline-flex min-w-0 max-w-full items-start gap-1.5 rounded-md border border-border bg-muted/40 px-1.5 py-0.5 text-left text-foreground outline-none transition-colors hover:bg-muted focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                              title={t('imageManagerTool.copyTag')}
+                              aria-label={t('imageManagerTool.copyTag')}
+                              onClick={() => void copyTag(tag)}
                             >
-                              {tag}
-                            </code>
+                              {copiedTag === tag ? (
+                                <Check size={13} className="mt-0.5 shrink-0" aria-hidden="true" />
+                              ) : (
+                                <Copy size={13} className="mt-0.5 shrink-0" aria-hidden="true" />
+                              )}
+                              <code className="min-w-0 break-all font-mono text-xs leading-5">
+                                {tag}
+                              </code>
+                            </button>
                           ))}
                         </div>
                       </div>
@@ -1901,7 +1934,7 @@ export default function ImageManagerTool({
                     <p className="m-0 text-xs text-muted-foreground">
                       {t('imageManagerTool.registryDeleteGCHint')}
                     </p>
-                  </>
+                  </div>
                 ) : (
                   <p className="m-0">
                     {confirm.ids.length > 1
