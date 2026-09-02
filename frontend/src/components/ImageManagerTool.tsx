@@ -18,7 +18,6 @@ import {
 } from '@phosphor-icons/react';
 import {
   DeleteDockerImages,
-  GetDockerStatus,
   GetSSHConfigHosts,
   InspectDockerImage,
   PushDockerImage,
@@ -613,17 +612,6 @@ export default function ImageManagerTool({
         setLoading(false);
       }
     });
-
-    void GetDockerStatus(sourceID)
-      .then((nextStatus) => {
-        if (active) setStatus(nextStatus);
-      })
-      .catch((error) => {
-        if (active) {
-          setStatus(null);
-          setLoadError(errorMessage(error) || t('imageManagerTool.loadFailed'));
-        }
-      });
 
     const watchCall = WatchDockerImages(sourceID, clientID);
     void watchCall.catch((error) => {
@@ -1434,7 +1422,10 @@ export default function ImageManagerTool({
                         <span className="font-mono text-foreground">
                           {t('imageManagerTool.statusProgressScan', {
                             scanned: updateProgress.scanned,
-                            total: updateProgress.total ?? '?',
+                            total:
+                              typeof updateProgress.total === 'number' && updateProgress.total > 0
+                                ? updateProgress.total
+                                : '?',
                           })}
                         </span>
                       </div>
