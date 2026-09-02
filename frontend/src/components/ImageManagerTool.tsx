@@ -1117,7 +1117,7 @@ export default function ImageManagerTool({
   };
 
   const toggleAll = (checked: boolean) => {
-    setSelected(checked ? new Set(images.map((image) => image.id)) : new Set());
+    setSelected(checked ? new Set(filteredImages.map((image) => image.id)) : new Set());
   };
 
   const toggleRow = (id: string, checked: boolean) => {
