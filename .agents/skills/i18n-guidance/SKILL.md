@@ -33,4 +33,3 @@ user-invocable: false
 
 - 搜索新增代码中的硬编码用户可见字符串，确认它们已迁移到 locale；允许日志、错误类型、协议值和内部 ID 保持代码常量。
 - 检查中英文资源的 key 结构一致、默认语言和回退语言仍为 `zh-CN`。
-- 在 `frontend/` 运行 `npx tsc --noEmit` 和 `npm run build`，再按任务范围执行 `project-validation` skill。

@@ -7,14 +7,14 @@
 
 ## 语言与国际化
 
-- 始终使用简体中文与用户沟通；代码注释、报告和评审意见使用中文；Git commit subject/body 必须使用英文，并遵循 `.agents/skills/git-commit-guidance/SKILL.md`。
+- 始终使用简体中文与用户沟通；代码注释、报告和评审意见使用中文；Git commit subject/body 必须使用英文。
 - 应用默认语言和回退语言为 `zh-CN`。前端用户可见文案必须通过 i18n 资源提供；原生 Go 托盘文案遵循 `.agents/skills/i18n-guidance/SKILL.md`。
 
 ## 强制 Skill 路由
 
 ### 范围判定
 
-- 只加载直接命中当前变更边界的 skill；`project-validation` 用于实现完成后的验证，不在任务开始时展开完整验证矩阵。
+- 只加载直接命中当前变更边界的 skill；`project-validation` 仅可手动调用用于实现完成后的验证，不在任务开始时展开完整验证矩阵。
 - 修改现有工具的局部行为或样式，且不改变工具 ID、注册、导航、历史、托盘、配置、事件或 bindings 时，不执行新增工具的完整接线清单。
 - 仅在持久化 Config、Wails 事件、托盘、Go 服务或 bindings 边界实际受影响时，才梳理前后端接线。
 - 先检查直接生产者和消费者；发现跨界证据后再扩展检查范围，不做无依据的全仓扫描。
@@ -27,7 +27,6 @@
 - UI 文案、locale 或语言设置：`.agents/skills/i18n-guidance/SKILL.md`
 - shadcn/Base UI 组件安装、更新、组合或样式：`.agents/skills/shadcn/SKILL.md`
 - 实现完成后的命令验证：`.agents/skills/project-validation/SKILL.md`
-- Git 提交、提交拆分、提交信息和提交前检查：`.agents/skills/git-commit-guidance/SKILL.md`
 - 明确进行 Radix 到 Base UI 迁移时使用 `.agents/skills/migrate-radix-to-base/SKILL.md`。
 
 ## 全局不变量
