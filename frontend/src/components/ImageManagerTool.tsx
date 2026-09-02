@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { CancelError, Events } from '@wailsio/runtime';
 // @ts-ignore -- 遵循明确要求: 用且只用 import { TbBrandDocker } from "react-icons/tb"
@@ -138,6 +138,7 @@ type WatchDockerImagesEvent = {
   status?: DockerStatus;
   progress?: WatchProgress;
   isUpdating?: boolean;
+  isInitialLoad?: boolean;
   error?: string;
 };
 
@@ -152,6 +153,9 @@ type ConfirmState =
     }
   | null;
 
+type SourceViewState = 'connecting' | 'unavailable' | 'loading-details' | 'updating' | 'connected';
+type ContentViewState = 'detail' | 'loading' | 'error' | 'empty' | 'no-results' | 'table';
+
 function errorMessage(error: unknown) {
   if (error instanceof Error && error.message) return error.message;
   if (typeof error === 'string' && error) return error;
@@ -161,6 +165,37 @@ function errorMessage(error: unknown) {
     if (typeof value.error === 'string' && value.error) return value.error;
   }
   return '';
+}
+
+// 来源状态只由连接探测、扫描错误和后台更新事件共同决定。
+function resolveSourceViewState(
+  isConnecting: boolean,
+  status: DockerStatus | null,
+  loadError: string,
+  isUpdating: boolean,
+  isInitialLoad: boolean,
+): SourceViewState {
+  if (isConnecting) return 'connecting';
+  if (loadError || !status?.available) return 'unavailable';
+  if (isUpdating && isInitialLoad) return 'loading-details';
+  if (isUpdating) return 'updating';
+  return 'connected';
+}
+
+// 内容区优先保留已有数据；只有没有任何镜像时，更新中才显示 loading。
+function resolveContentViewState(
+  hasDetail: boolean,
+  isConnecting: boolean,
+  imageCount: number,
+  filteredCount: number,
+  sourceViewState: SourceViewState,
+): ContentViewState {
+  if (hasDetail) return 'detail';
+  if (isConnecting) return 'loading';
+  if (imageCount > 0) return filteredCount > 0 ? 'table' : 'no-results';
+  if (sourceViewState === 'unavailable') return 'error';
+  if (sourceViewState === 'loading-details' || sourceViewState === 'updating') return 'loading';
+  return 'empty';
 }
 
 function isWatchCancelError(error: unknown) {
@@ -450,9 +485,10 @@ export default function ImageManagerTool({
   const [sourceId, setSourceId] = useState(LOCAL_SOURCE_ID);
   const source = sources.find((item) => item.id === sourceId) ?? sources[0] ?? LOCAL_SOURCE;
   const [reloadNonce, setReloadNonce] = useState(0);
-  const [loading, setLoading] = useState(false);
+  const [connectionPending, setConnectionPending] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [status, setStatus] = useState<DockerStatus | null>(null);
+  const [watchSourceId, setWatchSourceId] = useState<string | null>(null);
   const [images, setImages] = useState<DockerImage[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [detail, setDetail] = useState<DockerImageDetail | null>(null);
@@ -478,10 +514,17 @@ export default function ImageManagerTool({
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const detailRequest = useRef(0);
   const deferredSearch = useDeferredValue(search);
-  const [registryDetailsLoading, setRegistryDetailsLoading] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [isInitialLoad, setIsInitialLoad] = useState(false);
   const [updateProgress, setUpdateProgress] = useState<WatchProgress | null>(null);
   const sourceConfigKey = JSON.stringify(source);
+  const sourceIsChanging = watchSourceId !== source.id;
+  const isConnecting = connectionPending || sourceIsChanging;
+  const requestWatchReload = useCallback(() => {
+    setConnectionPending(true);
+    setLoadError('');
+    setReloadNonce((value) => value + 1);
+  }, []);
 
   useEffect(() => {
     if (!sources.some((item) => item.id === sourceId))
@@ -501,12 +544,13 @@ export default function ImageManagerTool({
     setImages([]);
     setSelected(new Set());
     setDetail(null);
+    setWatchSourceId(sourceID);
     setStatus(null);
-    setLoading(true);
+    setConnectionPending(true);
     setLoadError('');
     setIsUpdating(false);
+    setIsInitialLoad(false);
     setUpdateProgress(null);
-    setRegistryDetailsLoading(false);
 
     const offWatch = Events.On('image-manager:watch-docker-images', (event) => {
       const payload = event.data as WatchDockerImagesEvent | undefined;
@@ -528,7 +572,7 @@ export default function ImageManagerTool({
         if (maxRevision >= 0 && payload.revision !== maxRevision + 1) {
           if (!restarting) {
             restarting = true;
-            setReloadNonce((value) => value + 1);
+            requestWatchReload();
           }
           return;
         }
@@ -538,9 +582,15 @@ export default function ImageManagerTool({
 
       if (payload.status) {
         setStatus(payload.status);
+        // 连接态只由后端连接探测结果结束；镜像数据事件不能代表
+        // SSH/Registry 已连通或 Docker daemon 可用。
+        setConnectionPending(false);
       }
       if (payload.isUpdating !== undefined) {
         setIsUpdating(payload.isUpdating);
+      }
+      if (payload.isInitialLoad !== undefined) {
+        setIsInitialLoad(payload.isInitialLoad);
       }
       if (payload.progress) {
         setUpdateProgress(payload.progress);
@@ -549,7 +599,7 @@ export default function ImageManagerTool({
           setLoadError('');
         }
         if (stage === 'done' || stage === 'failed') {
-          setLoading(false);
+          setConnectionPending(false);
         }
       }
       if (payload.error) {
@@ -567,7 +617,6 @@ export default function ImageManagerTool({
           }
         }
         setImages(Array.from(map.values()));
-        setLoading(false);
       } else if (kind === 'create' || kind === 'update') {
         if (payload.image && payload.image.id) {
           const image = payload.image;
@@ -588,7 +637,6 @@ export default function ImageManagerTool({
               : current,
           );
         }
-        setLoading(false);
       } else if (kind === 'delete') {
         const idsToDelete = payload.imageIDs ?? (payload.imageID ? [payload.imageID] : []);
         let changed = false;
@@ -609,14 +657,13 @@ export default function ImageManagerTool({
           return selChanged ? next : current;
         });
         setDetail((current) => (current && idsToDelete.includes(current.id) ? null : current));
-        setLoading(false);
       }
     });
 
     const watchCall = WatchDockerImages(sourceID, clientID);
     void watchCall.catch((error) => {
       if (!active || isWatchCancelError(error)) return;
-      setLoading(false);
+      setConnectionPending(false);
       setLoadError(errorMessage(error) || t('imageManagerTool.loadFailed'));
     });
 
@@ -627,7 +674,7 @@ export default function ImageManagerTool({
         watchCall.cancel();
       }
     };
-  }, [cliPath, reloadNonce, source.id, sourceConfigKey, t]);
+  }, [cliPath, reloadNonce, requestWatchReload, source.id, sourceConfigKey, t]);
 
   useEffect(() => {
     if (!pending || pending.tool !== 'image-manager' || consumed.current === pending) return;
@@ -635,7 +682,7 @@ export default function ImageManagerTool({
     clearPending();
     if (pending.action === 'refresh') {
       setDetail(null);
-      setReloadNonce((value) => value + 1);
+      requestWatchReload();
       record(
         'image-manager',
         t('imageManagerTool.refreshed'),
@@ -643,7 +690,7 @@ export default function ImageManagerTool({
         source.id,
       );
     }
-  }, [clearPending, pending, record, source, t]);
+  }, [clearPending, pending, record, requestWatchReload, source, t]);
 
   const unnamed = t('imageManagerTool.unnamed');
   const indexedImages = useMemo<IndexedImage[]>(
@@ -691,7 +738,22 @@ export default function ImageManagerTool({
     () => filteredImages.reduce((total, image) => total + imageSizeBytes(image), 0),
     [filteredImages],
   );
-  const working = loading || busy !== null || detailLoading;
+  const sourceViewState = resolveSourceViewState(
+    isConnecting,
+    status,
+    loadError,
+    isUpdating,
+    isInitialLoad,
+  );
+  const contentError = loadError || status?.error || '';
+  const contentViewState = resolveContentViewState(
+    detail !== null,
+    isConnecting,
+    images.length,
+    filteredImages.length,
+    sourceViewState,
+  );
+  const working = isConnecting || busy !== null || detailLoading;
   const registryConfirmDigests =
     confirm?.type === 'delete' && confirm.sourceKind === 'registry'
       ? registryDeleteDigests(images, confirm.ids)
@@ -1174,7 +1236,7 @@ export default function ImageManagerTool({
       record('image-manager', t('imageManagerTool.delete'), name, ids.join('\n'));
       if (detail && ids.includes(detail.id)) setDetail(null);
       setSelected(new Set());
-      setReloadNonce((value) => value + 1);
+      requestWatchReload();
     } catch (error) {
       toast.add({
         title: t('imageManagerTool.actionFailed'),
@@ -1193,52 +1255,26 @@ export default function ImageManagerTool({
     else void runDelete(confirm.sourceId, confirm.ids, confirm.name);
   };
 
-  const statusText =
-    source.kind === 'registry'
-      ? loading
-        ? t('imageManagerTool.statusCheckingRegistry')
-        : loadError
-          ? t('imageManagerTool.statusRegistryUnavailable')
-          : isUpdating
-            ? t('imageManagerTool.statusBadgeRegistryUpdating')
-            : registryDetailsLoading
-              ? t('imageManagerTool.statusRegistryDetails')
-              : t('imageManagerTool.statusRegistryAvailable')
-      : loading
-        ? t('imageManagerTool.statusChecking')
-        : status?.available
-          ? isUpdating
-            ? t('imageManagerTool.statusBadgeUpdating')
-            : t('imageManagerTool.statusBadgeAvailable')
-          : status?.error || t('imageManagerTool.statusUnavailable');
-
   const statusBadgeLabel =
-    source.kind === 'registry'
-      ? loading
-        ? t('imageManagerTool.statusBadgeRegistryChecking')
-        : loadError
-          ? t('imageManagerTool.statusBadgeUnavailable')
-          : isUpdating
-            ? t('imageManagerTool.statusBadgeRegistryUpdating')
-            : registryDetailsLoading
-              ? t('imageManagerTool.statusBadgeRegistryDetails')
-              : t('imageManagerTool.statusBadgeRegistryAvailable')
-      : loading
-        ? t('imageManagerTool.statusBadgeChecking')
-        : status?.available
-          ? isUpdating
+    sourceViewState === 'connecting'
+      ? t('imageManagerTool.statusBadgeChecking')
+      : sourceViewState === 'unavailable'
+        ? t('imageManagerTool.statusBadgeUnavailable')
+        : sourceViewState === 'loading-details'
+          ? t('imageManagerTool.statusBadgeLoadingDetails')
+          : sourceViewState === 'updating'
             ? t('imageManagerTool.statusBadgeUpdating')
-            : t('imageManagerTool.statusBadgeAvailable')
-          : t('imageManagerTool.statusBadgeUnavailable');
-
-  const statusBadgeVariant =
-    source.kind === 'registry'
-      ? loadError
-        ? 'destructive'
-        : 'outline'
-      : loading || status?.available
-        ? 'outline'
-        : 'destructive';
+            : t('imageManagerTool.statusBadgeAvailable');
+  const statusText =
+    sourceViewState === 'unavailable'
+      ? contentError ||
+        t(
+          source.kind === 'registry'
+            ? 'imageManagerTool.statusRegistryUnavailable'
+            : 'imageManagerTool.statusUnavailable',
+        )
+      : statusBadgeLabel;
+  const statusBadgeVariant = sourceViewState === 'unavailable' ? 'destructive' : 'outline';
 
   const sourceKindLabel = t(
     `imageManagerTool.kind${source.kind === 'registry' ? 'Registry' : source.kind === 'ssh' ? 'Ssh' : 'Local'}`,
@@ -1380,7 +1416,12 @@ export default function ImageManagerTool({
                       />
                     }
                   >
-                    {source.kind !== 'registry' ? (
+                    {sourceViewState === 'connecting' ? (
+                      <Spinner
+                        data-icon="inline-start"
+                        className="size-3.5 shrink-0 motion-reduce:animate-none"
+                      />
+                    ) : source.kind !== 'registry' ? (
                       <TbBrandDocker
                         data-icon="inline-start"
                         className="size-3.5 shrink-0"
@@ -1414,10 +1455,16 @@ export default function ImageManagerTool({
                         </div>
                       </>
                     ) : null}
-                    {isUpdating && updateProgress && typeof updateProgress.scanned === 'number' ? (
+                    {(sourceViewState === 'loading-details' || sourceViewState === 'updating') &&
+                    updateProgress &&
+                    typeof updateProgress.scanned === 'number' ? (
                       <div className="flex items-center justify-between gap-2 border-t border-border pt-1.5 text-[11px]">
                         <span className="text-muted-foreground">
-                          {t('imageManagerTool.statusUpdateProgress')}
+                          {t(
+                            sourceViewState === 'loading-details'
+                              ? 'imageManagerTool.statusInitialLoadProgress'
+                              : 'imageManagerTool.statusUpdateProgress',
+                          )}
                         </span>
                         <span className="font-mono text-foreground">
                           {t('imageManagerTool.statusProgressScan', {
@@ -1438,7 +1485,7 @@ export default function ImageManagerTool({
                   disabled={working}
                   onClick={() => {
                     setDetail(null);
-                    setReloadNonce((value) => value + 1);
+                    requestWatchReload();
                     record(
                       'image-manager',
                       t('imageManagerTool.refreshed'),
@@ -1447,7 +1494,7 @@ export default function ImageManagerTool({
                     );
                   }}
                 >
-                  {loading ? (
+                  {sourceViewState === 'connecting' ? (
                     <Spinner data-icon="inline-start" />
                   ) : (
                     <ArrowsClockwise data-icon="inline-start" weight="duotone" />
@@ -1466,7 +1513,7 @@ export default function ImageManagerTool({
           />
         )}
         <ToolLayoutContent className="flex min-h-0 flex-col">
-          {detail ? (
+          {contentViewState === 'detail' && detail ? (
             <div className="h-full min-h-0 overflow-x-hidden overflow-y-auto [padding-inline-end:var(--overlay-scrollbar-hit-size)]">
               <h2 className="m-0 text-[13px] font-semibold text-foreground">
                 {t('imageManagerTool.detailTitle')}
@@ -1513,44 +1560,42 @@ export default function ImageManagerTool({
                 </div>
               </dl>
             </div>
-          ) : loadError ? (
+          ) : contentViewState === 'loading' ? (
+            <div className="flex min-h-0 flex-1 items-center justify-center">
+              <Spinner />
+            </div>
+          ) : contentViewState === 'error' ? (
             <div className="flex h-auto min-h-0 flex-1 flex-col items-center justify-center gap-2 text-center">
               <HardDrives size={28} weight="duotone" className="text-muted-foreground" />
               <div className="text-sm font-medium text-foreground">
                 {t('imageManagerTool.loadFailed')}
               </div>
               <div className="max-w-md text-xs text-muted-foreground">
-                {loadError || t('imageManagerTool.loadFailedHint')}
+                {contentError || t('imageManagerTool.loadFailedHint')}
               </div>
               <Button
                 variant="outline"
                 size="sm"
                 className="mt-2 h-[30px] px-[11px] text-[11px]"
-                onClick={() => setReloadNonce((value) => value + 1)}
+                onClick={requestWatchReload}
               >
                 <ArrowsClockwise data-icon="inline-start" weight="duotone" />
                 {t('imageManagerTool.refresh')}
               </Button>
             </div>
-          ) : loading || images.length === 0 || filteredImages.length === 0 ? (
+          ) : contentViewState === 'empty' || contentViewState === 'no-results' ? (
             <div className="flex h-auto min-h-0 flex-1 flex-col items-center justify-center gap-2 text-center">
-              {loading ? (
-                <Spinner />
-              ) : (
-                <>
-                  <HardDrives size={28} weight="duotone" className="text-muted-foreground" />
-                  <div className="text-sm font-medium text-foreground">
-                    {images.length > 0
-                      ? t('imageManagerTool.searchNoResults')
-                      : t('imageManagerTool.emptyTitle')}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    {images.length > 0
-                      ? t('imageManagerTool.searchNoResultsHint')
-                      : t('imageManagerTool.emptyHint')}
-                  </div>
-                </>
-              )}
+              <HardDrives size={28} weight="duotone" className="text-muted-foreground" />
+              <div className="text-sm font-medium text-foreground">
+                {contentViewState === 'no-results'
+                  ? t('imageManagerTool.searchNoResults')
+                  : t('imageManagerTool.emptyTitle')}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {contentViewState === 'no-results'
+                  ? t('imageManagerTool.searchNoResultsHint')
+                  : t('imageManagerTool.emptyHint')}
+              </div>
             </div>
           ) : (
             <div className="min-h-0 flex-1 overflow-auto overscroll-contain [padding-inline-end:var(--overlay-scrollbar-hit-size)]">
@@ -1729,8 +1774,8 @@ export default function ImageManagerTool({
             </div>
           )}
         </ToolLayoutContent>
-        <ToolLayoutFooter>
-          {!detail ? (
+        {contentViewState === 'table' || contentViewState === 'no-results' ? (
+          <ToolLayoutFooter>
             <div className="flex items-center justify-between gap-3 border-t border-border pt-3">
               <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
                 <span>
@@ -1767,8 +1812,8 @@ export default function ImageManagerTool({
                 {t('imageManagerTool.batchDelete')}
               </Button>
             </div>
-          ) : null}
-        </ToolLayoutFooter>
+          </ToolLayoutFooter>
+        ) : null}
       </ToolLayout>
       <Dialog open={manageOpen} onOpenChange={setManageOpen}>
         <DialogContent

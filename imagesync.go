@@ -32,13 +32,16 @@ type WatchDockerImagesEvent struct {
 	Status     *DockerStatus  `json:"status,omitempty"`
 	Progress   *WatchProgress `json:"progress,omitempty"`
 	IsUpdating *bool          `json:"isUpdating,omitempty"`
-	Error      string         `json:"error,omitempty"`
+	// IsInitialLoad 表示当前来源尚无完整缓存，本轮用于首次构建镜像详情。
+	// false 表示已有完整缓存后的定时增量扫描。
+	IsInitialLoad *bool  `json:"isInitialLoad,omitempty"`
+	Error         string `json:"error,omitempty"`
 }
 
 // WatchProgress 是后台扫描进度，stage 取值见下方常量。
 type WatchProgress struct {
-	Scanned int    `json:"scanned,omitempty"`
-	Total   int    `json:"total,omitempty"`
+	Scanned int    `json:"scanned"`
+	Total   int    `json:"total"`
 	Stage   string `json:"stage,omitempty"`
 }
 
@@ -289,18 +292,30 @@ func (s *ImageService) runWatchRound(worker *watchWorker) {
 	if err == nil {
 		fingerprintChanged = worker.setFingerprint(fingerprint)
 	}
-	if err == nil && fingerprintChanged && source.Kind != "registry" {
-		cached, _ := s.watchPreviousSnapshot(worker, fingerprint)
-		s.emitWatchEvent(worker, s.watchSnapshotEvent(worker, watchImagesFromIndex(cached)))
-	}
 	status := DockerStatus{CLIPath: cliPath}
 	if err == nil {
 		status = s.sourceConnectionStatusContext(worker.ctx, source, cliPath)
 	}
-	s.emitWatchEvent(worker, s.watchScanningEvent(worker, &status))
+	_, hasCompleteSnapshot := s.watchPreviousSnapshot(worker, fingerprint)
+	s.emitWatchEvent(worker, s.watchScanningEvent(worker, &status, !hasCompleteSnapshot))
 	if err != nil {
 		s.failWatchRound(worker, err)
 		return
+	}
+	if !status.Available {
+		statusErr := status.Error
+		if statusErr == "" {
+			statusErr = "镜像来源不可用"
+		}
+		s.failWatchRound(worker, errors.New(statusErr))
+		return
+	}
+	// 连接状态必须先于缓存数据发布，避免前端在状态尚未判定时把
+	// snapshot 误认为连接完成并短暂显示“不可用”。
+	previous, hasPrevious := s.watchPreviousSnapshot(worker, fingerprint)
+	if fingerprintChanged && source.Kind != "registry" {
+		cached := previous
+		s.emitWatchEvent(worker, s.watchSnapshotEvent(worker, watchImagesFromIndex(cached)))
 	}
 	ctx, cancel := context.WithCancel(worker.ctx)
 	defer cancel()
@@ -319,7 +334,7 @@ func (s *ImageService) runWatchRound(worker *watchWorker) {
 		doneScanned = result.completedCount
 		doneTotal = result.totalCount
 	} else {
-		images, err = s.scanDockerSource(ctx, worker, source, cliPath)
+		images, err = s.scanDockerSource(ctx, worker, source, cliPath, !hasPrevious)
 		if err != nil {
 			s.failWatchRound(worker, err)
 			return
@@ -377,11 +392,12 @@ func (s *ImageService) scanWatchSource(ctx context.Context, worker *watchWorker,
 	if source.Kind == "registry" {
 		return nil, errors.New("registry 来源走 scanRegistryFlow")
 	}
-	return s.scanDockerSource(ctx, worker, source, cliPath)
+	return s.scanDockerSource(ctx, worker, source, cliPath, false)
 }
 
-// scanDockerSource 通过 Docker CLI 查询本地/SSH 镜像。
-func (s *ImageService) scanDockerSource(ctx context.Context, worker *watchWorker, source ImageSource, cliPath string) ([]DockerImage, error) {
+// scanDockerSource 通过 Docker CLI 查询本地/SSH 镜像。首次扫描会先逐条发布
+// image ls 的基础行，再并发补全 inspect 详情并发布精准 update。
+func (s *ImageService) scanDockerSource(ctx context.Context, worker *watchWorker, source ImageSource, cliPath string, emitInitialRows bool) ([]DockerImage, error) {
 	commandCtx, cancel := context.WithTimeout(ctx, imageCommandTimeout)
 	defer cancel()
 	output, err := s.runDockerSnapshotContext(commandCtx, source, cliPath, []string{"image", "ls", "--no-trunc", "--format", "{{json .}}"})
@@ -423,11 +439,81 @@ func (s *ImageService) scanDockerSource(ctx context.Context, worker *watchWorker
 			continue
 		}
 		byID[item.ID] = len(images)
-		images = append(images, DockerImage{ID: item.ID, Name: name, Tags: []string{name}, Size: item.Size, SizeBytes: parseDockerImageSize(item.Size), CreatedAt: item.CreatedAt})
+		image := DockerImage{ID: item.ID, Name: name, Tags: []string{name}, Size: item.Size, SizeBytes: parseDockerImageSize(item.Size), CreatedAt: item.CreatedAt}
+		images = append(images, image)
+		if emitInitialRows {
+			row := image
+			s.emitWatchEvent(worker, s.watchImageEvent(worker, watchEventKindCreate, &row))
+		}
 		s.emitWatchEvent(worker, s.watchProgressEvent(worker, len(images), total))
 	}
+	s.enrichDockerWatchImages(ctx, worker, source, cliPath, images)
 	sort.Slice(images, func(i, j int) bool { return images[i].ID < images[j].ID })
 	return images, nil
+}
+
+// enrichDockerWatchImages 并发预热 Docker inspect 缓存；每条详情返回后立即
+// 推送 update，前端无需等待整批详情完成再刷新列表。
+func (s *ImageService) enrichDockerWatchImages(ctx context.Context, worker *watchWorker, source ImageSource, cliPath string, images []DockerImage) {
+	if len(images) == 0 {
+		return
+	}
+	var wg sync.WaitGroup
+	var imagesMu sync.Mutex
+	jobs := make(chan int)
+	workers := min(len(images), imageDetailConcurrency)
+	for range workers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for index := range jobs {
+				base := images[index]
+				detail, err := s.inspectWithGeneration(worker.sourceID, source, cliPath, worker.fingerprint, base.ID, "", ctx, 0)
+				if err != nil {
+					if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+						s.logWatch(worker, "镜像详情加载失败 image="+base.ID+": "+redactImageError(err, source).Error())
+					}
+					continue
+				}
+				updated := dockerImageFromDetail(base, detail)
+				imagesMu.Lock()
+				images[index] = updated
+				imagesMu.Unlock()
+				if !dockerImagesEqual(base, updated) {
+					eventImage := updated
+					s.emitWatchEvent(worker, s.watchImageEvent(worker, watchEventKindUpdate, &eventImage))
+				}
+			}
+		}()
+	}
+	for index := range images {
+		select {
+		case <-ctx.Done():
+			close(jobs)
+			wg.Wait()
+			return
+		case jobs <- index:
+		}
+	}
+	close(jobs)
+	wg.Wait()
+}
+
+func dockerImageFromDetail(base DockerImage, detail DockerImageDetail) DockerImage {
+	updated := base
+	if detail.Name != "" {
+		updated.Name = detail.Name
+	}
+	if len(detail.Tags) > 0 {
+		updated.Tags = append([]string(nil), detail.Tags...)
+	}
+	if detail.Size > 0 {
+		updated.SizeBytes = detail.Size
+	}
+	if detail.CreatedAt != "" {
+		updated.CreatedAt = detail.CreatedAt
+	}
+	return updated
 }
 
 // watchRegistryResult 是一轮 registry 流式扫描的结果。
@@ -755,7 +841,10 @@ func dockerImagesEqual(a, b DockerImage) bool {
 }
 
 func (s *ImageService) logWatch(worker *watchWorker, message string) {
-	log.Printf("[image-watch] source=%s client=%s generation=%d revision=%d %s", worker.sourceID, worker.clientID, worker.generation, worker.revision, message)
+	worker.emitMu.Lock()
+	generation, revision := worker.generation, worker.revision
+	worker.emitMu.Unlock()
+	log.Printf("[image-watch] source=%s client=%s generation=%d revision=%d %s", worker.sourceID, worker.clientID, generation, revision, message)
 }
 
 func (s *ImageService) failWatchRound(worker *watchWorker, err error) {
@@ -776,14 +865,15 @@ func (s *ImageService) watchStateEvent(worker *watchWorker, stage string, scanne
 	}
 }
 
-// watchScanningEvent 推送后台更新中状态，携带版本与 CLI 路径。
-func (s *ImageService) watchScanningEvent(worker *watchWorker, status *DockerStatus) WatchDockerImagesEvent {
+// watchScanningEvent 推送扫描开始状态，携带版本、CLI 路径和本轮是否首次构建缓存。
+func (s *ImageService) watchScanningEvent(worker *watchWorker, status *DockerStatus, isInitialLoad bool) WatchDockerImagesEvent {
 	return WatchDockerImagesEvent{
-		ClientID:   worker.clientID,
-		SourceID:   worker.sourceID,
-		Status:     status,
-		IsUpdating: boolPtr(true),
-		Progress:   &WatchProgress{Scanned: 0, Total: 0, Stage: watchStageScanning},
+		ClientID:      worker.clientID,
+		SourceID:      worker.sourceID,
+		Status:        status,
+		IsUpdating:    boolPtr(true),
+		IsInitialLoad: boolPtr(isInitialLoad),
+		Progress:      &WatchProgress{Scanned: 0, Total: 0, Stage: watchStageScanning},
 	}
 }
 

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -189,6 +190,9 @@ func TestWatchDockerImagesEmitsSnapshotAndProgress(t *testing.T) {
 		if len(args) == 1 && args[0] == "--version" {
 			return []byte("Docker version 27.0.0, build deadbeef\n"), nil
 		}
+		if len(args) >= 2 && args[0] == "image" && args[1] == "inspect" {
+			return []byte(`[{"Id":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","RepoTags":["repo:latest"],"Size":10485760,"Created":"2026-09-02T00:00:00Z"}]`), nil
+		}
 		return []byte("{" + `"ID":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","Repository":"repo","Tag":"latest","Size":"10MB"` + "}\n"), nil
 	}
 	harness := &watchTestHarness{service: service, events: make(chan WatchDockerImagesEvent, 64), client: "client-1", source: "local"}
@@ -200,31 +204,78 @@ func TestWatchDockerImagesEmitsSnapshotAndProgress(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	watchDone := harness.start(ctx)
 	defer waitWatchStop(t, cancel, watchDone)
-	// 状态事件应携带版本与 CLI 路径（在 snapshot 之前推送）。
-	if !harness.waitEvent(3*time.Second, func(event WatchDockerImagesEvent) bool {
-		return event.Status != nil && event.Status.Version != "" && event.Status.CLIPath == "docker" && event.IsUpdating != nil && *event.IsUpdating
-	}) {
-		t.Fatal("等待带版本/CLI 路径的更新中状态事件超时")
+	// 首个事件必须是连接探测结果，缓存 snapshot 不得抢先结束连接态。
+	firstEvent, ok := harness.waitFor(3*time.Second, func(WatchDockerImagesEvent) bool { return true })
+	if !ok {
+		t.Fatal("等待首个连接状态事件超时")
 	}
-	snapshotEvent, ok := harness.waitFor(3*time.Second, func(event WatchDockerImagesEvent) bool {
-		return event.Kind == watchEventKindSnapshot && len(event.Images) == 1
+	if firstEvent.Status == nil || firstEvent.Status.Version == "" || firstEvent.Status.CLIPath != "docker" || firstEvent.IsUpdating == nil || !*firstEvent.IsUpdating || firstEvent.IsInitialLoad == nil || !*firstEvent.IsInitialLoad {
+		t.Fatalf("首个事件应携带可用的 Docker 状态: %#v", firstEvent)
+	}
+	createEvent, ok := harness.waitFor(3*time.Second, func(event WatchDockerImagesEvent) bool {
+		return event.Kind == watchEventKindCreate && event.Image != nil
 	})
 	if !ok {
-		t.Fatal("等待 snapshot 事件超时")
+		t.Fatal("等待首次基础行 create 事件超时")
 	}
-	if snapshotEvent.ClientID != "client-1" || snapshotEvent.SourceID != "local" {
-		t.Fatalf("事件字段错误: %#v", snapshotEvent)
+	if createEvent.ClientID != "client-1" || createEvent.SourceID != "local" {
+		t.Fatalf("事件字段错误: %#v", createEvent)
 	}
-	if snapshotEvent.Generation == 0 || snapshotEvent.Revision == 0 {
-		t.Fatalf("事件缺少 generation/revision: %#v", snapshotEvent)
+	if createEvent.Generation == 0 || createEvent.Revision == 0 {
+		t.Fatalf("事件缺少 generation/revision: %#v", createEvent)
 	}
-	if len(snapshotEvent.Images) != 1 || snapshotEvent.Images[0].Name != "repo:latest" {
-		t.Fatalf("snapshot 镜像错误: %#v", snapshotEvent.Images)
+	if createEvent.Image.Name != "repo:latest" || createEvent.Image.SizeBytes != 10*1000*1000 {
+		t.Fatalf("基础行镜像错误: %#v", createEvent.Image)
+	}
+	updateEvent, ok := harness.waitFor(3*time.Second, func(event WatchDockerImagesEvent) bool {
+		return event.Kind == watchEventKindUpdate && event.Image != nil
+	})
+	if !ok || updateEvent.Revision <= createEvent.Revision || updateEvent.Image.SizeBytes != 10485760 {
+		t.Fatalf("详情 update 应在 create 后推送: create=%#v update=%#v", createEvent, updateEvent)
 	}
 	if !harness.waitEvent(3*time.Second, func(event WatchDockerImagesEvent) bool {
 		return event.Progress != nil && event.Progress.Stage == watchStageDone
 	}) {
 		t.Fatal("等待 done 状态事件超时")
+	}
+}
+
+// TestWatchUnavailableStopsBeforeSnapshot 验证连接探测失败时直接进入失败态，
+// 不发布缓存 snapshot，也不继续调用 Docker 列表命令。
+func TestWatchUnavailableStopsBeforeSnapshot(t *testing.T) {
+	config := &ConfigService{cfg: normalizeConfig(defaultConfig())}
+	service := NewImageService(config)
+	defer service.shutdown()
+	service.cacheDir = t.TempDir()
+	var listCalls atomic.Int32
+	service.runner = func(_ context.Context, _ string, args ...string) ([]byte, error) {
+		if len(args) == 1 && args[0] == "--version" {
+			return nil, errors.New("docker unavailable")
+		}
+		listCalls.Add(1)
+		return nil, errors.New("不应执行镜像列表命令")
+	}
+	harness := newWatchTestHarness(t, service, "client-unavailable", "local")
+	ctx, cancel := context.WithCancel(context.Background())
+	watchDone := harness.start(ctx)
+	defer waitWatchStop(t, cancel, watchDone)
+
+	statusEvent, ok := harness.waitFor(3*time.Second, func(event WatchDockerImagesEvent) bool {
+		return event.Status != nil
+	})
+	if !ok || statusEvent.Status.Available {
+		t.Fatalf("连接失败应先推送不可用状态: %#v", statusEvent)
+	}
+	if _, ok := harness.waitFor(3*time.Second, func(event WatchDockerImagesEvent) bool {
+		return event.Progress != nil && event.Progress.Stage == watchStageFailed
+	}); !ok {
+		t.Fatal("连接失败后未进入 failed 状态")
+	}
+	if listCalls.Load() != 0 {
+		t.Fatalf("连接失败后不应继续扫描镜像，实际调用 %d 次", listCalls.Load())
+	}
+	if events := harness.collectKind(100*time.Millisecond, watchEventKindSnapshot); len(events) != 0 {
+		t.Fatalf("连接失败前不应发布 snapshot: %#v", events)
 	}
 }
 
@@ -253,17 +304,19 @@ func TestWatchDockerImagesDiffRoundEmitsCreateUpdateDelete(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	watchDone := harness.start(ctx)
 	defer waitWatchStop(t, cancel, watchDone)
-	// 第一轮：真实循环完成 snapshot（2 个镜像）。
-	snapshotEvent, ok := harness.waitFor(3*time.Second, func(event WatchDockerImagesEvent) bool {
-		return event.Kind == watchEventKindSnapshot && len(event.Images) == 2
+	// 第一轮：真实循环先逐条推送基础行（2 个镜像）。
+	createEvent, ok := harness.waitFor(3*time.Second, func(event WatchDockerImagesEvent) bool {
+		return event.Kind == watchEventKindCreate && event.Image != nil
 	})
 	if !ok {
-		t.Fatal("等待首轮 snapshot 超时")
+		t.Fatal("等待首轮 create 超时")
 	}
-	if len(snapshotEvent.Images) != 2 {
-		t.Fatalf("首轮 snapshot 镜像数错误: %d", len(snapshotEvent.Images))
+	firstRevision := createEvent.Revision
+	if !harness.waitEvent(3*time.Second, func(event WatchDockerImagesEvent) bool {
+		return event.Progress != nil && event.Progress.Stage == watchStageDone
+	}) {
+		t.Fatal("等待首轮 done 超时")
 	}
-	firstRevision := snapshotEvent.Revision
 	harness.drain()
 
 	// 第二轮：b 标签变化 -> update（完整对象）。
@@ -271,6 +324,12 @@ func TestWatchDockerImagesDiffRoundEmitsCreateUpdateDelete(t *testing.T) {
 	secondRevision := harness.manualRound()
 	if secondRevision <= firstRevision {
 		t.Fatalf("第二轮 revision 应大于首轮: first=%d second=%d", firstRevision, secondRevision)
+	}
+	secondScanEvent, ok := harness.waitFor(3*time.Second, func(event WatchDockerImagesEvent) bool {
+		return event.Status != nil && event.Progress != nil && event.Progress.Stage == watchStageScanning
+	})
+	if !ok || secondScanEvent.IsInitialLoad == nil || *secondScanEvent.IsInitialLoad {
+		t.Fatalf("已有完整缓存后的第二轮应标记为后台更新: %#v", secondScanEvent)
 	}
 	updateEvent, ok := harness.waitFor(3*time.Second, func(event WatchDockerImagesEvent) bool {
 		return event.Kind == watchEventKindUpdate
