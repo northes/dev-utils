@@ -77,7 +77,7 @@ func (h *watchTestHarness) collectKind(timeout time.Duration, kind string) []Wat
 	}
 }
 
-// manualRound 手动推进一轮扫描（绕过真实 10 秒间隔），返回该轮的最大 revision。
+// manualRound 手动推进一轮扫描（绕过真实 2 分钟间隔），返回该轮的最大 revision。
 func (h *watchTestHarness) manualRound() uint64 {
 	h.service.mu.Lock()
 	worker := h.service.watchWorker
@@ -481,6 +481,9 @@ func TestWatchRegistryStreamsAndFailsWithoutDelete(t *testing.T) {
 	})
 	if !ok {
 		t.Fatal("等待 Registry 首轮完成超时")
+	}
+	if doneEvent.Progress == nil || doneEvent.Progress.Scanned != 3 || doneEvent.Progress.Total != 3 {
+		t.Fatalf("Registry done 进度应为已完成详情数/总 tag 数 3/3: %#v", doneEvent.Progress)
 	}
 	firstRevision := doneEvent.Revision
 	harness.drain()

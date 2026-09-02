@@ -54,7 +54,7 @@ const (
 	watchEventKindUpdate   = "update"
 	watchEventKindDelete   = "delete"
 
-	watchInterRoundDelay = 10 * time.Second
+	watchInterRoundDelay = 2 * time.Minute
 	watchScanMaxDocker   = 50
 	watchScanMaxRegistry = maxRegistryRepositories
 
@@ -248,7 +248,7 @@ func (s *ImageService) WatchDockerImages(ctx context.Context, sourceID string, c
 	}
 }
 
-// watchLoop 是非重入循环：按固定 10 秒 tick 触发扫描；扫描期间到达的
+// watchLoop 是非重入循环：按固定 2 分钟 tick 触发扫描；扫描期间到达的
 // tick 在本轮结束后丢弃，保证慢扫描不会与下一轮重叠。
 func (s *ImageService) watchLoop(worker *watchWorker) {
 	defer worker.releaseBound()
@@ -272,7 +272,7 @@ func (s *ImageService) watchLoop(worker *watchWorker) {
 		case <-timer.C:
 			s.runWatchRound(worker)
 			// 本轮执行期间错过的所有 tick 都跳过，只等待下一个
-			// 固定时间点，而不是在本轮完成后重新计算 10 秒。
+			// 固定时间点，而不是在本轮完成后重新计算 2 分钟。
 			now := time.Now()
 			for !nextTick.After(now) {
 				nextTick = nextTick.Add(watchInterRoundDelay)
@@ -306,6 +306,7 @@ func (s *ImageService) runWatchRound(worker *watchWorker) {
 	defer cancel()
 	var images []DockerImage
 	var index map[string]DockerImage
+	doneScanned, doneTotal := 0, 0
 	if source.Kind == "registry" {
 		prev, _ := s.watchPreviousSnapshot(worker, fingerprint)
 		result, scanErr := s.scanRegistryFlow(ctx, worker, source, prev, fingerprintChanged || worker.bootstrap)
@@ -315,6 +316,8 @@ func (s *ImageService) runWatchRound(worker *watchWorker) {
 		}
 		images = result.images
 		index = result.index
+		doneScanned = result.completedCount
+		doneTotal = result.totalCount
 	} else {
 		images, err = s.scanDockerSource(ctx, worker, source, cliPath)
 		if err != nil {
@@ -322,6 +325,8 @@ func (s *ImageService) runWatchRound(worker *watchWorker) {
 			return
 		}
 		index = indexImages(images)
+		doneScanned = len(images)
+		doneTotal = len(images)
 		// 同一 generation 内做精准 diff，generation 变化时发 snapshot。
 		s.diffWatchRound(worker, fingerprint, images)
 	}
@@ -335,7 +340,7 @@ func (s *ImageService) runWatchRound(worker *watchWorker) {
 	if worker.ctx.Err() != nil {
 		return
 	}
-	doneEvent := s.watchStateEvent(worker, watchStageDone, len(images), len(images), "")
+	doneEvent := s.watchStateEvent(worker, watchStageDone, doneScanned, doneTotal, "")
 	doneEvent.Status = &status
 	s.emitWatchEvent(worker, doneEvent)
 }
@@ -427,8 +432,10 @@ func (s *ImageService) scanDockerSource(ctx context.Context, worker *watchWorker
 
 // watchRegistryResult 是一轮 registry 流式扫描的结果。
 type watchRegistryResult struct {
-	index  map[string]DockerImage
-	images []DockerImage
+	index          map[string]DockerImage
+	images         []DockerImage
+	completedCount int
+	totalCount     int
 }
 
 // scanRegistryFlow 流式处理 catalog/repo/tags，并保持详情补全与 catalog 并发流水：
@@ -455,19 +462,30 @@ func (s *ImageService) scanRegistryFlow(ctx context.Context, worker *watchWorker
 	defer cancelScan()
 	jobs := make(chan DockerImage, imageDetailConcurrency*4)
 	var detailWG sync.WaitGroup
+	var progressMu sync.Mutex
+	completedDetails := 0
+	totalTags := 0
+	reportProgress := func(completedDelta, totalDelta int) {
+		progressMu.Lock()
+		completedDetails += completedDelta
+		totalTags += totalDelta
+		completed, total := completedDetails, totalTags
+		progressMu.Unlock()
+		s.emitWatchEvent(worker, s.watchProgressEvent(worker, completed, total))
+	}
+	reportTagProgress := func(count int) { reportProgress(0, count) }
+	reportDetailProgress := func() { reportProgress(1, 0) }
 	for i := 0; i < imageDetailConcurrency; i++ {
 		detailWG.Add(1)
 		go func() {
 			defer detailWG.Done()
 			for base := range jobs {
-				s.registryDetailWorker(scanCtx, worker, source, puller, prev, base, cur, &mu, bootstrap)
+				s.registryDetailWorker(scanCtx, worker, source, puller, prev, base, cur, &mu, bootstrap, reportDetailProgress)
 			}
 		}()
 	}
 	repoJobs := make(chan string, imageDetailConcurrency*2)
 	var repoWG sync.WaitGroup
-	var progressMu sync.Mutex
-	discoveredRepos := 0
 	var scanErrMu sync.Mutex
 	var firstScanErr error
 	setScanErr := func(err error) {
@@ -512,17 +530,10 @@ func (s *ImageService) scanRegistryFlow(ctx context.Context, worker *watchWorker
 				mu.Lock()
 				catalogRepos[repositoryName] = true
 				mu.Unlock()
-				s.commitRegistryRepo(scanCtx, worker, jobs, repositoryName, tags, prev, cur, &mu, &pendingDeletes, bootstrap)
+				s.commitRegistryRepo(scanCtx, worker, jobs, repositoryName, tags, prev, cur, &mu, &pendingDeletes, bootstrap, reportTagProgress)
 				if scanCtx.Err() != nil {
 					return
 				}
-				mu.Lock()
-				completed := len(catalogRepos)
-				mu.Unlock()
-				progressMu.Lock()
-				total := discoveredRepos
-				progressMu.Unlock()
-				s.emitWatchEvent(worker, s.watchProgressEvent(worker, completed, total))
 			}
 		}()
 	}
@@ -552,9 +563,6 @@ func (s *ImageService) scanRegistryFlow(ctx context.Context, worker *watchWorker
 				return errors.New("Registry 目录页异常，扫描非权威")
 			}
 			discovered += len(page)
-			progressMu.Lock()
-			discoveredRepos = discovered
-			progressMu.Unlock()
 			for _, repositoryName := range page {
 				select {
 				case <-scanCtx.Done():
@@ -562,10 +570,6 @@ func (s *ImageService) scanRegistryFlow(ctx context.Context, worker *watchWorker
 				case repoJobs <- repositoryName:
 				}
 			}
-			mu.Lock()
-			completed := len(catalogRepos)
-			mu.Unlock()
-			s.emitWatchEvent(worker, s.watchProgressEvent(worker, completed, discovered))
 			if len(page) < pageSize {
 				return nil
 			}
@@ -612,7 +616,10 @@ func (s *ImageService) scanRegistryFlow(ctx context.Context, worker *watchWorker
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].ID < result[j].ID })
 	mu.Unlock()
-	return &watchRegistryResult{index: cur, images: result}, nil
+	progressMu.Lock()
+	completed, total := completedDetails, totalTags
+	progressMu.Unlock()
+	return &watchRegistryResult{index: cur, images: result, completedCount: completed, totalCount: total}, nil
 }
 
 // registryCatalogPage 对单次 catalog 分页调用设 timeout。
@@ -629,7 +636,7 @@ func (s *ImageService) registryCatalogPage(ctx context.Context, registry name.Re
 //   - 新 tag（prev 无）→ create(base)；已有 tag 不在此降级，交给 detail 判定；
 //   - 该 repo 内 prev 有而 cur 无的 tag → delete（该 repo tags 已成功，权威）；
 //   - 所有 base 进入 cur 并送入详情补全池。
-func (s *ImageService) commitRegistryRepo(ctx context.Context, worker *watchWorker, jobs chan<- DockerImage, repositoryName string, tags []string, prev map[string]DockerImage, cur map[string]DockerImage, mu *sync.Mutex, pendingDeletes *[]string, bootstrap bool) {
+func (s *ImageService) commitRegistryRepo(ctx context.Context, worker *watchWorker, jobs chan<- DockerImage, repositoryName string, tags []string, prev map[string]DockerImage, cur map[string]DockerImage, mu *sync.Mutex, pendingDeletes *[]string, bootstrap bool, reportProgress func(int)) {
 	mu.Lock()
 	var baseList []DockerImage
 	repoIDs := make(map[string]bool)
@@ -670,6 +677,9 @@ func (s *ImageService) commitRegistryRepo(ctx context.Context, worker *watchWork
 		image := base
 		s.emitWatchEvent(worker, s.watchImageEvent(worker, watchEventKindCreate, &image))
 	}
+	if reportProgress != nil {
+		reportProgress(len(baseList))
+	}
 	// 送详情补全池（流水：不等待 catalog 全部读完）。
 	for _, base := range baseList {
 		select {
@@ -681,13 +691,16 @@ func (s *ImageService) commitRegistryRepo(ctx context.Context, worker *watchWork
 }
 
 // registryDetailWorker 从池中取 base 补全详情；只在实际变化时 emit update。
-func (s *ImageService) registryDetailWorker(ctx context.Context, worker *watchWorker, source ImageSource, puller *remote.Puller, prev map[string]DockerImage, base DockerImage, cur map[string]DockerImage, mu *sync.Mutex, bootstrap bool) {
+func (s *ImageService) registryDetailWorker(ctx context.Context, worker *watchWorker, source ImageSource, puller *remote.Puller, prev map[string]DockerImage, base DockerImage, cur map[string]DockerImage, mu *sync.Mutex, bootstrap bool, reportProgress func()) {
 	metadata, err := s.fetchRegistryImageMetadata(ctx, source, base.ID, puller)
 	if err != nil {
 		if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 			log.Printf("Registry 镜像元数据加载失败 image=%s: %v", base.ID, redactRegistryError(err, source))
 		}
 		return
+	}
+	if reportProgress != nil {
+		reportProgress()
 	}
 	detail := DockerImage{
 		ID:         base.ID,
@@ -774,9 +787,9 @@ func (s *ImageService) watchScanningEvent(worker *watchWorker, status *DockerSta
 	}
 }
 
-// watchProgressEvent 推送扫描过程中的已扫描数量。Registry 的 catalog API
-// 不提供总仓库数，因此 total 表示当前已发现的仓库数；最终完成事件会
-// 使用最终镜像总数。
+// watchProgressEvent 推送扫描进度。Registry 的 scanned 是已成功获取
+// digest/size 的 tag 数量，total 随 tags list 返回动态增加；Docker 则使用
+// 本轮解析出的唯一镜像数。
 func (s *ImageService) watchProgressEvent(worker *watchWorker, scanned, total int) WatchDockerImagesEvent {
 	return WatchDockerImagesEvent{
 		ClientID:   worker.clientID,

@@ -1209,9 +1209,7 @@ export default function ImageManagerTool({
         : status?.available
           ? isUpdating
             ? t('imageManagerTool.statusBadgeUpdating')
-            : t('imageManagerTool.statusAvailable', {
-                version: status.version || t('imageManagerTool.emptyValue'),
-              })
+            : t('imageManagerTool.statusBadgeAvailable')
           : status?.error || t('imageManagerTool.statusUnavailable');
 
   const statusBadgeLabel =
@@ -1392,8 +1390,10 @@ export default function ImageManagerTool({
                     {statusBadgeLabel}
                   </PopoverTrigger>
                   <PopoverContent align="end" className="w-auto min-w-56 gap-2 p-3 text-xs">
-                    <div className="font-medium text-foreground">{sourceKindLabel}</div>
-                    <div className="text-muted-foreground">{statusText}</div>
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="font-medium text-foreground">{sourceKindLabel}</div>
+                      <div className="text-muted-foreground">{statusBadgeLabel}</div>
+                    </div>
                     {source.kind !== 'registry' ? (
                       <>
                         <div className="flex items-center justify-between gap-2 border-t border-border pt-1.5 text-[11px]">
