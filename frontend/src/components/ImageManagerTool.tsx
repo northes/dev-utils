@@ -19,7 +19,6 @@ import {
 import {
   DeleteDockerImages,
   GetSSHConfigHosts,
-  InspectDockerImage,
   PushDockerImage,
   TestImageSourceConnection,
   WatchDockerImages,
@@ -154,7 +153,7 @@ type ConfirmState =
   | null;
 
 type SourceViewState = 'connecting' | 'unavailable' | 'loading-details' | 'updating' | 'connected';
-type ContentViewState = 'detail' | 'loading' | 'error' | 'empty' | 'no-results' | 'table';
+type ContentViewState = 'loading' | 'error' | 'empty' | 'no-results' | 'table';
 
 function errorMessage(error: unknown) {
   if (error instanceof Error && error.message) return error.message;
@@ -184,13 +183,11 @@ function resolveSourceViewState(
 
 // 内容区优先保留已有数据；只有没有任何镜像时，更新中才显示 loading。
 function resolveContentViewState(
-  hasDetail: boolean,
   isConnecting: boolean,
   imageCount: number,
   filteredCount: number,
   sourceViewState: SourceViewState,
 ): ContentViewState {
-  if (hasDetail) return 'detail';
   if (isConnecting) return 'loading';
   if (imageCount > 0) return filteredCount > 0 ? 'table' : 'no-results';
   if (sourceViewState === 'unavailable') return 'error';
@@ -280,6 +277,15 @@ function formatBytes(bytes: number, locale: string) {
   })} ${units[unit]}`;
 }
 
+function formatRawJSON(value: string) {
+  if (!value) return '';
+  try {
+    return JSON.stringify(JSON.parse(value), null, 2) ?? value;
+  } catch {
+    return value;
+  }
+}
+
 function parseDateSafe(value: string): Date | null {
   if (!value) return null;
   const raw = value.trim();
@@ -346,6 +352,18 @@ function shortId(id: string) {
 
 function imageLabel(image: DockerImage, unnamed: string) {
   return image.name?.trim() || unnamed;
+}
+
+function copyableImageName(source: ImageSource, image: DockerImage, unnamed: string) {
+  const name = imageLabel(image, unnamed);
+  if (source.kind !== 'registry') return name;
+  const registryPrefix = ((source as ManagedImageSource).registryURL ?? '')
+    .trim()
+    .replace(/^[a-z][a-z0-9+.-]*:\/\//i, '')
+    .replace(/\/+$/, '');
+  return registryPrefix && !name.startsWith(`${registryPrefix}/`)
+    ? `${registryPrefix}/${name}`
+    : name;
 }
 
 function registryImageIdentity(image: DockerImage) {
@@ -428,6 +446,389 @@ function ImageSearchField({
   );
 }
 
+export function ImageManagerDetailView({
+  active,
+  detail,
+  error,
+  loading,
+  onBack,
+  sourceLabel,
+}: {
+  active: boolean;
+  detail: DockerImageDetail | null;
+  error: string;
+  loading: boolean;
+  onBack: () => void;
+  sourceLabel: string;
+}) {
+  const { t, i18n } = useTranslation();
+  const unnamed = t('imageManagerTool.unnamed');
+  const detailMetadataRows = detail
+    ? [
+        { key: 'id', label: t('imageManagerTool.detailId'), value: detail.id },
+        {
+          key: 'names',
+          label: t('imageManagerTool.detailNames'),
+          value: [detail.name, ...asStringList(detail.tags)].filter(Boolean).join(', ') || unnamed,
+        },
+        {
+          key: 'repository',
+          label: t('imageManagerTool.detailRepository'),
+          value: detail.repository,
+        },
+        {
+          key: 'size',
+          label: t('imageManagerTool.detailSize'),
+          value: formatBytes(detail.size, i18n.language),
+        },
+        { key: 'digest', label: t('imageManagerTool.detailDigest'), value: detail.digest },
+        { key: 'mediaType', label: t('imageManagerTool.detailMediaType'), value: detail.mediaType },
+        { key: 'sizeType', label: t('imageManagerTool.detailSizeType'), value: detail.sizeType },
+        {
+          key: 'manifest',
+          label: t('imageManagerTool.detailManifest'),
+          value: detail.manifest
+            ? `${detail.manifest.mediaType} · ${t('imageManagerTool.manifestSize', { size: formatBytes(detail.manifest.config.size + (detail.manifest.layers ?? []).reduce((total, layer) => total + layer.size, 0), i18n.language) })}`
+            : detail.index
+              ? t('imageManagerTool.detailIndex')
+              : '',
+        },
+        {
+          key: 'platforms',
+          label: t('imageManagerTool.detailPlatforms'),
+          value: detail.index?.manifests
+            ?.map((item) =>
+              item.platform
+                ? `${item.platform.os}/${item.platform.architecture}${item.platform.variant ? `/${item.platform.variant}` : ''}`
+                : '',
+            )
+            .filter(Boolean)
+            .join(', '),
+        },
+        {
+          key: 'createdAt',
+          label: t('imageManagerTool.detailCreated'),
+          value: formatCreatedAt(detail.metadata.createdAt || detail.createdAt, i18n.language),
+        },
+        {
+          key: 'architecture',
+          label: t('imageManagerTool.detailArchitecture'),
+          value: detail.metadata.architecture || detail.architecture,
+        },
+        {
+          key: 'os',
+          label: t('imageManagerTool.detailOs'),
+          value: detail.metadata.os || detail.os,
+        },
+        {
+          key: 'osVersion',
+          label: t('imageManagerTool.detailOsVersion'),
+          value: detail.metadata.osVersion,
+        },
+        {
+          key: 'variant',
+          label: t('imageManagerTool.detailVariant'),
+          value: detail.metadata.variant,
+        },
+        { key: 'author', label: t('imageManagerTool.detailAuthor'), value: detail.metadata.author },
+        {
+          key: 'dockerVersion',
+          label: t('imageManagerTool.detailDockerVersion'),
+          value: detail.metadata.dockerVersion,
+        },
+        {
+          key: 'container',
+          label: t('imageManagerTool.detailContainer'),
+          value: detail.metadata.container,
+        },
+        {
+          key: 'configDigest',
+          label: t('imageManagerTool.detailConfigDigest'),
+          value: detail.metadata.configDigest,
+        },
+        {
+          key: 'rootfsType',
+          label: t('imageManagerTool.detailRootfsType'),
+          value: detail.metadata.rootfsType,
+        },
+        {
+          key: 'diffIDs',
+          label: t('imageManagerTool.detailDiffIDs'),
+          value: asStringList(detail.metadata.diffIDs).join('\n'),
+        },
+      ]
+    : [];
+
+  const runtime = detail?.runtime;
+  const healthcheck = runtime?.healthcheck;
+  const runtimeHealthcheck = healthcheck
+    ? [
+        `${t('imageManagerTool.detailRuntimeHealthcheckTest')}: ${asStringList(healthcheck.test).join(' ') || t('imageManagerTool.emptyValue')}`,
+        healthcheck.interval
+          ? `${t('imageManagerTool.detailRuntimeHealthcheckInterval')}: ${healthcheck.interval}`
+          : '',
+        healthcheck.timeout
+          ? `${t('imageManagerTool.detailRuntimeHealthcheckTimeout')}: ${healthcheck.timeout}`
+          : '',
+        healthcheck.startPeriod
+          ? `${t('imageManagerTool.detailRuntimeHealthcheckStartPeriod')}: ${healthcheck.startPeriod}`
+          : '',
+        healthcheck.retries > 0
+          ? `${t('imageManagerTool.detailRuntimeHealthcheckRetries')}: ${healthcheck.retries}`
+          : '',
+      ]
+        .filter(Boolean)
+        .join('\n')
+    : '';
+  const runtimeRows = detail
+    ? [
+        {
+          key: 'command',
+          label: t('imageManagerTool.detailCommand'),
+          value: asStringList(runtime?.command ?? detail.command).join(' '),
+        },
+        {
+          key: 'entrypoint',
+          label: t('imageManagerTool.detailEntrypoint'),
+          value: asStringList(runtime?.entrypoint ?? detail.entrypoint).join(' '),
+        },
+        { key: 'user', label: t('imageManagerTool.detailRuntimeUser'), value: runtime?.user ?? '' },
+        {
+          key: 'workingDir',
+          label: t('imageManagerTool.detailRuntimeWorkingDir'),
+          value: runtime?.workingDir ?? '',
+        },
+        {
+          key: 'env',
+          label: t('imageManagerTool.detailRuntimeEnv'),
+          value: asStringList(runtime?.env).join('\n'),
+        },
+        {
+          key: 'exposedPorts',
+          label: t('imageManagerTool.detailRuntimeExposedPorts'),
+          value: asStringList(runtime?.exposedPorts).join('\n'),
+        },
+        {
+          key: 'volumes',
+          label: t('imageManagerTool.detailRuntimeVolumes'),
+          value: asStringList(runtime?.volumes).join('\n'),
+        },
+        {
+          key: 'stopSignal',
+          label: t('imageManagerTool.detailRuntimeStopSignal'),
+          value: runtime?.stopSignal ?? '',
+        },
+        {
+          key: 'shell',
+          label: t('imageManagerTool.detailRuntimeShell'),
+          value: asStringList(runtime?.shell).join(' '),
+        },
+        {
+          key: 'healthcheck',
+          label: t('imageManagerTool.detailRuntimeHealthcheck'),
+          value: runtimeHealthcheck,
+        },
+        {
+          key: 'tty',
+          label: t('imageManagerTool.detailRuntimeTty'),
+          value: runtime?.tty
+            ? t('imageManagerTool.booleanTrue')
+            : t('imageManagerTool.booleanFalse'),
+        },
+        {
+          key: 'openStdin',
+          label: t('imageManagerTool.detailRuntimeOpenStdin'),
+          value: runtime?.openStdin
+            ? t('imageManagerTool.booleanTrue')
+            : t('imageManagerTool.booleanFalse'),
+        },
+        {
+          key: 'networkDisabled',
+          label: t('imageManagerTool.detailRuntimeNetworkDisabled'),
+          value: runtime?.networkDisabled
+            ? t('imageManagerTool.booleanTrue')
+            : t('imageManagerTool.booleanFalse'),
+        },
+      ]
+    : [];
+  const detailLayers =
+    detail?.layers && detail.layers.length > 0 ? detail.layers : (detail?.manifest?.layers ?? []);
+  const rawManifest = detail ? formatRawJSON(detail.rawManifest) : '';
+  const renderDetailRows = (rows: Array<{ key: string; label: string; value?: string }>) =>
+    rows.map((row) => {
+      const isMono = ['id', 'digest', 'configDigest', 'diffIDs', 'command', 'entrypoint'].includes(
+        row.key,
+      );
+      return (
+        <div
+          key={row.key}
+          className="grid grid-cols-1 gap-1 py-2.5 sm:grid-cols-[7rem_minmax(0,1fr)] sm:gap-4"
+        >
+          <dt className="text-[10px] font-medium text-muted-foreground">{row.label}</dt>
+          <dd
+            className={`m-0 min-w-0 whitespace-pre-wrap break-words text-[12px] text-foreground ${isMono ? 'font-mono' : ''}`}
+          >
+            {row.value || t('imageManagerTool.emptyValue')}
+          </dd>
+        </div>
+      );
+    });
+
+  return (
+    <Reveal index={0} fill active={active}>
+      <ToolLayout>
+        <ToolLayoutHeader
+          title={t('imageManagerTool.detailTitle')}
+          subtitle={sourceLabel || t('imageManagerTool.title')}
+        />
+        <ToolLayoutToolbar
+          left={
+            <Button
+              variant="ghost"
+              onClick={onBack}
+              className="h-[30px] flex-none px-[11px] text-[11px]"
+            >
+              <CaretLeft data-icon="inline-start" weight="duotone" aria-hidden="true" />
+              {t('imageManagerTool.back')}
+            </Button>
+          }
+        />
+        <ToolLayoutContent className="flex min-h-0 flex-col">
+          {loading ? (
+            <div className="flex min-h-0 flex-1 items-center justify-center">
+              <Spinner />
+            </div>
+          ) : error ? (
+            <div className="flex h-auto min-h-0 flex-1 flex-col items-center justify-center gap-2 text-center">
+              <HardDrives size={28} weight="duotone" className="text-muted-foreground" />
+              <div className="text-sm font-medium text-foreground">
+                {t('imageManagerTool.loadFailed')}
+              </div>
+              <div className="max-w-md text-xs text-muted-foreground">{error}</div>
+            </div>
+          ) : detail ? (
+            <div className="h-full min-h-0 overflow-x-hidden overflow-y-auto [padding-inline-end:var(--overlay-scrollbar-hit-size)]">
+              <section aria-labelledby="image-detail-metadata" className="mt-3">
+                <h3
+                  id="image-detail-metadata"
+                  className="m-0 text-[12px] font-semibold text-foreground"
+                >
+                  {t('imageManagerTool.detailMetadata')}
+                </h3>
+                <dl className="mt-2 divide-y divide-border">
+                  {renderDetailRows(detailMetadataRows)}
+                </dl>
+                <dl className="divide-y divide-border">
+                  <div className="grid grid-cols-1 gap-1 py-2.5 sm:grid-cols-[7rem_minmax(0,1fr)] sm:gap-4">
+                    <dt className="text-[10px] font-medium text-muted-foreground">
+                      {t('imageManagerTool.detailLabels')}
+                    </dt>
+                    <dd className="m-0 min-w-0">
+                      {labelEntries(detail.labels).length === 0 ? (
+                        <p className="m-0 text-[12px] text-muted-foreground">
+                          {t('imageManagerTool.labelsEmpty')}
+                        </p>
+                      ) : (
+                        <div className="space-y-2">
+                          {labelEntries(detail.labels).map(([key, value]) => (
+                            <div key={key} className="flex flex-col gap-0.5">
+                              <span className="font-mono text-[10px] text-muted-foreground">
+                                {key}
+                              </span>
+                              <span className="break-words text-[12px] text-foreground">
+                                {value}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </dd>
+                  </div>
+                </dl>
+              </section>
+
+              <section aria-labelledby="image-detail-layers" className="mt-6">
+                <h3
+                  id="image-detail-layers"
+                  className="m-0 text-[12px] font-semibold text-foreground"
+                >
+                  {t('imageManagerTool.detailLayers')}
+                </h3>
+                {detailLayers.length === 0 ? (
+                  <p className="mt-2 text-[12px] text-muted-foreground">
+                    {t('imageManagerTool.layersEmpty')}
+                  </p>
+                ) : (
+                  <div className="mt-2 overflow-x-auto border-y border-border">
+                    <Table className="min-w-[42rem] text-[11px]">
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-14">
+                            {t('imageManagerTool.detailLayerIndex')}
+                          </TableHead>
+                          <TableHead>{t('imageManagerTool.detailLayerSize')}</TableHead>
+                          <TableHead>{t('imageManagerTool.detailLayerDigest')}</TableHead>
+                          <TableHead>{t('imageManagerTool.detailLayerMediaType')}</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {detailLayers.map((layer, index) => (
+                          <TableRow key={`${layer.digest}-${index}`}>
+                            <TableCell className="text-muted-foreground">{index + 1}</TableCell>
+                            <TableCell className="whitespace-nowrap">
+                              {layer.size > 0
+                                ? formatBytes(layer.size, i18n.language)
+                                : t('imageManagerTool.emptyValue')}
+                            </TableCell>
+                            <TableCell className="max-w-[24rem] break-all font-mono">
+                              {layer.digest || t('imageManagerTool.emptyValue')}
+                            </TableCell>
+                            <TableCell className="max-w-[20rem] break-all font-mono">
+                              {layer.mediaType || t('imageManagerTool.emptyValue')}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </section>
+
+              <section aria-labelledby="image-detail-runtime" className="mt-6">
+                <h3
+                  id="image-detail-runtime"
+                  className="m-0 text-[12px] font-semibold text-foreground"
+                >
+                  {t('imageManagerTool.detailRuntime')}
+                </h3>
+                <dl className="mt-2 divide-y divide-border">{renderDetailRows(runtimeRows)}</dl>
+              </section>
+
+              <section aria-labelledby="image-detail-raw-manifest" className="mt-6 pb-6">
+                <h3
+                  id="image-detail-raw-manifest"
+                  className="m-0 text-[12px] font-semibold text-foreground"
+                >
+                  {t('imageManagerTool.detailRawManifest')}
+                </h3>
+                {rawManifest ? (
+                  <pre className="mt-2 max-h-[32rem] overflow-auto whitespace-pre-wrap break-all border-y border-border p-3 font-mono text-[11px] leading-5 text-foreground">
+                    {rawManifest}
+                  </pre>
+                ) : (
+                  <p className="mt-2 text-[12px] text-muted-foreground">
+                    {t('imageManagerTool.rawManifestEmpty')}
+                  </p>
+                )}
+              </section>
+            </div>
+          ) : null}
+        </ToolLayoutContent>
+      </ToolLayout>
+    </Reveal>
+  );
+}
+
 type ImageWithSizeBytes = DockerImage & { sizeBytes?: number | null };
 type SortKey = 'name' | 'size' | 'createdAt';
 type SortDirection = 'asc' | 'desc';
@@ -466,6 +867,7 @@ export default function ImageManagerTool({
   active,
   settings,
   onSettingsChange,
+  onOpenDetail,
   record,
   pending,
   clearPending,
@@ -473,6 +875,7 @@ export default function ImageManagerTool({
   active: boolean;
   settings: Settings;
   onSettingsChange: (patch: Pick<Settings, 'dockerCLIPath' | 'imageSources'>) => Promise<void>;
+  onOpenDetail: (sourceId: string, imageId: string) => void;
   record: (tool: ToolId, action: string, detail: string, input: string, output?: string) => void;
   pending: PendingAction | null;
   clearPending: () => void;
@@ -491,8 +894,6 @@ export default function ImageManagerTool({
   const [watchSourceId, setWatchSourceId] = useState<string | null>(null);
   const [images, setImages] = useState<DockerImage[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [detail, setDetail] = useState<DockerImageDetail | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
   const [busy, setBusy] = useState<'push' | 'delete' | null>(null);
   const [manageOpen, setManageOpen] = useState(false);
   const [manageTab, setManageTab] = useState<'ssh' | 'registry'>('ssh');
@@ -512,7 +913,6 @@ export default function ImageManagerTool({
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
-  const detailRequest = useRef(0);
   const deferredSearch = useDeferredValue(search);
   const [isUpdating, setIsUpdating] = useState(false);
   const [isInitialLoad, setIsInitialLoad] = useState(false);
@@ -540,10 +940,8 @@ export default function ImageManagerTool({
     let restarting = false;
     const map = new Map<string, DockerImage>();
 
-    detailRequest.current += 1;
     setImages([]);
     setSelected(new Set());
-    setDetail(null);
     setWatchSourceId(sourceID);
     setStatus(null);
     setConnectionPending(true);
@@ -622,20 +1020,6 @@ export default function ImageManagerTool({
           const image = payload.image;
           map.set(image.id, image);
           setImages(Array.from(map.values()));
-          setDetail((current) =>
-            current && current.id === image.id
-              ? {
-                  ...current,
-                  name: image.name || current.name,
-                  tags: image.tags || current.tags,
-                  digest: image.digest || current.digest,
-                  mediaType: image.mediaType || current.mediaType,
-                  sizeType: image.sizeType || current.sizeType,
-                  size: image.sizeBytes || current.size,
-                  createdAt: image.createdAt || current.createdAt,
-                }
-              : current,
-          );
         }
       } else if (kind === 'delete') {
         const idsToDelete = payload.imageIDs ?? (payload.imageID ? [payload.imageID] : []);
@@ -656,7 +1040,6 @@ export default function ImageManagerTool({
           }
           return selChanged ? next : current;
         });
-        setDetail((current) => (current && idsToDelete.includes(current.id) ? null : current));
       }
     });
 
@@ -681,7 +1064,6 @@ export default function ImageManagerTool({
     consumed.current = pending;
     clearPending();
     if (pending.action === 'refresh') {
-      setDetail(null);
       requestWatchReload();
       record(
         'image-manager',
@@ -747,13 +1129,12 @@ export default function ImageManagerTool({
   );
   const contentError = loadError || status?.error || '';
   const contentViewState = resolveContentViewState(
-    detail !== null,
     isConnecting,
     images.length,
     filteredImages.length,
     sourceViewState,
   );
-  const working = isConnecting || busy !== null || detailLoading;
+  const working = isConnecting || busy !== null;
   const registryConfirmDigests =
     confirm?.type === 'delete' && confirm.sourceKind === 'registry'
       ? registryDeleteDigests(images, confirm.ids)
@@ -1129,30 +1510,7 @@ export default function ImageManagerTool({
     });
   };
 
-  const viewImage = async (image: DockerImage) => {
-    const request = ++detailRequest.current;
-    const requestedSourceId = source.id;
-    setDetailLoading(true);
-    try {
-      const next = await InspectDockerImage(source.id, image.id);
-      if (request !== detailRequest.current || requestedSourceId !== sourceId) return;
-      setDetail(next);
-      record(
-        'image-manager',
-        t('imageManagerTool.inspected'),
-        imageLabel(image, unnamed),
-        image.id,
-      );
-    } catch (error) {
-      toast.add({
-        title: t('imageManagerTool.actionFailed'),
-        description: errorMessage(error) || undefined,
-        type: 'error',
-      });
-    } finally {
-      setDetailLoading(false);
-    }
-  };
+  const viewImage = (image: DockerImage) => onOpenDetail(source.id, image.id);
 
   const copyImageName = async (name: string) => {
     try {
@@ -1243,7 +1601,6 @@ export default function ImageManagerTool({
         toast.add({ title: t('imageManagerTool.deleted') });
       }
       record('image-manager', t('imageManagerTool.delete'), name, ids.join('\n'));
-      if (detail && ids.includes(detail.id)) setDetail(null);
       setSelected(new Set());
       requestWatchReload();
     } catch (error) {
@@ -1289,66 +1646,6 @@ export default function ImageManagerTool({
     `imageManagerTool.kind${source.kind === 'registry' ? 'Registry' : source.kind === 'ssh' ? 'Ssh' : 'Local'}`,
   );
 
-  const detailRows = detail
-    ? [
-        { key: 'id', label: t('imageManagerTool.detailId'), value: detail.id },
-        {
-          key: 'names',
-          label: t('imageManagerTool.detailNames'),
-          value: [detail.name, ...asStringList(detail.tags)].filter(Boolean).join(', ') || unnamed,
-        },
-        {
-          key: 'size',
-          label: t('imageManagerTool.detailSize'),
-          value: formatBytes(detail.size, i18n.language),
-        },
-        { key: 'digest', label: t('imageManagerTool.detailDigest'), value: detail.digest },
-        { key: 'mediaType', label: t('imageManagerTool.detailMediaType'), value: detail.mediaType },
-        {
-          key: 'manifest',
-          label: t('imageManagerTool.detailManifest'),
-          value: detail.manifest
-            ? `${detail.manifest.mediaType} · ${t('imageManagerTool.manifestSize', { size: formatBytes(detail.manifest.config.size + (detail.manifest.layers ?? []).reduce((total, layer) => total + layer.size, 0), i18n.language) })}`
-            : detail.index
-              ? t('imageManagerTool.detailIndex')
-              : '',
-        },
-        {
-          key: 'platforms',
-          label: t('imageManagerTool.detailPlatforms'),
-          value: detail.index?.manifests
-            ?.map((item) =>
-              item.platform
-                ? `${item.platform.os}/${item.platform.architecture}${item.platform.variant ? `/${item.platform.variant}` : ''}`
-                : '',
-            )
-            .filter(Boolean)
-            .join(', '),
-        },
-        {
-          key: 'createdAt',
-          label: t('imageManagerTool.detailCreated'),
-          value: formatCreatedAt(detail.createdAt, i18n.language),
-        },
-        {
-          key: 'architecture',
-          label: t('imageManagerTool.detailArchitecture'),
-          value: detail.architecture,
-        },
-        { key: 'os', label: t('imageManagerTool.detailOs'), value: detail.os },
-        {
-          key: 'command',
-          label: t('imageManagerTool.detailCommand'),
-          value: asStringList(detail.command).join(' '),
-        },
-        {
-          key: 'entrypoint',
-          label: t('imageManagerTool.detailEntrypoint'),
-          value: asStringList(detail.entrypoint).join(' '),
-        },
-      ]
-    : [];
-
   return (
     <Reveal index={0} fill active={active}>
       <ToolLayout>
@@ -1356,220 +1653,155 @@ export default function ImageManagerTool({
           title={t('imageManagerTool.title')}
           subtitle={t('imageManagerTool.subtitle')}
         />
-        {detail ? (
-          <ToolLayoutToolbar
-            left={
-              <Button
-                variant="ghost"
-                onClick={() => setDetail(null)}
-                className="h-[30px] flex-none px-[11px] text-[11px]"
-              >
-                <CaretLeft data-icon="inline-start" weight="duotone" />
-                {t('imageManagerTool.back')}
-              </Button>
-            }
-          />
-        ) : (
-          <ToolLayoutToolbar
-            left={
-              <div className="flex min-w-0 flex-wrap items-end gap-4 max-[700px]:w-full">
-                <div className="flex min-w-0 flex-col gap-1 text-[10px] font-medium text-muted-foreground max-[700px]:w-full">
-                  <span id={sourceLabelId}>{t('imageManagerTool.source')}</span>
-                  <Select
-                    items={sources.map((item) => ({
-                      value: item.id,
-                      label: sourceDisplayName(item, t),
-                    }))}
-                    value={source.id}
-                    onValueChange={(value) => {
-                      if (value) {
-                        detailRequest.current += 1;
-                        setDetail(null);
-                        setSourceId(value);
-                      }
-                    }}
-                  >
-                    <SelectTrigger
-                      className="h-[30px] w-[220px] max-w-full text-[11px] max-[700px]:w-full"
-                      aria-labelledby={sourceLabelId}
-                    >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent alignItemWithTrigger={false}>
-                      {sources.map((item) => (
-                        <SelectItem key={item.id} value={item.id}>
-                          {sourceDisplayName(item, t)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <ImageSearchField
-                  id="image-manager-search"
-                  label={t('imageManagerTool.search')}
-                  value={search}
-                  onChange={setSearch}
-                  placeholder={t('imageManagerTool.searchPlaceholder')}
-                />
-              </div>
-            }
-            right={
-              <div className="flex min-w-0 flex-wrap items-center gap-2 max-[700px]:w-full max-[700px]:justify-end">
-                <Popover>
-                  <PopoverTrigger
-                    render={
-                      <Badge
-                        variant={statusBadgeVariant}
-                        className="cursor-pointer text-[10px]"
-                        aria-label={statusText}
-                      />
+        <ToolLayoutToolbar
+          left={
+            <div className="flex min-w-0 flex-wrap items-end gap-4 max-[700px]:w-full">
+              <div className="flex min-w-0 flex-col gap-1 text-[10px] font-medium text-muted-foreground max-[700px]:w-full">
+                <span id={sourceLabelId}>{t('imageManagerTool.source')}</span>
+                <Select
+                  items={sources.map((item) => ({
+                    value: item.id,
+                    label: sourceDisplayName(item, t),
+                  }))}
+                  value={source.id}
+                  onValueChange={(value) => {
+                    if (value) {
+                      setSourceId(value);
                     }
-                  >
-                    {sourceViewState === 'connecting' ? (
-                      <Spinner
-                        data-icon="inline-start"
-                        className="size-3.5 shrink-0 motion-reduce:animate-none"
-                      />
-                    ) : source.kind !== 'registry' ? (
-                      <TbBrandDocker
-                        data-icon="inline-start"
-                        className="size-3.5 shrink-0"
-                        aria-hidden="true"
-                      />
-                    ) : null}
-                    {statusBadgeLabel}
-                  </PopoverTrigger>
-                  <PopoverContent align="end" className="w-auto min-w-56 gap-2 p-3 text-xs">
-                    <div className="flex items-center justify-between gap-4">
-                      <div className="font-medium text-foreground">{sourceKindLabel}</div>
-                      <div className="text-muted-foreground">{statusBadgeLabel}</div>
-                    </div>
-                    {source.kind !== 'registry' ? (
-                      <>
-                        <div className="flex items-center justify-between gap-2 border-t border-border pt-1.5 text-[11px]">
-                          <span className="text-muted-foreground">
-                            {t('imageManagerTool.statusDockerVersion')}
-                          </span>
-                          <span className="font-mono text-foreground">
-                            {status?.version || t('imageManagerTool.emptyValue')}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between gap-2 border-t border-border pt-1.5 text-[11px]">
-                          <span className="text-muted-foreground">
-                            {t('imageManagerTool.dockerCliPath')}
-                          </span>
-                          <span className="font-mono text-foreground">
-                            {status?.cliPath || t('imageManagerTool.emptyValue')}
-                          </span>
-                        </div>
-                      </>
-                    ) : null}
-                    {(sourceViewState === 'loading-details' || sourceViewState === 'updating') &&
-                    updateProgress &&
-                    typeof updateProgress.scanned === 'number' ? (
-                      <div className="flex items-center justify-between gap-2 border-t border-border pt-1.5 text-[11px]">
-                        <span className="text-muted-foreground">
-                          {t(
-                            sourceViewState === 'loading-details'
-                              ? 'imageManagerTool.statusInitialLoadProgress'
-                              : 'imageManagerTool.statusUpdateProgress',
-                          )}
-                        </span>
-                        <span className="font-mono text-foreground">
-                          {t('imageManagerTool.statusProgressScan', {
-                            scanned: updateProgress.scanned,
-                            total:
-                              typeof updateProgress.total === 'number' && updateProgress.total > 0
-                                ? updateProgress.total
-                                : '?',
-                          })}
-                        </span>
-                      </div>
-                    ) : null}
-                  </PopoverContent>
-                </Popover>
-                <Button
-                  variant="outline"
-                  className="h-[30px] min-w-[30px] flex-none px-[11px] text-[11px]"
-                  disabled={working}
-                  onClick={() => {
-                    setDetail(null);
-                    requestWatchReload();
-                    record(
-                      'image-manager',
-                      t('imageManagerTool.refreshed'),
-                      sourceDisplayName(source, t),
-                      source.id,
-                    );
                   }}
                 >
-                  {sourceViewState === 'connecting' ? (
-                    <Spinner data-icon="inline-start" />
-                  ) : (
-                    <ArrowsClockwise data-icon="inline-start" weight="duotone" />
-                  )}
-                  {t('imageManagerTool.refresh')}
-                </Button>
-                <Button
-                  variant="ghost"
-                  className="h-[30px] flex-none px-[11px] text-[11px]"
-                  onClick={openManage}
-                >
-                  {t('imageManagerTool.manageSources')}
-                </Button>
+                  <SelectTrigger
+                    className="h-[30px] w-[220px] max-w-full text-[11px] max-[700px]:w-full"
+                    aria-labelledby={sourceLabelId}
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent alignItemWithTrigger={false}>
+                    {sources.map((item) => (
+                      <SelectItem key={item.id} value={item.id}>
+                        {sourceDisplayName(item, t)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-            }
-          />
-        )}
-        <ToolLayoutContent className="flex min-h-0 flex-col">
-          {contentViewState === 'detail' && detail ? (
-            <div className="h-full min-h-0 overflow-x-hidden overflow-y-auto [padding-inline-end:var(--overlay-scrollbar-hit-size)]">
-              <h2 className="m-0 text-[13px] font-semibold text-foreground">
-                {t('imageManagerTool.detailTitle')}
-              </h2>
-              <dl className="mt-3 divide-y divide-border">
-                {detailRows.map((row) => {
-                  const isMono = ['id', 'digest', 'command', 'entrypoint'].includes(row.key);
-                  return (
-                    <div
-                      key={row.key}
-                      className="grid grid-cols-1 gap-1 py-2.5 sm:grid-cols-[7rem_minmax(0,1fr)] sm:gap-4"
-                    >
-                      <dt className="text-[10px] font-medium text-muted-foreground">{row.label}</dt>
-                      <dd
-                        className={`m-0 min-w-0 break-words text-[12px] text-foreground ${isMono ? 'font-mono' : ''}`}
-                      >
-                        {row.value || t('imageManagerTool.emptyValue')}
-                      </dd>
-                    </div>
-                  );
-                })}
-                <div className="grid grid-cols-1 gap-1 py-2.5 sm:grid-cols-[7rem_minmax(0,1fr)] sm:gap-4">
-                  <dt className="text-[10px] font-medium text-muted-foreground">
-                    {t('imageManagerTool.detailLabels')}
-                  </dt>
-                  <dd className="m-0 min-w-0">
-                    {labelEntries(detail.labels).length === 0 ? (
-                      <p className="m-0 text-[12px] text-muted-foreground">
-                        {t('imageManagerTool.labelsEmpty')}
-                      </p>
-                    ) : (
-                      <div className="space-y-2">
-                        {labelEntries(detail.labels).map(([key, value]) => (
-                          <div key={key} className="flex flex-col gap-0.5">
-                            <span className="font-mono text-[10px] text-muted-foreground">
-                              {key}
-                            </span>
-                            <span className="break-words text-[12px] text-foreground">{value}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </dd>
-                </div>
-              </dl>
+              <ImageSearchField
+                id="image-manager-search"
+                label={t('imageManagerTool.search')}
+                value={search}
+                onChange={setSearch}
+                placeholder={t('imageManagerTool.searchPlaceholder')}
+              />
             </div>
-          ) : contentViewState === 'loading' ? (
+          }
+          right={
+            <div className="flex min-w-0 flex-wrap items-center gap-2 max-[700px]:w-full max-[700px]:justify-end">
+              <Popover>
+                <PopoverTrigger
+                  render={
+                    <Badge
+                      variant={statusBadgeVariant}
+                      className="cursor-pointer text-[10px]"
+                      aria-label={statusText}
+                    />
+                  }
+                >
+                  {sourceViewState === 'connecting' ? (
+                    <Spinner
+                      data-icon="inline-start"
+                      className="size-3.5 shrink-0 motion-reduce:animate-none"
+                    />
+                  ) : source.kind !== 'registry' ? (
+                    <TbBrandDocker
+                      data-icon="inline-start"
+                      className="size-3.5 shrink-0"
+                      aria-hidden="true"
+                    />
+                  ) : null}
+                  {statusBadgeLabel}
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-auto min-w-56 gap-2 p-3 text-xs">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="font-medium text-foreground">{sourceKindLabel}</div>
+                    <div className="text-muted-foreground">{statusBadgeLabel}</div>
+                  </div>
+                  {source.kind !== 'registry' ? (
+                    <>
+                      <div className="flex items-center justify-between gap-2 border-t border-border pt-1.5 text-[11px]">
+                        <span className="text-muted-foreground">
+                          {t('imageManagerTool.statusDockerVersion')}
+                        </span>
+                        <span className="font-mono text-foreground">
+                          {status?.version || t('imageManagerTool.emptyValue')}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-2 border-t border-border pt-1.5 text-[11px]">
+                        <span className="text-muted-foreground">
+                          {t('imageManagerTool.dockerCliPath')}
+                        </span>
+                        <span className="font-mono text-foreground">
+                          {status?.cliPath || t('imageManagerTool.emptyValue')}
+                        </span>
+                      </div>
+                    </>
+                  ) : null}
+                  {(sourceViewState === 'loading-details' || sourceViewState === 'updating') &&
+                  updateProgress &&
+                  typeof updateProgress.scanned === 'number' ? (
+                    <div className="flex items-center justify-between gap-2 border-t border-border pt-1.5 text-[11px]">
+                      <span className="text-muted-foreground">
+                        {t(
+                          sourceViewState === 'loading-details'
+                            ? 'imageManagerTool.statusInitialLoadProgress'
+                            : 'imageManagerTool.statusUpdateProgress',
+                        )}
+                      </span>
+                      <span className="font-mono text-foreground">
+                        {t('imageManagerTool.statusProgressScan', {
+                          scanned: updateProgress.scanned,
+                          total:
+                            typeof updateProgress.total === 'number' && updateProgress.total > 0
+                              ? updateProgress.total
+                              : '?',
+                        })}
+                      </span>
+                    </div>
+                  ) : null}
+                </PopoverContent>
+              </Popover>
+              <Button
+                variant="outline"
+                className="h-[30px] min-w-[30px] flex-none px-[11px] text-[11px]"
+                disabled={working}
+                onClick={() => {
+                  requestWatchReload();
+                  record(
+                    'image-manager',
+                    t('imageManagerTool.refreshed'),
+                    sourceDisplayName(source, t),
+                    source.id,
+                  );
+                }}
+              >
+                {sourceViewState === 'connecting' ? (
+                  <Spinner data-icon="inline-start" />
+                ) : (
+                  <ArrowsClockwise data-icon="inline-start" weight="duotone" />
+                )}
+                {t('imageManagerTool.refresh')}
+              </Button>
+              <Button
+                variant="ghost"
+                className="h-[30px] flex-none px-[11px] text-[11px]"
+                onClick={openManage}
+              >
+                {t('imageManagerTool.manageSources')}
+              </Button>
+            </div>
+          }
+        />
+        <ToolLayoutContent className="flex min-h-0 flex-col">
+          {contentViewState === 'loading' ? (
             <div className="flex min-h-0 flex-1 items-center justify-center">
               <Spinner />
             </div>
@@ -1691,20 +1923,16 @@ export default function ImageManagerTool({
                       <TableCell className="min-w-40">
                         <button
                           type="button"
-                          className="inline-flex min-w-0 max-w-full items-center gap-1.5 truncate text-left"
-                          title={t('imageManagerTool.copyName', {
+                          className="inline-flex min-w-0 max-w-full cursor-pointer truncate text-left text-foreground hover:text-primary hover:underline hover:underline-offset-4 disabled:cursor-not-allowed disabled:opacity-50"
+                          disabled={working}
+                          title={t('imageManagerTool.viewName', {
                             name: imageLabel(image, unnamed),
                           })}
-                          aria-label={t('imageManagerTool.copyName', {
+                          aria-label={t('imageManagerTool.viewName', {
                             name: imageLabel(image, unnamed),
                           })}
-                          onClick={() => void copyImageName(imageLabel(image, unnamed))}
+                          onClick={() => void viewImage(image)}
                         >
-                          {copiedName === imageLabel(image, unnamed) ? (
-                            <Check size={13} className="shrink-0" aria-hidden="true" />
-                          ) : (
-                            <Copy size={13} className="shrink-0" aria-hidden="true" />
-                          )}
                           <span className="truncate">{imageLabel(image, unnamed)}</span>
                         </button>
                       </TableCell>
@@ -1746,6 +1974,15 @@ export default function ImageManagerTool({
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="min-w-32">
                               <DropdownMenuGroup>
+                                <DropdownMenuItem
+                                  onClick={() =>
+                                    void copyImageName(copyableImageName(source, image, unnamed))
+                                  }
+                                >
+                                  {copiedName === copyableImageName(source, image, unnamed)
+                                    ? t('imageManagerTool.copied')
+                                    : t('imageManagerTool.copyName')}
+                                </DropdownMenuItem>
                                 {((source as ManagedImageSource).capabilities?.canPush ??
                                 source.kind !== 'registry') ? (
                                   <DropdownMenuItem

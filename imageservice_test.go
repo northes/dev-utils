@@ -286,7 +286,7 @@ func TestListAndInspectDockerImagesUseStructuredOutput(t *testing.T) {
 			if args[1] == "ls" {
 				return []byte(`{"ID":"sha256:long","Repository":"repo","Tag":"latest","Size":"10MB","CreatedAt":"now"}` + "\n"), nil
 			}
-			return []byte(`[{"Id":"sha256:long","RepoTags":["repo:latest"],"Size":10,"Created":"2026-01-01T00:00:00Z","Architecture":"arm64","Os":"linux","Config":{"Labels":{"a":"b"},"Cmd":["run"],"Entrypoint":["/bin/sh"]}}]`), nil
+			return []byte(`[{"Id":"sha256:long","RepoTags":["repo:latest"],"Size":10,"Created":"2026-01-01T00:00:00Z","Architecture":"arm64","Os":"linux","Config":{"User":"1000","WorkingDir":"/app","Env":["A=B"],"ExposedPorts":{"8080/tcp":{}},"Volumes":{"/data":{}},"StopSignal":"SIGTERM","Shell":["/bin/sh"],"Healthcheck":{"Test":["CMD","true"],"Interval":1000000000,"Timeout":2000000000,"StartPeriod":3000000000,"Retries":3},"Labels":{"a":"b"},"Cmd":["run"],"Entrypoint":["/bin/sh"]},"RootFS":{"Type":"layers","Layers":["sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]}}]`), nil
 		},
 	}
 	images, err := service.ListDockerImages("local")
@@ -296,6 +296,12 @@ func TestListAndInspectDockerImagesUseStructuredOutput(t *testing.T) {
 	detail, err := service.InspectDockerImage("local", "sha256:long")
 	if err != nil || detail.ID != "sha256:long" || detail.Architecture != "arm64" || detail.Labels["a"] != "b" {
 		t.Fatalf("镜像详情为 %#v，错误 %v", detail, err)
+	}
+	if detail.Metadata.ConfigDigest != "sha256:long" || detail.Metadata.RootFSType != "layers" || len(detail.Layers) != 1 || detail.Layers[0].Digest == "" {
+		t.Fatalf("Docker 镜像元数据或 layers 为 %#v", detail)
+	}
+	if detail.Runtime.User != "1000" || detail.Runtime.WorkingDir != "/app" || len(detail.Runtime.Env) != 1 || detail.Runtime.Healthcheck == nil || detail.Runtime.Healthcheck.Interval != "1s" {
+		t.Fatalf("Docker runtime 配置为 %#v", detail.Runtime)
 	}
 }
 
@@ -311,10 +317,11 @@ func TestListDockerImagesAggregatesTagsByImageID(t *testing.T) {
 }
 
 func TestRegistryListDetailAndDeleteUseDigest(t *testing.T) {
-	configBlob := []byte(`{"architecture":"amd64","os":"linux","created":"2026-01-01T00:00:00Z","config":{"Labels":{"app":"demo"},"Cmd":["run"],"Entrypoint":["/bin/demo"]}}`)
+	configBlob := []byte(`{"architecture":"amd64","os":"linux","created":"2026-01-01T00:00:00Z","config":{"User":"app","WorkingDir":"/srv","Env":["APP_ENV=prod"],"ExposedPorts":{"8080/tcp":{}},"Volumes":{"/var/lib/app":{}},"StopSignal":"SIGTERM","Shell":["/bin/sh"],"Healthcheck":{"Test":["CMD-SHELL","wget -qO- http://localhost:8080/health"],"Interval":1000000000,"Timeout":2000000000,"StartPeriod":3000000000,"Retries":3},"Labels":{"app":"demo"},"Cmd":["run"],"Entrypoint":["/bin/demo"]}}`)
 	configHash := sha256.Sum256(configBlob)
 	configDigest := "sha256:" + hex.EncodeToString(configHash[:])
-	manifest := []byte(fmt.Sprintf(`{"schemaVersion":2,"mediaType":"application/vnd.oci.image.manifest.v1+json","config":{"mediaType":"application/vnd.oci.image.config.v1+json","digest":%q,"size":%d},"layers":[]}`, configDigest, len(configBlob)))
+	layerDigest := "sha256:" + strings.Repeat("b", 64)
+	manifest := []byte(fmt.Sprintf(`{"schemaVersion":2,"mediaType":"application/vnd.oci.image.manifest.v1+json","config":{"mediaType":"application/vnd.oci.image.config.v1+json","digest":%q,"size":%d},"layers":[{"mediaType":"application/vnd.oci.image.layer.v1.tar+gzip","digest":%q,"size":1234}]}`, configDigest, len(configBlob), layerDigest))
 	hash := sha256.Sum256(manifest)
 	digest := "sha256:" + hex.EncodeToString(hash[:])
 	var deletedPath string
@@ -376,7 +383,7 @@ func TestRegistryListDetailAndDeleteUseDigest(t *testing.T) {
 	}
 	for _, image := range images {
 		metadata, ok := metadataByID[image.ID]
-		if !ok || metadata.Digest != digest || metadata.SizeBytes != int64(len(configBlob)) || metadata.CreatedAt != "2026-01-01T00:00:00Z" {
+		if !ok || metadata.Digest != digest || metadata.SizeBytes != int64(len(configBlob)+1234) || metadata.CreatedAt != "2026-01-01T00:00:00Z" {
 			t.Fatalf("Registry 镜像元数据事件为 %#v", metadataByID)
 		}
 	}
@@ -385,8 +392,14 @@ func TestRegistryListDetailAndDeleteUseDigest(t *testing.T) {
 		t.Fatalf("Registry 状态为 %#v", status)
 	}
 	detail, err := service.InspectDockerImage("reg", images[0].ID)
-	if err != nil || detail.Manifest == nil || detail.Digest != digest || detail.Size != int64(len(configBlob)) || detail.Architecture != "amd64" || detail.Labels["app"] != "demo" {
+	if err != nil || detail.Manifest == nil || detail.Digest != digest || detail.Size != int64(len(configBlob)+1234) || detail.Architecture != "amd64" || detail.Labels["app"] != "demo" {
 		t.Fatalf("Registry 详情为 %#v，错误 %v", detail, err)
+	}
+	if detail.RawManifest != string(manifest) || detail.Metadata.ConfigDigest != configDigest || len(detail.Layers) != 1 || detail.Layers[0].Digest != layerDigest || detail.Layers[0].Size != 1234 || detail.Layers[0].MediaType != "application/vnd.oci.image.layer.v1.tar+gzip" {
+		t.Fatalf("Registry manifest 或 layers 为 %#v", detail)
+	}
+	if detail.Runtime.User != "app" || detail.Runtime.WorkingDir != "/srv" || len(detail.Runtime.Env) != 1 || detail.Runtime.Healthcheck == nil || detail.Runtime.Healthcheck.Retries != 3 {
+		t.Fatalf("Registry runtime 配置为 %#v", detail.Runtime)
 	}
 	result := service.DeleteDockerImages("reg", []string{images[0].ID})
 	if len(result.Deleted) != 1 || deletedPath != "/v2/repo/manifests/"+digest {

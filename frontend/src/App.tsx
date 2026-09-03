@@ -100,7 +100,7 @@ import type { Config as Settings, SidebarToolConfig } from '../bindings/changeme
 import { useLocation, useNavigate, useNavigationType } from 'react-router';
 import { resolveTheme } from './theme';
 
-type Page = 'settings' | 'history' | ToolId;
+type Page = 'settings' | 'history' | ToolId | 'image-manager-detail';
 type SaveWaiter = {
   target: Settings;
   resolve: () => void;
@@ -238,6 +238,7 @@ const JwtTool = lazy(() => import('./components/JwtTool'));
 const UrlTool = lazy(() => import('./components/UrlTool'));
 const ImageTool = lazy(() => import('./components/ImageTool'));
 const ImageManagerTool = lazy(() => import('./components/ImageManagerTool'));
+const ImageManagerDetailPage = lazy(() => import('./components/ImageManagerDetailPage'));
 const SettingsPage = lazy(() => import('./components/SettingsPage'));
 const HistoryPage = lazy(() => import('./components/HistoryPage'));
 const tools: ToolDefinition[] = [
@@ -850,6 +851,21 @@ function loadValue<T>(key: string, fallback: T): T {
     return fallback;
   }
 }
+const IMAGE_MANAGER_DETAIL_PATH = '/image-manager/detail';
+
+type ImageManagerDetailRoute = {
+  sourceId: string;
+  imageId: string;
+};
+
+function imageManagerDetailRoute(pathname: string, search: string): ImageManagerDetailRoute | null {
+  if (pathname !== IMAGE_MANAGER_DETAIL_PATH) return null;
+  const params = new URLSearchParams(search);
+  const sourceId = params.get('source')?.trim() ?? '';
+  const imageId = params.get('image')?.trim() ?? '';
+  return sourceId && imageId ? { sourceId, imageId } : null;
+}
+
 function pageFromPath(path: string): Page {
   const value = path.replace(/^\/+/, '');
   if (value === 'settings' || value === 'history' || tools.some((tool) => tool.id === value))
@@ -859,8 +875,20 @@ function pageFromPath(path: string): Page {
     return last as Page;
   return tools[0].id as Page;
 }
+
+function pageFromLocation(pathname: string, search: string): Page {
+  if (imageManagerDetailRoute(pathname, search)) return 'image-manager-detail';
+  if (pathname === IMAGE_MANAGER_DETAIL_PATH) return 'image-manager';
+  return pageFromPath(pathname);
+}
+
 function routePath(page: Page) {
-  return `/${page}`;
+  return page === 'image-manager-detail' ? IMAGE_MANAGER_DETAIL_PATH : `/${page}`;
+}
+
+function routeMatchesPage(pathname: string, search: string, page: Page) {
+  if (page === 'image-manager-detail') return imageManagerDetailRoute(pathname, search) !== null;
+  return pathname === routePath(page);
 }
 function isPage(value: unknown): value is Page {
   return value === 'settings' || value === 'history' || tools.some((tool) => tool.id === value);
@@ -882,7 +910,7 @@ function resolveSidebarTools(configs: SidebarToolConfig[] | null | undefined): S
   return resolved;
 }
 function availablePage(page: Page, sidebarTools: SidebarToolConfig[]): Page {
-  if (page === 'settings' || page === 'history') return page;
+  if (page === 'settings' || page === 'history' || page === 'image-manager-detail') return page;
   if (sidebarTools.some((item) => item.id === page && item.enabled)) return page;
   const firstEnabled = sidebarTools.find((item) => item.enabled && isToolId(item.id));
   return firstEnabled ? (firstEnabled.id as ToolId) : 'settings';
@@ -902,7 +930,13 @@ function moveSidebarToolBy(
 }
 function paletteToolId(item: PaletteItem): ToolId | null {
   if (item.tool) return item.tool;
-  if (item.page && item.page !== 'settings' && item.page !== 'history') return item.page;
+  if (
+    item.page &&
+    item.page !== 'settings' &&
+    item.page !== 'history' &&
+    item.page !== 'image-manager-detail'
+  )
+    return item.page;
   return null;
 }
 function isHiddenFocusTarget(el: HTMLElement) {
@@ -1038,7 +1072,8 @@ function AppShell() {
   const navigationType = useNavigationType();
   const routerNavigate = useNavigate();
   const workspaceRef = useRef<HTMLElement>(null);
-  const page = pageFromPath(location.pathname);
+  const page = pageFromLocation(location.pathname, location.search);
+  const imageDetailRoute = imageManagerDetailRoute(location.pathname, location.search);
   const [visited, setVisited] = useState<Set<Page>>(() => new Set([page]));
   const pageRef = useRef<Page>(page);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -1114,14 +1149,20 @@ function AppShell() {
     routerNavigate(routePath(next));
     dismissOverlays();
   };
+  const openImageManagerDetail = (sourceId: string, imageId: string) => {
+    const params = new URLSearchParams({ source: sourceId, image: imageId });
+    routerNavigate(`${IMAGE_MANAGER_DETAIL_PATH}?${params.toString()}`);
+    dismissOverlays();
+  };
   const navigate = navigatePage;
   useEffect(() => {
-    const next = pageFromPath(location.pathname);
+    const next = pageFromLocation(location.pathname, location.search);
     logFrontend(
       `[route] location pathname=${location.pathname} key=${location.key} type=${navigationType} page=${next}`,
     );
-    if (location.pathname !== routePath(next)) routerNavigate(routePath(next), { replace: true });
-  }, [location.key, location.pathname, navigationType, routerNavigate]);
+    if (!routeMatchesPage(location.pathname, location.search, next))
+      routerNavigate(routePath(next), { replace: true });
+  }, [location.key, location.pathname, location.search, navigationType, routerNavigate]);
   useLayoutEffect(() => {
     const root = document.documentElement;
     const dark = theme.endsWith('-dark');
@@ -1307,7 +1348,8 @@ function AppShell() {
     startPersistLatest();
   }, [settings]);
   useEffect(() => {
-    localStorage.setItem('devutils.lastPage', JSON.stringify(page));
+    const lastPage = page === 'image-manager-detail' ? 'image-manager' : page;
+    localStorage.setItem('devutils.lastPage', JSON.stringify(lastPage));
   }, [page]);
   const sidebarMode = (settings.sidebarMode as SidebarMode) || 'full';
   const layoutSidebarMode = sidebarManaging ? 'full' : sidebarMode;
@@ -1323,6 +1365,7 @@ function AppShell() {
     [resolvedSidebarTools],
   );
   const enabledToolSet = useMemo(() => new Set(enabledToolIds), [enabledToolIds]);
+  const sidebarPage = page === 'image-manager-detail' ? 'image-manager' : page;
   useLayoutEffect(() => {
     if (sidebarManaging) return;
     const next = availablePage(page, resolvedSidebarTools);
@@ -1643,7 +1686,7 @@ function AppShell() {
           className={`main relative z-[1] grid min-h-0 ${layoutSidebarMode === 'hidden' ? 'grid-cols-[0px_minmax(0,1fr)] [&_.sidebar]:invisible [&_.sidebar]:overflow-hidden' : layoutSidebarMode === 'icon' ? 'grid-cols-[56px_minmax(0,1fr)] [&_.sidebar]:overflow-hidden [&_.sidebar]:pt-3 [&_.sidebar-heading]:hidden [&_.sidebar-item]:justify-center [&_.sidebar-item]:px-0 [&_.sidebar-item_span]:hidden [&_.sidebar-palette_kbd]:hidden [&_.sidebar-palette_span]:hidden [&_.sidebar-palette]:justify-center' : 'grid-cols-[232px_minmax(0,1fr)]'}`}
         >
           <Sidebar
-            page={page}
+            page={sidebarPage}
             onNavigate={navigate}
             onOpenPalette={openPalette}
             managing={sidebarManaging}
@@ -1652,7 +1695,7 @@ function AppShell() {
             onExitManage={() => setSidebarManaging(false)}
           />
           <main
-            className={`workspace relative min-h-0 w-full overflow-x-hidden overflow-y-auto bg-background${tools.some((tool) => tool.id === page) || page === 'history' || page === 'settings' ? ' overflow-y-hidden' : ''}`}
+            className={`workspace relative min-h-0 w-full overflow-x-hidden overflow-y-auto bg-background${tools.some((tool) => tool.id === page) || page === 'history' || page === 'settings' || page === 'image-manager-detail' ? ' overflow-y-hidden' : ''}`}
             ref={workspaceRef}
           >
             {' '}
@@ -1795,12 +1838,29 @@ function AppShell() {
                     active={page === 'image-manager'}
                     settings={settings}
                     onSettingsChange={saveImageManagerSettings}
+                    onOpenDetail={openImageManagerDetail}
                     record={record}
                     pending={pending}
                     clearPending={() => setPending(null)}
                   />
                 </Suspense>
               )}
+            </div>
+            <div
+              className={`tool-slot h-full min-h-0 overflow-hidden${page === 'image-manager-detail' ? '' : ' is-hidden absolute inset-0 invisible pointer-events-none'}`}
+            >
+              {visited.has('image-manager-detail') && imageDetailRoute ? (
+                <Suspense fallback={null}>
+                  <ImageManagerDetailPage
+                    active={page === 'image-manager-detail'}
+                    imageId={imageDetailRoute.imageId}
+                    onBack={() => routerNavigate(-1)}
+                    record={record}
+                    settings={settings}
+                    sourceId={imageDetailRoute.sourceId}
+                  />
+                </Suspense>
+              ) : null}
             </div>
             <div
               className={`tool-slot h-full min-h-0 overflow-hidden${page === 'settings' ? '' : ' is-hidden absolute inset-0 invisible pointer-events-none'}`}
@@ -1842,7 +1902,7 @@ function AppShell() {
           onClose={closePalette}
           indexed={indexed}
           run={run}
-          page={page}
+          page={sidebarPage}
         />
       </div>
       <AlertDialog

@@ -100,22 +100,70 @@ type registryImageMetadataStateEvent struct {
 }
 
 type DockerImageDetail struct {
-	ID           string            `json:"id"`
-	Name         string            `json:"name"`
-	Tags         []string          `json:"tags"`
-	Size         int64             `json:"size"`
-	CreatedAt    string            `json:"createdAt"`
-	Architecture string            `json:"architecture"`
-	OS           string            `json:"os"`
-	Labels       map[string]string `json:"labels"`
-	Command      []string          `json:"command"`
-	Entrypoint   []string          `json:"entrypoint"`
-	Repository   string            `json:"repository"`
-	Digest       string            `json:"digest"`
-	MediaType    string            `json:"mediaType"`
-	SizeType     string            `json:"sizeType"`
-	Manifest     *RegistryManifest `json:"manifest"`
-	Index        *RegistryIndex    `json:"index"`
+	ID           string              `json:"id"`
+	Name         string              `json:"name"`
+	Tags         []string            `json:"tags"`
+	Size         int64               `json:"size"`
+	CreatedAt    string              `json:"createdAt"`
+	Architecture string              `json:"architecture"`
+	OS           string              `json:"os"`
+	Labels       map[string]string   `json:"labels"`
+	Command      []string            `json:"command"`
+	Entrypoint   []string            `json:"entrypoint"`
+	Repository   string              `json:"repository"`
+	Digest       string              `json:"digest"`
+	MediaType    string              `json:"mediaType"`
+	SizeType     string              `json:"sizeType"`
+	Manifest     *RegistryManifest   `json:"manifest"`
+	Index        *RegistryIndex      `json:"index"`
+	Metadata     DockerImageMetadata `json:"metadata"`
+	Layers       []DockerImageLayer  `json:"layers"`
+	Runtime      DockerRuntimeConfig `json:"runtime"`
+	RawManifest  string              `json:"rawManifest"`
+}
+
+type DockerImageMetadata struct {
+	CreatedAt     string   `json:"createdAt"`
+	Architecture  string   `json:"architecture"`
+	OS            string   `json:"os"`
+	OSVersion     string   `json:"osVersion"`
+	Variant       string   `json:"variant"`
+	Author        string   `json:"author"`
+	DockerVersion string   `json:"dockerVersion"`
+	Container     string   `json:"container"`
+	ConfigDigest  string   `json:"configDigest"`
+	RootFSType    string   `json:"rootfsType"`
+	DiffIDs       []string `json:"diffIDs"`
+}
+
+type DockerImageLayer struct {
+	Size      int64  `json:"size"`
+	Digest    string `json:"digest"`
+	MediaType string `json:"mediaType"`
+}
+
+type DockerHealthcheck struct {
+	Test        []string `json:"test"`
+	Interval    string   `json:"interval"`
+	Timeout     string   `json:"timeout"`
+	StartPeriod string   `json:"startPeriod"`
+	Retries     int      `json:"retries"`
+}
+
+type DockerRuntimeConfig struct {
+	User            string             `json:"user"`
+	WorkingDir      string             `json:"workingDir"`
+	Env             []string           `json:"env"`
+	ExposedPorts    []string           `json:"exposedPorts"`
+	Volumes         []string           `json:"volumes"`
+	StopSignal      string             `json:"stopSignal"`
+	Shell           []string           `json:"shell"`
+	Command         []string           `json:"command"`
+	Entrypoint      []string           `json:"entrypoint"`
+	Healthcheck     *DockerHealthcheck `json:"healthcheck"`
+	TTY             bool               `json:"tty"`
+	OpenStdin       bool               `json:"openStdin"`
+	NetworkDisabled bool               `json:"networkDisabled"`
 }
 
 type RegistryDescriptor struct {
@@ -1427,7 +1475,8 @@ type imageInventory struct {
 	Tags []string
 }
 
-const imageCacheSchema = 1
+// 详情字段扩展后必须淘汰旧缓存，避免旧 JSON 缺少 layers/runtime/rawManifest。
+const imageCacheSchema = 2
 
 func imageCacheKey(sourceID, fingerprint, imageID, repository string) string {
 	value := sourceID + "\x00" + fingerprint + "\x00" + imageID + "\x00" + repository
@@ -2032,13 +2081,138 @@ func (s *ImageService) inspectDockerImage(ctx context.Context, source ImageSourc
 	if len(tags) > 0 {
 		nameValue = tags[0]
 	}
-	return DockerImageDetail{ID: item.ID, Name: nameValue, Tags: tags, Size: item.Size, CreatedAt: item.Created, Architecture: item.Architecture, OS: item.OS, Labels: item.Config.Labels, Command: item.Config.Cmd, Entrypoint: item.Config.Entrypoint}, nil
+	metadata := DockerImageMetadata{
+		CreatedAt:    item.Created,
+		Architecture: item.Architecture,
+		OS:           item.OS,
+		ConfigDigest: item.ID,
+		RootFSType:   item.RootFS.Type,
+	}
+	return DockerImageDetail{
+		ID:           item.ID,
+		Name:         nameValue,
+		Tags:         tags,
+		Size:         item.Size,
+		CreatedAt:    item.Created,
+		Architecture: item.Architecture,
+		OS:           item.OS,
+		Labels:       item.Config.Labels,
+		Command:      item.Config.Cmd,
+		Entrypoint:   item.Config.Entrypoint,
+		Metadata:     metadata,
+		Layers:       dockerRootFSLayers(item.RootFS.Layers),
+		Runtime:      dockerRuntimeConfig(item.Config),
+	}, nil
 }
 
 func registryDescriptor(value v1.Descriptor) RegistryDescriptor {
-	result := RegistryDescriptor{MediaType: string(value.MediaType), Digest: value.Digest.String(), Size: value.Size}
+	result := RegistryDescriptor{MediaType: string(value.MediaType), Digest: digestString(value.Digest), Size: value.Size}
 	if value.Platform != nil {
 		result.Platform = &RegistryPlatform{Architecture: value.Platform.Architecture, OS: value.Platform.OS, Variant: value.Platform.Variant}
+	}
+	return result
+}
+
+func digestString(value v1.Hash) string {
+	if value.Algorithm == "" || value.Hex == "" {
+		return ""
+	}
+	return value.String()
+}
+
+func sortedStringSet(values map[string]struct{}) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	result := make([]string, 0, len(values))
+	for value := range values {
+		result = append(result, value)
+	}
+	sort.Strings(result)
+	return result
+}
+
+func copyStrings(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	return append([]string(nil), values...)
+}
+
+func durationString(value time.Duration) string {
+	if value <= 0 {
+		return ""
+	}
+	return value.String()
+}
+
+func dockerHealthcheck(value *v1.HealthConfig) *DockerHealthcheck {
+	if value == nil {
+		return nil
+	}
+	return &DockerHealthcheck{
+		Test:        copyStrings(value.Test),
+		Interval:    durationString(value.Interval),
+		Timeout:     durationString(value.Timeout),
+		StartPeriod: durationString(value.StartPeriod),
+		Retries:     value.Retries,
+	}
+}
+
+func dockerRuntimeConfig(config v1.Config) DockerRuntimeConfig {
+	return DockerRuntimeConfig{
+		User:            config.User,
+		WorkingDir:      config.WorkingDir,
+		Env:             copyStrings(config.Env),
+		ExposedPorts:    sortedStringSet(config.ExposedPorts),
+		Volumes:         sortedStringSet(config.Volumes),
+		StopSignal:      config.StopSignal,
+		Shell:           copyStrings(config.Shell),
+		Command:         copyStrings(config.Cmd),
+		Entrypoint:      copyStrings(config.Entrypoint),
+		Healthcheck:     dockerHealthcheck(config.Healthcheck),
+		TTY:             config.Tty,
+		OpenStdin:       config.OpenStdin,
+		NetworkDisabled: config.NetworkDisabled,
+	}
+}
+
+func dockerImageMetadata(config *v1.ConfigFile, configDigest string, rootfsType string, diffIDs []string) DockerImageMetadata {
+	metadata := DockerImageMetadata{ConfigDigest: configDigest, RootFSType: rootfsType, DiffIDs: copyStrings(diffIDs)}
+	if config == nil {
+		return metadata
+	}
+	metadata.Architecture = config.Architecture
+	metadata.OS = config.OS
+	metadata.OSVersion = config.OSVersion
+	metadata.Variant = config.Variant
+	metadata.Author = config.Author
+	metadata.DockerVersion = config.DockerVersion
+	metadata.Container = config.Container
+	if !config.Created.Time.IsZero() {
+		metadata.CreatedAt = config.Created.Time.UTC().Format(time.RFC3339Nano)
+	}
+	return metadata
+}
+
+func dockerImageLayers(values []v1.Descriptor) []DockerImageLayer {
+	if len(values) == 0 {
+		return nil
+	}
+	result := make([]DockerImageLayer, 0, len(values))
+	for _, value := range values {
+		result = append(result, DockerImageLayer{Size: value.Size, Digest: digestString(value.Digest), MediaType: string(value.MediaType)})
+	}
+	return result
+}
+
+func dockerRootFSLayers(values []string) []DockerImageLayer {
+	if len(values) == 0 {
+		return nil
+	}
+	result := make([]DockerImageLayer, 0, len(values))
+	for _, value := range values {
+		result = append(result, DockerImageLayer{Digest: value})
 	}
 	return result
 }
@@ -2086,7 +2260,7 @@ func (s *ImageService) inspectRegistryImage(ctx context.Context, source ImageSou
 		detailName = registryTagImageID(repository, tag)
 		detailTags = []string{detailName}
 	}
-	detail := DockerImageDetail{ID: imageID, Name: detailName, Tags: detailTags, Repository: repository, Digest: digest, MediaType: string(descriptor.MediaType), Size: registryImageSize(descriptor, nil), SizeType: "manifest"}
+	detail := DockerImageDetail{ID: imageID, Name: detailName, Tags: detailTags, Repository: repository, Digest: digest, MediaType: string(descriptor.MediaType), Size: registryImageSize(descriptor, nil), SizeType: "manifest", RawManifest: string(descriptor.Manifest)}
 	var envelope struct {
 		SchemaVersion int             `json:"schemaVersion"`
 		MediaType     string          `json:"mediaType"`
@@ -2097,6 +2271,7 @@ func (s *ImageService) inspectRegistryImage(ctx context.Context, source ImageSou
 	if err := json.Unmarshal(descriptor.Manifest, &envelope); err != nil {
 		return DockerImageDetail{}, fmt.Errorf("解析 Registry manifest 失败: %w", err)
 	}
+	detail.Metadata.ConfigDigest = digestString(envelope.Config.Digest)
 	if descriptor.MediaType == types.OCIImageIndex || descriptor.MediaType == types.DockerManifestList {
 		detail.SizeType = "manifest-index"
 		manifests := make([]RegistryDescriptor, 0, len(envelope.Manifests))
@@ -2110,11 +2285,14 @@ func (s *ImageService) inspectRegistryImage(ctx context.Context, source ImageSou
 			layers = append(layers, registryDescriptor(item))
 		}
 		detail.Manifest = &RegistryManifest{SchemaVersion: envelope.SchemaVersion, MediaType: envelope.MediaType, Config: registryDescriptor(envelope.Config), Layers: layers}
+		detail.Layers = dockerImageLayers(envelope.Layers)
 	}
 	if image, imageErr := descriptor.Image(); imageErr == nil {
 		detail.Size = registryImageSize(descriptor, image)
 		if config, configErr := image.ConfigFile(); configErr == nil && config != nil {
-			detail.CreatedAt = config.Created.Time.UTC().Format(time.RFC3339Nano)
+			detail.Metadata = dockerImageMetadata(config, digestString(envelope.Config.Digest), config.RootFS.Type, hashesToStrings(config.RootFS.DiffIDs))
+			detail.Runtime = dockerRuntimeConfig(config.Config)
+			detail.CreatedAt = detail.Metadata.CreatedAt
 			detail.Architecture = config.Architecture
 			detail.OS = config.OS
 			detail.Labels = config.Config.Labels
@@ -2125,18 +2303,33 @@ func (s *ImageService) inspectRegistryImage(ctx context.Context, source ImageSou
 	return detail, nil
 }
 
+func hashesToStrings(values []v1.Hash) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		digest := digestString(value)
+		if digest == "" {
+			continue
+		}
+		result = append(result, digest)
+	}
+	return result
+}
+
 type dockerImageInspectJSON struct {
-	ID           string   `json:"Id"`
-	RepoTags     []string `json:"RepoTags"`
-	Size         int64    `json:"Size"`
-	Created      string   `json:"Created"`
-	Architecture string   `json:"Architecture"`
-	OS           string   `json:"Os"`
-	Config       struct {
-		Labels     map[string]string `json:"Labels"`
-		Cmd        []string          `json:"Cmd"`
-		Entrypoint []string          `json:"Entrypoint"`
-	} `json:"Config"`
+	ID           string    `json:"Id"`
+	RepoTags     []string  `json:"RepoTags"`
+	Size         int64     `json:"Size"`
+	Created      string    `json:"Created"`
+	Architecture string    `json:"Architecture"`
+	OS           string    `json:"Os"`
+	Config       v1.Config `json:"Config"`
+	RootFS       struct {
+		Type   string   `json:"Type"`
+		Layers []string `json:"Layers"`
+	} `json:"RootFS"`
 }
 
 func (s *ImageService) InspectDockerImage(sourceID string, imageID string) (DockerImageDetail, error) {

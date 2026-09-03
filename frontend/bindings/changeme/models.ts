@@ -33,6 +33,14 @@ export interface DockerDeleteResult {
     "failed": DockerDeleteFailure[] | null;
 }
 
+export interface DockerHealthcheck {
+    "test": string[] | null;
+    "interval": string;
+    "timeout": string;
+    "startPeriod": string;
+    "retries": number;
+}
+
 export interface DockerImage {
     "id": string;
     "name": string;
@@ -63,6 +71,30 @@ export interface DockerImageDetail {
     "sizeType": string;
     "manifest": RegistryManifest | null;
     "index": RegistryIndex | null;
+    "metadata": DockerImageMetadata;
+    "layers": DockerImageLayer[] | null;
+    "runtime": DockerRuntimeConfig;
+    "rawManifest": string;
+}
+
+export interface DockerImageLayer {
+    "size": number;
+    "digest": string;
+    "mediaType": string;
+}
+
+export interface DockerImageMetadata {
+    "createdAt": string;
+    "architecture": string;
+    "os": string;
+    "osVersion": string;
+    "variant": string;
+    "author": string;
+    "dockerVersion": string;
+    "container": string;
+    "configDigest": string;
+    "rootfsType": string;
+    "diffIDs": string[] | null;
 }
 
 export interface DockerOperationResult {
@@ -70,6 +102,22 @@ export interface DockerOperationResult {
     "image": string;
     "output": string;
     "error": string;
+}
+
+export interface DockerRuntimeConfig {
+    "user": string;
+    "workingDir": string;
+    "env": string[] | null;
+    "exposedPorts": string[] | null;
+    "volumes": string[] | null;
+    "stopSignal": string;
+    "shell": string[] | null;
+    "command": string[] | null;
+    "entrypoint": string[] | null;
+    "healthcheck": DockerHealthcheck | null;
+    "tty": boolean;
+    "openStdin": boolean;
+    "networkDisabled": boolean;
 }
 
 export interface DockerStatus {
