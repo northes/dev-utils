@@ -1198,6 +1198,7 @@ export default function ImageManagerTool({
 
   const openManage = () => {
     setManageTab('ssh');
+    setEditingSource(null);
     setHostsError('');
     setHostOptions([]);
     setManageOpen(true);
@@ -1303,14 +1304,9 @@ export default function ImageManagerTool({
     if (!editingSource) return null;
     return (
       <div className="flex flex-col gap-3 border-t border-border pt-3">
-        <div className="flex items-center justify-between">
-          <h3 className="m-0 text-sm font-medium text-foreground">
-            {editingSource.id ? t('imageManagerTool.editSource') : t('imageManagerTool.addSource')}
-          </h3>
-          <Button variant="ghost" size="sm" onClick={() => setEditingSource(null)}>
-            {t('imageManagerTool.cancel')}
-          </Button>
-        </div>
+        <h3 className="m-0 text-sm font-medium text-foreground">
+          {editingSource.id ? t('imageManagerTool.editSource') : t('imageManagerTool.addSource')}
+        </h3>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="flex flex-col gap-1 sm:col-span-2">
             <Label htmlFor="source-edit-name">{t('imageManagerTool.sourceName')}</Label>
@@ -1427,6 +1423,16 @@ export default function ImageManagerTool({
           </p>
         ) : null}
         <div className="flex justify-end gap-2 pt-1">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setEditingSource(null);
+              setSourceDraftError('');
+            }}
+          >
+            {t('imageManagerTool.cancel')}
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -2061,7 +2067,16 @@ export default function ImageManagerTool({
           </ToolLayoutFooter>
         ) : null}
       </ToolLayout>
-      <Dialog open={manageOpen} onOpenChange={setManageOpen}>
+      <Dialog
+        open={manageOpen}
+        onOpenChange={(open) => {
+          setManageOpen(open);
+          if (!open) {
+            setEditingSource(null);
+            setSourceDraftError('');
+          }
+        }}
+      >
         <DialogContent
           className="flex max-h-[calc(100dvh-2rem)] min-h-0 flex-col sm:max-w-lg"
           showCloseButton
@@ -2074,9 +2089,7 @@ export default function ImageManagerTool({
             <Tabs
               value={manageTab}
               onValueChange={(value) => {
-                const tab = value as 'ssh' | 'registry';
-                setManageTab(tab);
-                setEditingSource((current) => (current ? { ...current, kind: tab } : current));
+                setManageTab(value as 'ssh' | 'registry');
               }}
               orientation="horizontal"
               className="flex-col min-w-0 gap-4"
@@ -2134,7 +2147,7 @@ export default function ImageManagerTool({
                   </div>
                 ) : null}
 
-                {!editingSource || editingSource.kind !== 'ssh' ? (
+                {editingSource?.kind === 'ssh' && !editingSource.id ? (
                   <div className="flex flex-col gap-2 border-t border-border pt-3">
                     <span className="text-[10px] font-medium text-muted-foreground">
                       {t('imageManagerTool.sshHosts')}
