@@ -322,7 +322,7 @@ export function ToolLayoutToolbar({
   if (!left && !right) return null;
   return (
     <div
-      className={`tool-layout-toolbar row-start-2 flex min-w-0 flex-wrap items-end gap-4 px-0.5 pb-3 max-[700px]:flex-col max-[700px]:items-stretch${className ? ` ${className}` : ''}`}
+      className={`tool-layout-toolbar row-start-2 flex min-w-0 flex-wrap items-end gap-4 pb-3 max-[700px]:flex-col max-[700px]:items-stretch${className ? ` ${className}` : ''}`}
     >
       {left ? <div className="flex min-w-0 flex-wrap items-end gap-4">{left}</div> : null}
       {right ? (
