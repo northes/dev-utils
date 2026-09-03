@@ -1,12 +1,12 @@
 ---
 name: layout-guidance
-description: 指导本项目工具页、编辑器、浮层和滚动条的布局实现与回归。涉及布局重构、响应式调整、工具页高度链、CodeMirror 尺寸或浮层滚动时使用。
+description: 仅在改工具页高度链、CodeMirror 尺寸、浮层滚动或 OverlayScrollbar 时使用。普通间距、颜色或文案修改不要使用本 skill。
 user-invocable: false
 ---
 
 # 布局指导
 
-本项目的布局优先保证数据流、尺寸链、滚动责任和状态保留，再处理视觉细节。工具页面必须遵循现有 `ToolLayout` 与 `Reveal` 结构，不创建平行布局系统。
+布局优先保证数据流、尺寸链、滚动责任和状态保留，再处理视觉细节。工具页面必须遵循现有 `ToolLayout` 与 `Reveal` 结构，不创建平行布局系统。本项目滚动条以本节和 [overlay-scrollbar.md](./overlay-scrollbar.md) 为准，不要改成 `ScrollArea`。
 
 ## 工具页布局
 
@@ -42,21 +42,13 @@ user-invocable: false
 
 ## 自绘滚动条
 
-- 自绘滚动条以真实滚动容器为责任边界，初始化发现已有容器，DOM 增删增量注册，使用 `ResizeObserver` 跟踪尺寸。
-- 横纵轴资格、布局和拖动计算必须复用同一个判定函数；`overflow-x: hidden` 不得生成横向滑块。
-- 滑块长度、位置和拖动映射使用可滚范围及扣除最小滑块后的有效轨道，并钳制在容器边界内。
-- 命中区尺寸统一使用 `--overlay-scrollbar-hit-size`；`OverlayScrollbar` 的几何计算和真实滚动层的预留空间必须引用同一个变量，禁止再次硬编码 `12px`。
-- 新增或修改由 `OverlayScrollbar` 管理的 `ScrollableContent`（包括 `ToolLayoutScrollableContent`）时，真实滚动层必须在滚动内容边缘预留 `padding-inline-end: var(--overlay-scrollbar-hit-size)`，避免自绘滚动条覆盖文字、控件或分隔线；预留空间放在真实滚动层，不要放在 fixed overlay 外壳。
-- 视觉滑块与命中区域分离；外壳 `pointer-events: none`，只有滑块接收事件，拖动绑定发起手势的 `pointerId` 并使用 pointer capture。
-- `pointerup`、`pointercancel`、window blur、页面隐藏、源节点移除和组件卸载都必须进入同一个清理流程。
-- fixed Overlay 不使用全局固定高 `z-index`；根据源容器层级和 Portal DOM 顺序决定 stacking context。
-- 自绘滚动条必须补齐 `role="scrollbar"`、可聚焦、可访问名称、`aria-controls`、方向、`aria-valuemin/max/now`，并支持方向键、PageUp/PageDown、Home/End。
+仅在修改 `OverlayScrollbar`、`ScrollableContent` 或 `ToolLayoutScrollableContent` 时读取 [overlay-scrollbar.md](./overlay-scrollbar.md)。
 
-## 回归
+## 静态检查
 
-本项目禁止使用 Playwright 或 Computer Use 验证。回归按变更类型分层触发，跨多个边界时组合对应层级；本节中的命令由 `project-validation` 聚合执行，同一轮不重复要求运行：
+按变更类型分层；跨多个边界时组合对应层级，不扩大到无关工具页：
 
-- **普通布局**（布局、间距或尺寸）：静态检查直接尺寸链、响应式切换和受影响页面，不扩大为无关工具页回归。
-- **滚动容器**（真实滚动容器或 `OverlayScrollbar`）：静态检查横纵轴资格、嵌套滚动、动态内容/尺寸变化、失焦清理，以及滚动条的可访问性和命中区预留。
-- **浮层**（`Popover`、`Select`、`Dialog` 等）：静态检查 Portal 挂载位置、实际滚动层和 Dialog 内浮层的滚动与定位关系。
-- **CodeMirror/常驻工具页**：静态检查隐藏页面不卸载、状态（撤销历史和滚动位置）保留、尺寸链，以及编辑器自身滚动责任。
+- **普通布局**：直接尺寸链、响应式切换和受影响页面。
+- **滚动容器**：按 [overlay-scrollbar.md](./overlay-scrollbar.md) 检查。
+- **浮层**：Portal 挂载位置、实际滚动层，以及 Dialog 内浮层的滚动与定位关系。
+- **CodeMirror/常驻工具页**：隐藏页面不卸载、撤销历史和滚动位置保留、尺寸链，以及编辑器自身滚动责任。

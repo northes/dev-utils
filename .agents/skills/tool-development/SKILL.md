@@ -1,18 +1,14 @@
 ---
 name: tool-development
-description: 指导本项目新增开发者工具的组件结构、App 路由、命令面板、历史记录、托盘识别、locale 和验证接线。新增 JSON、JWT、文本或其他工具时使用。
+description: 仅在新增开发者工具，或改变 ToolId、工具注册、导航、常驻挂载、命令面板、历史记录或托盘识别时使用。现有工具的算法、文案或样式修改不要使用本 skill。
 user-invocable: false
 ---
-
-## 适用范围与快速路径
-
-- 新增工具，或改变 `ToolId`、工具注册、导航、常驻挂载、命令、历史记录或托盘识别能力时，执行下方完整接线清单。
-- 现有工具的内部算法、局部交互、用户可见文案或样式修改，只检查组件及其直接依赖，并按实际变更加载 `i18n-guidance`、`layout-guidance` 等相关 skill；不默认检查 Go、托盘、历史记录和所有注册点。用户可见文案仍必须通过 i18n 资源提供。
-- 调查发现变更跨越上述边界时，再升级到完整接线清单。
 
 # 新增工具
 
 新增工具必须完成完整接线，不能只新增一个组件并把导航或历史逻辑留在旧代码中。工具组件使用 `ToolLayout`、`ToolActionBar` 和共享类型，遵循现有工具的数据流。
+
+调查发现变更跨越 `ToolId`、注册、导航、常驻挂载、命令、历史或托盘识别时，再升级到完整接线清单。编解码类工具（例如 JWT）的产品特例见 [examples.md](./examples.md)，仅在新增同类工具时读取。
 
 ## 必需接线
 
@@ -31,17 +27,13 @@ user-invocable: false
    - `tools` 数组加入侧栏和路由定义。
    - 加入常驻 `tool-slot` 渲染，切页只隐藏不卸载。
    - `paletteItems` 加入 `open:<id>` 导航命令和实际存在的工具动作命令。
-   - 命令 `labelKey` 直接复用界面按钮文案；切换型命令才使用独立的 `commands.toggleXxx`。
 4. `frontend/src/components/HistoryPage.tsx`
    - 同步更新 `toHistoryItem`、`HistoryIcon` 和 `historyTools`。
    - 否则工具记录会被过滤或显示缺少图标。
 5. locale
    - `frontend/src/locales/zh-CN.json` 和 `frontend/src/locales/en-US.json` 同步增加 `tools.<id>`、导航命令和工具文案。
-   - 不在组件、App 或 Go 托盘菜单中硬编码用户可见文案。
-   - 具体 key 命名和语言资源规则遵循 `i18n-guidance` skill。
 6. 页面恢复
-   - 上次打开的工具或页面只使用 `localStorage` key `devutils.lastPage`。
-   - 设置配置仍由 Go `ConfigService` 管理，不得写入 localStorage。
+   - 不要为新工具新增设置类 localStorage；页面恢复 key 见 `AGENTS.md`。
 
 ## 命令面板
 
@@ -62,19 +54,8 @@ user-invocable: false
 
 三处工具 ID 必须一致。新支持的工具默认开启；已有用户配置通过一次性迁移加入，之后用户手动关闭必须持久化，不能每次启动重新开启。
 
-## 以 JWT 为例
+## 静态检查
 
-- 纯前端解码，不新增依赖；复用共享 `decodeBase64` 解 header/payload。
-- 使用左侧可编辑 CodeMirror，右侧上下只读 header/payload；不展示 signature。
-- 底部动作顺序为“清空 → 复制 Header → 复制 Payload”，对应 tertiary、secondary、primary。
-- 托盘命中要求三段 base64url JWT，且 header、payload 都能解为非空 JSON 对象。
-- JWT 检测顺序在 time 之后、base64/json/text 之前。
-
-## 验证
-
-- 检查工具 ID 在侧栏、路由、常驻挂载、命令面板、历史记录和 locale 中完整出现。
-- 检查 pending action 不会被其他常驻工具消费，切换页后编辑器状态和撤销历史仍保留。
-- 检查托盘识别开关、默认值、迁移和用户关闭状态一致。
-- 在 `frontend/` 运行 `npx tsc --noEmit` 和 `npm run build`，项目根目录运行 `go test ./...` 和 `git diff --check`。
-- 本项目禁止使用 Playwright、Computer Use 或其他浏览器自动化验证。
-- 完整命令矩阵和 Go/Wails 变更验证遵循 `project-validation` skill。
+- 工具 ID 在侧栏、路由、常驻挂载、命令面板、历史记录和 locale 中完整出现。
+- pending action 不会被其他常驻工具消费，切页后编辑器状态和撤销历史仍保留。
+- 若支持托盘识别：开关、默认值、迁移和用户关闭状态一致。

@@ -8,30 +8,21 @@
 ## 语言与国际化
 
 - 始终使用简体中文与用户沟通；代码注释、报告和评审意见使用中文；Git commit subject/body 必须使用英文。
-- 应用默认语言和回退语言为 `zh-CN`。前端用户可见文案必须通过 i18n 资源提供；原生 Go 托盘文案遵循 `.agents/skills/i18n-guidance/SKILL.md`。
+- 应用默认语言和回退语言为 `zh-CN`。前端用户可见文案必须通过 i18n 资源提供。
 
-## 强制 Skill 路由
+## Skill 加载
 
-### 范围判定
-
-- 只加载直接命中当前变更边界的 skill；`project-validation` 仅可手动调用用于实现完成后的验证，不在任务开始时展开完整验证矩阵。
-- 修改现有工具的局部行为或样式，且不改变工具 ID、注册、导航、历史、托盘、配置、事件或 bindings 时，不执行新增工具的完整接线清单。
-- 仅在持久化 Config、Wails 事件、托盘、Go 服务或 bindings 边界实际受影响时，才梳理前后端接线。
+- 只加载 description 直接命中当前变更边界的 skill；禁止因“相关领域”顺带加载相邻 skill。
+- `project-validation` 仅在实现完成后按 diff 执行一次；实现过程中不要加载。
+- 修改现有工具的局部行为或样式，且不改变工具 ID、注册、导航、历史、托盘、配置、事件或 bindings 时，不要加载 `tool-development`。
+- 仅在持久化 Config、Wails 事件、托盘、Go 服务或 bindings 实际受影响时，才加载 `wails-integration`。
+- 不要因为普通样式、布局或现有组件 `className` 调整加载 `shadcn`；仅在安装、更新、添加 shadcn 组件或修改 `components.json` 时加载。
+- `migrate-radix-to-base` 仅在用户明确要求 Radix 到 Base UI 迁移时加载。
 - 先检查直接生产者和消费者；发现跨界证据后再扩展检查范围，不做无依据的全仓扫描。
-
-- 主题实现与接线：`.agents/skills/theme-customization/SKILL.md`
-- 主题回归验证：`.agents/skills/theme-validation/SKILL.md`
-- 工具页、编辑器、浮层或滚动条：`.agents/skills/layout-guidance/SKILL.md`
-- 新增开发者工具及其接线：`.agents/skills/tool-development/SKILL.md`
-- Wails、Go 服务、托盘、窗口、配置、事件或 bindings：`.agents/skills/wails-integration/SKILL.md`
-- UI 文案、locale 或语言设置：`.agents/skills/i18n-guidance/SKILL.md`
-- shadcn/Base UI 组件安装、更新、组合或样式：`.agents/skills/shadcn/SKILL.md`
-- 实现完成后的命令验证：`.agents/skills/project-validation/SKILL.md`
-- 明确进行 Radix 到 Base UI 迁移时使用 `.agents/skills/migrate-radix-to-base/SKILL.md`。
 
 ## 全局不变量
 
-- `default-light` 和 `default-dark` 是持久化配置值，不得改名、复用或删除；其他主题约束以主题 skills 为准。
+- `default-light` 和 `default-dark` 是持久化配置值，不得改名、复用或删除。
 - 设置页配置由 Go `ConfigService` 管理，前端不得写入设置 localStorage；唯一页面恢复 key 是 `devutils.lastPage`。
 - `frontend/bindings/` 是 Wails 生成文件，永远不要手工编辑；Go 导出类型变化后必须重新生成 bindings。
 - 所有项目开发、构建、打包和运行任务以根目录 `Taskfile.yml` 为准，通过 `wails3 task <name>` 执行。`main.go` 嵌入 `frontend/dist`，Go 构建前必须有前端产物。
