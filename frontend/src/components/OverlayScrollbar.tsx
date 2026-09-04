@@ -348,7 +348,8 @@ export default function OverlayScrollbar() {
     scan(document.body);
     paint();
     const onScroll = () => paint(),
-      onResize = () => paint();
+      onResize = () => paint(),
+      onMotionEnd = () => paint();
     const mo = new MutationObserver((records) => {
       let changed = false;
       for (const record of records) {
@@ -362,6 +363,8 @@ export default function OverlayScrollbar() {
       if (changed) paint();
     });
     document.addEventListener('scroll', onScroll, true);
+    document.addEventListener('animationend', onMotionEnd, true);
+    document.addEventListener('transitionend', onMotionEnd, true);
     window.addEventListener('resize', onResize);
     mo.observe(document.body, {
       subtree: true,
@@ -373,6 +376,8 @@ export default function OverlayScrollbar() {
     return () => {
       cleanupDragRef.current();
       document.removeEventListener('scroll', onScroll, true);
+      document.removeEventListener('animationend', onMotionEnd, true);
+      document.removeEventListener('transitionend', onMotionEnd, true);
       window.removeEventListener('resize', onResize);
       mo.disconnect();
       resizeRef.current?.disconnect();
