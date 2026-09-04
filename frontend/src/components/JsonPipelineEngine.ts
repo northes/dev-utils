@@ -1,48 +1,48 @@
-export type WorkflowItemType = 'extract' | 'sort' | 'arraySort' | 'filter' | 'template';
-export type WorkflowSortMode = 'key' | 'value';
-export type WorkflowDirection = 'asc' | 'desc';
-export type WorkflowItem = {
+export type PipelineItemType = 'extract' | 'sort' | 'arraySort' | 'filter' | 'template';
+export type PipelineSortMode = 'key' | 'value';
+export type PipelineDirection = 'asc' | 'desc';
+export type PipelineItem = {
   id: string;
   enabled: boolean;
-  type: WorkflowItemType;
+  type: PipelineItemType;
   path: string;
-  sortMode: WorkflowSortMode;
-  direction: WorkflowDirection;
+  sortMode: PipelineSortMode;
+  direction: PipelineDirection;
   arrayPath: string;
   itemPath: string;
   filterValue: string;
   template: string;
 };
-export type WorkflowError = { code: string; item?: number; path?: string; index?: number };
-export type WorkflowContexts = {
+export type PipelineError = { code: string; item?: number; path?: string; index?: number };
+export type PipelineContexts = {
   roots: unknown[];
   itemRoots: unknown[];
   filterValues: unknown[][];
 };
-export type WorkflowEvaluation = {
+export type PipelineEvaluation = {
   output: string;
-  error: WorkflowError | null;
+  error: PipelineError | null;
   text: boolean;
-  contexts: WorkflowContexts;
+  contexts: PipelineContexts;
 };
-export type WorkflowWorkerRequest = { id: number; source: string; rules: WorkflowItem[] };
-export type WorkflowWorkerResponse = { id: number; result: WorkflowEvaluation };
+export type PipelineWorkerRequest = { id: number; source: string; rules: PipelineItem[] };
+export type PipelineWorkerResponse = { id: number; result: PipelineEvaluation };
 
 type PathToken = { type: 'key' | 'index' | 'all'; value: string };
 type Scalar = null | boolean | number | string;
 
-class WorkflowPathError extends Error {
+class PipelinePathError extends Error {
   constructor(readonly code: string) {
     super(code);
   }
 }
-class WorkflowRunError extends Error {
-  constructor(readonly error: WorkflowError) {
+class PipelineRunError extends Error {
+  constructor(readonly error: PipelineError) {
     super(error.code);
   }
 }
-const fail = (error: WorkflowError): never => {
-  throw new WorkflowRunError(error);
+const fail = (error: PipelineError): never => {
+  throw new PipelineRunError(error);
 };
 export const isObject = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -129,7 +129,7 @@ function parsePath(path: string): PathToken[] {
     }
     if (source[index] === '[') {
       const end = source.indexOf(']', index);
-      if (end < 0) throw new WorkflowPathError('missingBracket');
+      if (end < 0) throw new PipelinePathError('missingBracket');
       const inner = source.slice(index + 1, end).trim();
       if (inner === '*') tokens.push({ type: 'all', value: '*' });
       else if (/^-?\d+$/.test(inner)) tokens.push({ type: 'index', value: inner });
@@ -138,14 +138,14 @@ function parsePath(path: string): PathToken[] {
         (inner.startsWith('"') && inner.endsWith('"'))
       )
         tokens.push({ type: 'key', value: inner.slice(1, -1) });
-      else throw new WorkflowPathError('invalidSegment');
+      else throw new PipelinePathError('invalidSegment');
       index = end + 1;
     } else if (/[A-Za-z0-9_$]/.test(source[index])) {
       let end = index;
       while (end < source.length && /[A-Za-z0-9_$-]/.test(source[end])) end++;
       tokens.push({ type: 'key', value: source.slice(index, end) });
       index = end;
-    } else throw new WorkflowPathError('invalidChar');
+    } else throw new PipelinePathError('invalidChar');
   }
   return tokens;
 }
@@ -154,16 +154,16 @@ function readTokens(value: unknown, tokens: PathToken[], offset = 0): unknown {
   const token = tokens[offset];
   if (token.type === 'all') {
     const children = Array.isArray(value) ? value : isObject(value) ? Object.values(value) : [];
-    if (!Array.isArray(value) && !isObject(value)) throw new WorkflowPathError('notContainer');
+    if (!Array.isArray(value) && !isObject(value)) throw new PipelinePathError('notContainer');
     return children.map((child) => readTokens(child, tokens, offset + 1));
   }
   if (token.type === 'index') {
-    if (!Array.isArray(value)) throw new WorkflowPathError('notArray');
+    if (!Array.isArray(value)) throw new PipelinePathError('notArray');
     const index = Number(token.value);
-    if (index < 0 || index >= value.length) throw new WorkflowPathError('indexOutOfRange');
+    if (index < 0 || index >= value.length) throw new PipelinePathError('indexOutOfRange');
     return readTokens(value[index], tokens, offset + 1);
   }
-  if (!isObject(value) || !(token.value in value)) throw new WorkflowPathError('pathNotFound');
+  if (!isObject(value) || !(token.value in value)) throw new PipelinePathError('pathNotFound');
   return readTokens(value[token.value], tokens, offset + 1);
 }
 function readPath(
@@ -194,7 +194,7 @@ function readPath(
   try {
     return readTokens(value, tokens);
   } catch (error) {
-    if (error instanceof WorkflowPathError) {
+    if (error instanceof PipelinePathError) {
       if (error.code === 'notContainer' || error.code === 'notArray')
         return fail({
           code:
@@ -229,7 +229,7 @@ function readOptionalPath(
   try {
     return { ok: true, value: readTokens(value, tokens) };
   } catch (error) {
-    if (error instanceof WorkflowPathError && error.code === 'pathNotFound') return { ok: false };
+    if (error instanceof PipelinePathError && error.code === 'pathNotFound') return { ok: false };
     throw error;
   }
 }
@@ -247,7 +247,7 @@ function compareValues(a: Scalar, b: Scalar) {
 function stableSort<T>(
   items: T[],
   key: (item: T, index: number) => Scalar,
-  direction: WorkflowDirection,
+  direction: PipelineDirection,
 ) {
   return items
     .map((item, index) => ({ item, index }))
@@ -257,7 +257,7 @@ function stableSort<T>(
     })
     .map((entry) => entry.item);
 }
-function sortKeys(value: unknown, direction: WorkflowDirection): unknown {
+function sortKeys(value: unknown, direction: PipelineDirection): unknown {
   if (Array.isArray(value)) return value.map((item) => sortKeys(item, direction));
   if (!isObject(value)) return value;
   const result: Record<string, unknown> = {};
@@ -268,7 +268,7 @@ function sortKeys(value: unknown, direction: WorkflowDirection): unknown {
     result[key] = sortKeys(value[key], direction);
   return result;
 }
-function sortValues(value: unknown, direction: WorkflowDirection): unknown {
+function sortValues(value: unknown, direction: PipelineDirection): unknown {
   if (Array.isArray(value)) {
     const next = value.every(isScalar) ? stableSort(value, (item) => item, direction) : value;
     return next.map((item) => sortValues(item, direction));
@@ -286,16 +286,16 @@ function updatePath(
 ): unknown {
   if (offset >= tokens.length) return update(value);
   const token = tokens[offset];
-  if (token.type === 'all') throw new WorkflowPathError('multiple');
+  if (token.type === 'all') throw new PipelinePathError('multiple');
   if (token.type === 'index') {
-    if (!Array.isArray(value)) throw new WorkflowPathError('notArray');
+    if (!Array.isArray(value)) throw new PipelinePathError('notArray');
     const index = Number(token.value);
-    if (index < 0 || index >= value.length) throw new WorkflowPathError('indexOutOfRange');
+    if (index < 0 || index >= value.length) throw new PipelinePathError('indexOutOfRange');
     const result = [...value];
     result[index] = updatePath(result[index], tokens, update, offset + 1);
     return result;
   }
-  if (!isObject(value) || !(token.value in value)) throw new WorkflowPathError('pathNotFound');
+  if (!isObject(value) || !(token.value in value)) throw new PipelinePathError('pathNotFound');
   return { ...value, [token.value]: updatePath(value[token.value], tokens, update, offset + 1) };
 }
 function pathTokens(path: string, index: number, kind: 'arrayPath' | 'itemPath') {
@@ -310,11 +310,11 @@ function pathTokens(path: string, index: number, kind: 'arrayPath' | 'itemPath')
       return fail({ code: 'pathMultiple', item: index, path });
     return tokens;
   } catch (error) {
-    if (error instanceof WorkflowRunError) throw error;
+    if (error instanceof PipelineRunError) throw error;
     return fail({ code: 'invalidPath', item: index, path });
   }
 }
-function executeArraySort(value: unknown, item: WorkflowItem, index: number) {
+function executeArraySort(value: unknown, item: PipelineItem, index: number) {
   const arrayTokens = pathTokens(item.arrayPath, index, 'arrayPath');
   const itemTokens = pathTokens(item.itemPath, index, 'itemPath');
   let target: unknown;
@@ -352,11 +352,11 @@ function parseFilterValue(raw: string, index: number) {
     if (!isScalar(value)) return fail({ code: 'filterValueInvalid', item: index });
     return value;
   } catch (error) {
-    if (error instanceof WorkflowRunError) throw error;
+    if (error instanceof PipelineRunError) throw error;
     return fail({ code: 'filterValueInvalid', item: index });
   }
 }
-function executeFilter(value: unknown, item: WorkflowItem, index: number) {
+function executeFilter(value: unknown, item: PipelineItem, index: number) {
   const arrayTokens = pathTokens(item.arrayPath, index, 'arrayPath');
   let target: unknown;
   try {
@@ -390,7 +390,7 @@ function executeTemplate(value: unknown, template: string, index: number) {
     return rendered === undefined ? '' : rendered;
   });
 }
-function executeItem(value: unknown, item: WorkflowItem, index: number) {
+function executeItem(value: unknown, item: PipelineItem, index: number) {
   if (item.type === 'extract')
     return { value: readPath(value, item.path, true, index, 'path'), text: false };
   if (item.type === 'sort') {
@@ -409,22 +409,22 @@ function executeItem(value: unknown, item: WorkflowItem, index: number) {
   if (item.type === 'filter') return { value: executeFilter(value, item, index), text: false };
   return { value: executeTemplate(value, item.template, index), text: true };
 }
-const emptyContexts = (rules: WorkflowItem[]): WorkflowContexts => ({
+const emptyContexts = (rules: PipelineItem[]): PipelineContexts => ({
   roots: Array(rules.length),
   itemRoots: Array(rules.length),
   filterValues: Array(rules.length),
 });
-export const emptyWorkflowEvaluation = (rules: WorkflowItem[] = []): WorkflowEvaluation => ({
+export const emptyPipelineEvaluation = (rules: PipelineItem[] = []): PipelineEvaluation => ({
   output: '',
   error: null,
   text: false,
   contexts: emptyContexts(rules),
 });
-const fillWorkflowContext = (
+const fillPipelineContext = (
   value: unknown,
-  item: WorkflowItem,
+  item: PipelineItem,
   index: number,
-  contexts: WorkflowContexts,
+  contexts: PipelineContexts,
 ) => {
   contexts.roots[index] = value;
   contexts.itemRoots[index] = value;
@@ -459,7 +459,7 @@ const fillWorkflowContext = (
     }
   }
 };
-export function evaluateWorkflow(source: string, rules: WorkflowItem[]): WorkflowEvaluation {
+export function evaluatePipeline(source: string, rules: PipelineItem[]): PipelineEvaluation {
   const contexts = emptyContexts(rules);
   if (!source.trim()) return { output: '', error: null, text: false, contexts };
   let value: unknown;
@@ -472,7 +472,7 @@ export function evaluateWorkflow(source: string, rules: WorkflowItem[]): Workflo
   try {
     for (let index = 0; index < rules.length; index++) {
       const item = rules[index];
-      fillWorkflowContext(value, item, index, contexts);
+      fillPipelineContext(value, item, index, contexts);
       if (!item.enabled) continue;
       if (item.type === 'template' && rules.slice(index + 1).some((next) => next.enabled))
         fail({ code: 'templateNotLast', item: index });
@@ -489,7 +489,7 @@ export function evaluateWorkflow(source: string, rules: WorkflowItem[]): Workflo
   } catch (error) {
     return {
       output: '',
-      error: error instanceof WorkflowRunError ? error.error : { code: 'failed' },
+      error: error instanceof PipelineRunError ? error.error : { code: 'failed' },
       text: false,
       contexts,
     };

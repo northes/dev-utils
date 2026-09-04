@@ -1,20 +1,20 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  emptyWorkflowEvaluation,
-  evaluateWorkflow,
-  type WorkflowEvaluation,
-  type WorkflowItem,
-  type WorkflowWorkerRequest,
-  type WorkflowWorkerResponse,
-} from './JsonWorkflowEngine';
+  emptyPipelineEvaluation,
+  evaluatePipeline,
+  type PipelineEvaluation,
+  type PipelineItem,
+  type PipelineWorkerRequest,
+  type PipelineWorkerResponse,
+} from './JsonPipelineEngine';
 
-export function useDebouncedWorkflowEvaluation(
+export function useDebouncedPipelineEvaluation(
   enabled: boolean,
   source: string,
-  rules: WorkflowItem[],
+  rules: PipelineItem[],
   delay = 150,
 ) {
-  const [resolved, setResolved] = useState<WorkflowEvaluation>(() => emptyWorkflowEvaluation());
+  const [resolved, setResolved] = useState<PipelineEvaluation>(() => emptyPipelineEvaluation());
   const revision = useRef(0);
   const request = useRef(0);
   const timer = useRef<number | null>(null);
@@ -35,25 +35,25 @@ export function useDebouncedWorkflowEvaluation(
     if (!enabled) {
       worker.current?.terminate();
       worker.current = null;
-      setResolved(emptyWorkflowEvaluation());
+      setResolved(emptyPipelineEvaluation());
       return;
     }
-    setResolved(emptyWorkflowEvaluation(rules));
+    setResolved(emptyPipelineEvaluation(rules));
     timer.current = window.setTimeout(() => {
       timer.current = null;
-      const commit = (value: WorkflowEvaluation) => {
+      const commit = (value: PipelineEvaluation) => {
         if (current === revision.current) setResolved(value);
       };
-      const fallback = () => commit(evaluateWorkflow(source, rules));
+      const fallback = () => commit(evaluatePipeline(source, rules));
       try {
         const instance =
           worker.current ??
-          new Worker(new URL('../utils/jsonWorkflow.worker.ts', import.meta.url), {
+          new Worker(new URL('../utils/jsonPipeline.worker.ts', import.meta.url), {
             type: 'module',
           });
         worker.current = instance;
         const id = ++request.current;
-        instance.onmessage = (event: MessageEvent<WorkflowWorkerResponse>) => {
+        instance.onmessage = (event: MessageEvent<PipelineWorkerResponse>) => {
           if (event.data.id !== id) return;
           commit(event.data.result);
         };
@@ -63,7 +63,7 @@ export function useDebouncedWorkflowEvaluation(
           worker.current = null;
           fallback();
         };
-        const message: WorkflowWorkerRequest = { id, source, rules };
+        const message: PipelineWorkerRequest = { id, source, rules };
         instance.postMessage(message);
       } catch {
         fallback();
@@ -76,5 +76,5 @@ export function useDebouncedWorkflowEvaluation(
       }
     };
   }, [enabled, source, rules, delay]);
-  return enabled ? resolved : emptyWorkflowEvaluation(rules);
+  return enabled ? resolved : emptyPipelineEvaluation(rules);
 }

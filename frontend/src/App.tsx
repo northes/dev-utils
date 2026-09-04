@@ -506,57 +506,57 @@ const paletteItems: PaletteItem[] = [
     context: 'json.schema',
   },
   {
-    id: 'json:workflow',
-    labelKey: 'commands.toggleWorkflow',
+    id: 'json:pipeline',
+    labelKey: 'commands.togglePipeline',
     groupKey: 'tools.json.name',
     icon: BracketsCurly,
-    keywords: 'workflow pipeline item transform rule 工作流 流程 规则 项目 转换',
+    keywords: 'pipeline item transform rule 流水线 流程 规则 项目 转换',
     tool: 'json',
-    action: 'workflow',
+    action: 'pipeline',
   },
   {
-    id: 'json:workflow:addItem',
-    labelKey: 'jsonTool.workflow.addItem',
+    id: 'json:pipeline:addItem',
+    labelKey: 'jsonTool.pipeline.addItem',
     groupKey: 'tools.json.name',
-    subgroupKey: 'jsonTool.workflow.title',
+    subgroupKey: 'jsonTool.pipeline.title',
     icon: BracketsCurly,
-    keywords: 'workflow add item step node rule 工作流 添加 节点 步骤 项目 规则',
+    keywords: 'pipeline add item step node rule 流水线 添加 节点 步骤 项目 规则',
     tool: 'json',
-    action: 'workflowAddItem',
-    context: 'json.workflow',
+    action: 'pipelineAddItem',
+    context: 'json.pipeline',
   },
   {
-    id: 'json:workflow:import',
-    labelKey: 'jsonTool.workflow.importConfig',
+    id: 'json:pipeline:import',
+    labelKey: 'jsonTool.pipeline.importConfig',
     groupKey: 'tools.json.name',
-    subgroupKey: 'jsonTool.workflow.title',
+    subgroupKey: 'jsonTool.pipeline.title',
     icon: BracketsCurly,
-    keywords: 'workflow import config clipboard 工作流 导入 配置 剪贴板',
+    keywords: 'pipeline import config clipboard 流水线 导入 配置 剪贴板',
     tool: 'json',
-    action: 'workflowImport',
-    context: 'json.workflow',
+    action: 'pipelineImport',
+    context: 'json.pipeline',
   },
   {
-    id: 'json:workflow:export',
-    labelKey: 'jsonTool.workflow.exportConfig',
+    id: 'json:pipeline:export',
+    labelKey: 'jsonTool.pipeline.exportConfig',
     groupKey: 'tools.json.name',
-    subgroupKey: 'jsonTool.workflow.title',
+    subgroupKey: 'jsonTool.pipeline.title',
     icon: BracketsCurly,
-    keywords: 'workflow export config clipboard 工作流 导出 配置 剪贴板',
+    keywords: 'pipeline export config clipboard 流水线 导出 配置 剪贴板',
     tool: 'json',
-    action: 'workflowExport',
-    context: 'json.workflow',
+    action: 'pipelineExport',
+    context: 'json.pipeline',
   },
   {
-    id: 'json:workflow:copy',
+    id: 'json:pipeline:copy',
     labelKey: 'jsonTool.copy',
     groupKey: 'tools.json.name',
-    subgroupKey: 'jsonTool.workflow.title',
+    subgroupKey: 'jsonTool.pipeline.title',
     icon: BracketsCurly,
-    keywords: 'workflow output copy result 工作流 输出 复制 结果',
+    keywords: 'pipeline output copy result 流水线 输出 复制 结果',
     tool: 'json',
-    action: 'workflowCopy',
-    context: 'json.workflow',
+    action: 'pipelineCopy',
+    context: 'json.pipeline',
   },
   {
     id: 'time:refresh',
@@ -1080,7 +1080,7 @@ function AppShell() {
   const [romanize, setRomanize] = useState<Romanize>(() => (text) => text);
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [jsonSchemaOpen, setJsonSchemaOpen] = useState(false);
-  const [jsonWorkflowOpen, setJsonWorkflowOpen] = useState(false);
+  const [jsonPipelineOpen, setJsonPipelineOpen] = useState(false);
   const [matchDialog, setMatchDialog] = useState<null | {
     tool: ToolId;
     input: string;
@@ -1235,10 +1235,10 @@ function AppShell() {
     return () => window.removeEventListener('devutils:json-schema', onSchema);
   }, []);
   useEffect(() => {
-    const onWorkflow = (event: Event) =>
-      setJsonWorkflowOpen((event as CustomEvent<boolean>).detail);
-    window.addEventListener('devutils:json-workflow', onWorkflow);
-    return () => window.removeEventListener('devutils:json-workflow', onWorkflow);
+    const onPipeline = (event: Event) =>
+      setJsonPipelineOpen((event as CustomEvent<boolean>).detail);
+    window.addEventListener('devutils:json-pipeline', onPipeline);
+    return () => window.removeEventListener('devutils:json-pipeline', onPipeline);
   }, []);
   useEffect(() => {
     const onMouseDown = (event: MouseEvent) => {
@@ -1393,7 +1393,7 @@ function AppShell() {
     const isTool = tools.some((tool) => tool.id === page);
     const contexts = new Set<PaletteContext>();
     if (jsonSchemaOpen && page === 'json') contexts.add('json.schema');
-    if (jsonWorkflowOpen && page === 'json') contexts.add('json.workflow');
+    if (jsonPipelineOpen && page === 'json') contexts.add('json.pipeline');
     const items = paletteItems.filter((item) => {
       const toolId = paletteToolId(item);
       if (toolId && !enabledToolSet.has(toolId)) return false;
@@ -1411,7 +1411,7 @@ function AppShell() {
       })),
       romanize,
     );
-  }, [t, jsonSchemaOpen, jsonWorkflowOpen, page, romanize, enabledToolSet]);
+  }, [t, jsonSchemaOpen, jsonPipelineOpen, page, romanize, enabledToolSet]);
   const record = (
     tool: ToolId,
     action: string,

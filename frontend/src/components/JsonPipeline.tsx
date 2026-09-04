@@ -28,29 +28,29 @@ import type { Extension } from '@codemirror/state';
 import { pathCompletions, valueCompletions } from './JsonPathCompletion';
 import { JsonErrorPanel } from './JsonErrorPanel';
 import { JsonTablePreview } from './JsonTablePreview';
-import { isObject } from './JsonWorkflowEngine';
+import { isObject } from './JsonPipelineEngine';
 import { parseJsonLoose } from './shared';
 import { toast } from './ui/toast';
 import '../styles/tools/editor.css';
 import '../styles/tools/json.css';
 import type {
-  WorkflowContexts,
-  WorkflowDirection,
-  WorkflowError,
-  WorkflowItem,
-  WorkflowItemType,
-  WorkflowSortMode,
-} from './JsonWorkflowEngine';
+  PipelineContexts,
+  PipelineDirection,
+  PipelineError,
+  PipelineItem,
+  PipelineItemType,
+  PipelineSortMode,
+} from './JsonPipelineEngine';
 
-class WorkflowConfigError extends Error {
+class PipelineConfigError extends Error {
   constructor() {
     super('invalidConfig');
   }
 }
-const createWorkflowId = () => `workflow-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-function newWorkflowItem(type: WorkflowItemType = 'extract'): WorkflowItem {
+const createPipelineId = () => `pipeline-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+function newPipelineItem(type: PipelineItemType = 'extract'): PipelineItem {
   return {
-    id: createWorkflowId(),
+    id: createPipelineId(),
     enabled: true,
     type,
     path: '$',
@@ -62,48 +62,48 @@ function newWorkflowItem(type: WorkflowItemType = 'extract'): WorkflowItem {
     template: '{$.name}?token={$.token}',
   };
 }
-const typeOptions: WorkflowItemType[] = ['extract', 'sort', 'arraySort', 'filter', 'template'];
+const typeOptions: PipelineItemType[] = ['extract', 'sort', 'arraySort', 'filter', 'template'];
 const configString = (item: Record<string, unknown>, key: string, fallback: string) => {
   const value = item[key];
   if (value === undefined) return fallback;
-  if (typeof value !== 'string') throw new WorkflowConfigError();
+  if (typeof value !== 'string') throw new PipelineConfigError();
   return value;
 };
-export function parseWorkflowConfig(source: string): WorkflowItem[] {
+export function parsePipelineConfig(source: string): PipelineItem[] {
   let parsed: unknown;
   try {
     parsed = JSON.parse(source);
   } catch {
-    throw new WorkflowConfigError();
+    throw new PipelineConfigError();
   }
   if (isObject(parsed) && parsed.version !== undefined && parsed.version !== 1)
-    throw new WorkflowConfigError();
+    throw new PipelineConfigError();
   const items = Array.isArray(parsed)
     ? parsed
     : isObject(parsed) && Array.isArray(parsed.items)
       ? parsed.items
       : null;
-  if (!items) throw new WorkflowConfigError();
+  if (!items) throw new PipelineConfigError();
   const result = items.map((raw) => {
     if (
       !isObject(raw) ||
       typeof raw.type !== 'string' ||
-      !typeOptions.includes(raw.type as WorkflowItemType)
+      !typeOptions.includes(raw.type as PipelineItemType)
     )
-      throw new WorkflowConfigError();
+      throw new PipelineConfigError();
     if (raw.enabled !== undefined && typeof raw.enabled !== 'boolean')
-      throw new WorkflowConfigError();
+      throw new PipelineConfigError();
     if (raw.sortMode !== undefined && raw.sortMode !== 'key' && raw.sortMode !== 'value')
-      throw new WorkflowConfigError();
+      throw new PipelineConfigError();
     if (raw.direction !== undefined && raw.direction !== 'asc' && raw.direction !== 'desc')
-      throw new WorkflowConfigError();
-    const item: WorkflowItem = {
-      id: createWorkflowId(),
+      throw new PipelineConfigError();
+    const item: PipelineItem = {
+      id: createPipelineId(),
       enabled: raw.enabled ?? true,
-      type: raw.type as WorkflowItemType,
+      type: raw.type as PipelineItemType,
       path: configString(raw, 'path', '$'),
-      sortMode: (raw.sortMode ?? 'key') as WorkflowSortMode,
-      direction: (raw.direction ?? 'asc') as WorkflowDirection,
+      sortMode: (raw.sortMode ?? 'key') as PipelineSortMode,
+      direction: (raw.direction ?? 'asc') as PipelineDirection,
       arrayPath: configString(raw, 'arrayPath', '$'),
       itemPath: configString(raw, 'itemPath', '$'),
       filterValue: configString(raw, 'filterValue', ''),
@@ -111,15 +111,15 @@ export function parseWorkflowConfig(source: string): WorkflowItem[] {
     };
     return item;
   });
-  if (result.filter((item) => item.type === 'template').length > 1) throw new WorkflowConfigError();
+  if (result.filter((item) => item.type === 'template').length > 1) throw new PipelineConfigError();
   const template = result.find((item) => item.type === 'template');
   return template ? [...result.filter((item) => item !== template), template] : result;
 }
-export function serializeWorkflow(rules: WorkflowItem[]): string {
+export function serializePipeline(rules: PipelineItem[]): string {
   return JSON.stringify({ version: 1, items: rules.map(({ id, ...item }) => item) }, null, 2);
 }
 
-function WorkflowSelect({
+function PipelineSelect({
   label,
   value,
   options,
@@ -141,7 +141,7 @@ function WorkflowSelect({
       }}
     >
       <SelectTrigger
-        className={`json-workflow-select h-[30px] min-h-[30px] w-full min-w-0 flex-1 justify-self-stretch px-[9px] text-[11px] ${className}`.trim()}
+        className={`json-pipeline-select h-[30px] min-h-[30px] w-full min-w-0 flex-1 justify-self-stretch px-[9px] text-[11px] ${className}`.trim()}
         aria-label={label}
       >
         <SelectValue />
@@ -194,12 +194,12 @@ function PathField({
     [completion, template],
   );
   return (
-    <label className="json-workflow-field flex min-w-0 items-center gap-2 @max-[520px]/workflow-rules:items-stretch @max-[520px]/workflow-rules:flex-col @max-[520px]/workflow-rules:gap-[5px]">
-      <span className="w-[86px] min-w-[86px] whitespace-nowrap font-mono text-[10px] font-medium leading-none tracking-[.02em] text-muted-foreground @max-[520px]/workflow-rules:w-auto @max-[520px]/workflow-rules:min-w-0">
+    <label className="json-pipeline-field flex min-w-0 items-center gap-2 @max-[520px]/pipeline-rules:items-stretch @max-[520px]/pipeline-rules:flex-col @max-[520px]/pipeline-rules:gap-[5px]">
+      <span className="w-[86px] min-w-[86px] whitespace-nowrap font-mono text-[10px] font-medium leading-none tracking-[.02em] text-muted-foreground @max-[520px]/pipeline-rules:w-auto @max-[520px]/pipeline-rules:min-w-0">
         {label}
       </span>
       <CodeMirror
-        className="json-cm json-workflow-path-cm min-w-0 flex-1 overflow-visible rounded-lg border border-input bg-card focus-within:border-ring"
+        className="json-cm json-pipeline-path-cm min-w-0 flex-1 overflow-visible rounded-lg border border-input bg-card focus-within:border-ring"
         height="30px"
         value={value}
         placeholder={placeholder}
@@ -236,16 +236,16 @@ function SelectField({
   onSelect: (value: string) => void;
 }) {
   return (
-    <label className="json-workflow-field json-workflow-select-field flex min-w-0 items-center gap-2 @max-[520px]/workflow-rules:items-stretch @max-[520px]/workflow-rules:flex-col @max-[520px]/workflow-rules:gap-[5px]">
-      <span className="w-[86px] min-w-[86px] whitespace-nowrap font-mono text-[10px] font-medium leading-none tracking-[.02em] text-muted-foreground @max-[520px]/workflow-rules:w-auto @max-[520px]/workflow-rules:min-w-0">
+    <label className="json-pipeline-field json-pipeline-select-field flex min-w-0 items-center gap-2 @max-[520px]/pipeline-rules:items-stretch @max-[520px]/pipeline-rules:flex-col @max-[520px]/pipeline-rules:gap-[5px]">
+      <span className="w-[86px] min-w-[86px] whitespace-nowrap font-mono text-[10px] font-medium leading-none tracking-[.02em] text-muted-foreground @max-[520px]/pipeline-rules:w-auto @max-[520px]/pipeline-rules:min-w-0">
         {label}
       </span>
-      <WorkflowSelect label={label} value={value} options={options} onSelect={onSelect} />
+      <PipelineSelect label={label} value={value} options={options} onSelect={onSelect} />
     </label>
   );
 }
 
-function WorkflowRuleRow({
+function PipelineRuleRow({
   item,
   index,
   root,
@@ -258,15 +258,15 @@ function WorkflowRuleRow({
   onRemove,
   onFirstEditorCreate,
 }: {
-  item: WorkflowItem;
+  item: PipelineItem;
   index: number;
   root: unknown;
   itemRoot: unknown;
   filterValues: unknown[];
-  labels: Record<WorkflowItemType, string>;
+  labels: Record<PipelineItemType, string>;
   theme: Extension;
-  onUpdate: (id: string, patch: Partial<WorkflowItem>) => void;
-  onTypeChange: (item: WorkflowItem, type: WorkflowItemType) => void;
+  onUpdate: (id: string, patch: Partial<PipelineItem>) => void;
+  onTypeChange: (item: PipelineItem, type: PipelineItemType) => void;
   onRemove: (id: string) => void;
   onFirstEditorCreate: (id: string, view: EditorView) => void;
 }) {
@@ -289,55 +289,55 @@ function WorkflowRuleRow({
     <div
       ref={setNodeRef}
       style={style}
-      className={`json-workflow-item border-b border-border px-3 pt-3.5 pb-6${item.enabled ? '' : ' opacity-[.55]'}${isDragging ? ' bg-[color-mix(in_oklch,var(--primary)_12%,transparent)]' : ''}`}
+      className={`json-pipeline-item border-b border-border px-3 pt-3.5 pb-6${item.enabled ? '' : ' opacity-[.55]'}${isDragging ? ' bg-[color-mix(in_oklch,var(--primary)_12%,transparent)]' : ''}`}
     >
-      <div className="json-workflow-item-header grid min-w-0 grid-cols-[28px_24px_minmax(0,1fr)_28px_28px] items-center gap-2">
+      <div className="json-pipeline-item-header grid min-w-0 grid-cols-[28px_24px_minmax(0,1fr)_28px_28px] items-center gap-2">
         <Button
           ref={setActivatorNodeRef}
           variant="ghost"
           size="icon-sm"
-          className="json-workflow-drag flex-none cursor-grab touch-none text-muted-foreground"
+          className="json-pipeline-drag flex-none cursor-grab touch-none text-muted-foreground"
           {...attributes}
           {...listeners}
-          aria-label={t('jsonTool.workflow.drag')}
-          title={t('jsonTool.workflow.drag')}
+          aria-label={t('jsonTool.pipeline.drag')}
+          title={t('jsonTool.pipeline.drag')}
         >
           <DotsSixVertical size={14} weight="duotone" />
         </Button>
-        <span className="json-workflow-index w-6 min-w-6 text-center font-mono text-[10px] font-medium leading-none text-muted-foreground">
+        <span className="json-pipeline-index w-6 min-w-6 text-center font-mono text-[10px] font-medium leading-none text-muted-foreground">
           {String(index + 1).padStart(2, '0')}
         </span>
-        <WorkflowSelect
-          label={t('jsonTool.workflow.type')}
+        <PipelineSelect
+          label={t('jsonTool.pipeline.type')}
           value={item.type}
           options={typeOptions.map((type) => ({ key: type, label: labels[type] }))}
-          onSelect={(value) => onTypeChange(item, value as WorkflowItemType)}
-          className="json-workflow-type w-full min-w-0 justify-self-stretch"
+          onSelect={(value) => onTypeChange(item, value as PipelineItemType)}
+          className="json-pipeline-type w-full min-w-0 justify-self-stretch"
         />
         <Switch
           size="sm"
-          className="json-workflow-enabled flex-none justify-self-end"
+          className="json-pipeline-enabled flex-none justify-self-end"
           checked={item.enabled}
           onCheckedChange={(checked) => onUpdate(item.id, { enabled: checked })}
-          aria-label={t('jsonTool.workflow.enableItem')}
+          aria-label={t('jsonTool.pipeline.enableItem')}
         />
         <Button
           variant="ghost"
           size="icon-sm"
-          className="json-workflow-delete flex-none text-muted-foreground"
+          className="json-pipeline-delete flex-none text-muted-foreground"
           onClick={() => onRemove(item.id)}
-          aria-label={t('jsonTool.workflow.delete')}
-          title={t('jsonTool.workflow.delete')}
+          aria-label={t('jsonTool.pipeline.delete')}
+          title={t('jsonTool.pipeline.delete')}
         >
           <Trash size={14} weight="duotone" />
         </Button>
       </div>
-      <div className="json-workflow-item-body min-w-0 pt-2.5 pl-[66px] @max-[520px]/workflow-rules:pl-0">
+      <div className="json-pipeline-item-body min-w-0 pt-2.5 pl-[66px] @max-[520px]/pipeline-rules:pl-0">
         {item.type === 'extract' && (
           <PathField
-            label={t('jsonTool.workflow.path')}
+            label={t('jsonTool.pipeline.path')}
             value={item.path}
-            placeholder={t('jsonTool.workflow.pathPlaceholder')}
+            placeholder={t('jsonTool.pipeline.pathPlaceholder')}
             onChange={(value) => onUpdate(item.id, { path: value })}
             root={root}
             theme={theme}
@@ -345,80 +345,80 @@ function WorkflowRuleRow({
           />
         )}{' '}
         {item.type === 'sort' && (
-          <div className="json-workflow-inline-fields grid grid-cols-2 gap-x-2 gap-y-2.5 @max-[520px]/workflow-rules:grid-cols-1">
+          <div className="json-pipeline-inline-fields grid grid-cols-2 gap-x-2 gap-y-2.5 @max-[520px]/pipeline-rules:grid-cols-1">
             <SelectField
-              label={t('jsonTool.workflow.sortMode')}
+              label={t('jsonTool.pipeline.sortMode')}
               value={item.sortMode}
               options={[
                 { key: 'key', label: t('jsonTool.sortByKey') },
                 { key: 'value', label: t('jsonTool.sortByValue') },
               ]}
-              onSelect={(value) => onUpdate(item.id, { sortMode: value as WorkflowSortMode })}
+              onSelect={(value) => onUpdate(item.id, { sortMode: value as PipelineSortMode })}
             />
             <SelectField
-              label={t('jsonTool.workflow.direction')}
+              label={t('jsonTool.pipeline.direction')}
               value={item.direction}
               options={[
                 { key: 'asc', label: t('jsonTool.sortOrderAsc') },
                 { key: 'desc', label: t('jsonTool.sortOrderDesc') },
               ]}
-              onSelect={(value) => onUpdate(item.id, { direction: value as WorkflowDirection })}
+              onSelect={(value) => onUpdate(item.id, { direction: value as PipelineDirection })}
             />
           </div>
         )}{' '}
         {item.type === 'arraySort' && (
-          <div className="json-workflow-fields grid grid-cols-2 gap-x-2 gap-y-2.5 @max-[520px]/workflow-rules:grid-cols-1">
+          <div className="json-pipeline-fields grid grid-cols-2 gap-x-2 gap-y-2.5 @max-[520px]/pipeline-rules:grid-cols-1">
             <PathField
-              label={t('jsonTool.workflow.arrayPath')}
+              label={t('jsonTool.pipeline.arrayPath')}
               value={item.arrayPath}
-              placeholder={t('jsonTool.workflow.arrayPathPlaceholder')}
+              placeholder={t('jsonTool.pipeline.arrayPathPlaceholder')}
               onChange={(value) => onUpdate(item.id, { arrayPath: value })}
               root={root}
               theme={theme}
               onCreate={(view) => onFirstEditorCreate(item.id, view)}
             />
             <PathField
-              label={t('jsonTool.workflow.itemPath')}
+              label={t('jsonTool.pipeline.itemPath')}
               value={item.itemPath}
-              placeholder={t('jsonTool.workflow.itemPathPlaceholder')}
+              placeholder={t('jsonTool.pipeline.itemPathPlaceholder')}
               onChange={(value) => onUpdate(item.id, { itemPath: value })}
               root={itemRoot}
               theme={theme}
             />
             <SelectField
-              label={t('jsonTool.workflow.direction')}
+              label={t('jsonTool.pipeline.direction')}
               value={item.direction}
               options={[
                 { key: 'asc', label: t('jsonTool.sortOrderAsc') },
                 { key: 'desc', label: t('jsonTool.sortOrderDesc') },
               ]}
-              onSelect={(value) => onUpdate(item.id, { direction: value as WorkflowDirection })}
+              onSelect={(value) => onUpdate(item.id, { direction: value as PipelineDirection })}
             />
           </div>
         )}{' '}
         {item.type === 'filter' && (
-          <div className="json-workflow-fields grid grid-cols-2 gap-x-2 gap-y-2.5 @max-[520px]/workflow-rules:grid-cols-1">
+          <div className="json-pipeline-fields grid grid-cols-2 gap-x-2 gap-y-2.5 @max-[520px]/pipeline-rules:grid-cols-1">
             <PathField
-              label={t('jsonTool.workflow.arrayPath')}
+              label={t('jsonTool.pipeline.arrayPath')}
               value={item.arrayPath}
-              placeholder={t('jsonTool.workflow.arrayPathPlaceholder')}
+              placeholder={t('jsonTool.pipeline.arrayPathPlaceholder')}
               onChange={(value) => onUpdate(item.id, { arrayPath: value })}
               root={root}
               theme={theme}
               onCreate={(view) => onFirstEditorCreate(item.id, view)}
             />
             <PathField
-              label={t('jsonTool.workflow.itemPath')}
+              label={t('jsonTool.pipeline.itemPath')}
               value={item.itemPath}
-              placeholder={t('jsonTool.workflow.itemPathPlaceholder')}
+              placeholder={t('jsonTool.pipeline.itemPathPlaceholder')}
               onChange={(value) => onUpdate(item.id, { itemPath: value })}
               root={itemRoot}
               theme={theme}
             />
             <PathField
-              label={t('jsonTool.workflow.filterValue')}
+              label={t('jsonTool.pipeline.filterValue')}
               value={item.filterValue}
-              placeholder={t('jsonTool.workflow.filterValuePlaceholder')}
+              placeholder={t('jsonTool.pipeline.filterValuePlaceholder')}
               onChange={(value) => onUpdate(item.id, { filterValue: value })}
               root={root}
               theme={theme}
@@ -429,9 +429,9 @@ function WorkflowRuleRow({
         )}{' '}
         {item.type === 'template' && (
           <PathField
-            label={t('jsonTool.workflow.template')}
+            label={t('jsonTool.pipeline.template')}
             value={item.template}
-            placeholder={t('jsonTool.workflow.templatePlaceholder')}
+            placeholder={t('jsonTool.pipeline.templatePlaceholder')}
             onChange={(value) => onUpdate(item.id, { template: value })}
             root={root}
             theme={theme}
@@ -444,14 +444,14 @@ function WorkflowRuleRow({
   );
 }
 
-export function WorkflowOutputPane({
+export function PipelineOutputPane({
   output,
   error,
   theme,
   foldExt,
 }: {
   output: string;
-  error: WorkflowError | null;
+  error: PipelineError | null;
   theme: Extension;
   foldExt: Extension;
 }) {
@@ -470,11 +470,11 @@ export function WorkflowOutputPane({
     }
   }, [output, outputPreview.valid, outputTableMode, error]);
   return (
-    <section className="json-workflow-output json-pane flex h-full min-h-0 min-w-0 flex-col gap-2">
+    <section className="json-pipeline-output json-pane flex h-full min-h-0 min-w-0 flex-col gap-2">
       <span className="json-pane-label flex-none font-mono text-[10px] font-medium leading-none tracking-[.04em] text-muted-foreground uppercase">
-        {t('jsonTool.workflow.output')}
+        {t('jsonTool.pipeline.output')}
       </span>
-      <div className="json-workflow-output-field json-pane-editor relative flex min-h-0 min-w-0 flex-1">
+      <div className="json-pipeline-output-field json-pane-editor relative flex min-h-0 min-w-0 flex-1">
         <Button
           type="button"
           variant={outputTableMode ? 'secondary' : 'ghost'}
@@ -494,31 +494,31 @@ export function WorkflowOutputPane({
         </Button>
         {error ? (
           <JsonErrorPanel
-            title={t('jsonTool.workflow.errorTitle')}
-            description={t(`jsonTool.workflow.errors.${error.code}`)}
+            title={t('jsonTool.pipeline.errorTitle')}
+            description={t(`jsonTool.pipeline.errors.${error.code}`)}
             item={
               error.item !== undefined
-                ? t('jsonTool.workflow.errorItem', {
+                ? t('jsonTool.pipeline.errorItem', {
                     item: String(error.item + 1).padStart(2, '0'),
                   })
                 : undefined
             }
             path={
               error.path
-                ? { label: t('jsonTool.workflow.errorPath'), value: error.path }
+                ? { label: t('jsonTool.pipeline.errorPath'), value: error.path }
                 : undefined
             }
           />
         ) : (
           <CodeMirror
-            className="json-cm json-workflow-cm"
+            className="json-cm json-pipeline-cm"
             height="100%"
             value={output}
             editable={false}
             theme={theme}
             extensions={[json5(), foldExt]}
             onCreateEditor={(view) =>
-              view.contentDOM.setAttribute('aria-label', t('jsonTool.workflow.output'))
+              view.contentDOM.setAttribute('aria-label', t('jsonTool.pipeline.output'))
             }
           />
         )}
@@ -536,7 +536,7 @@ export function WorkflowOutputPane({
   );
 }
 
-export function WorkflowPanel({
+export function PipelinePanel({
   rules,
   contexts,
   theme,
@@ -546,10 +546,10 @@ export function WorkflowPanel({
   focusItemId,
   onFocusHandled,
 }: {
-  rules: WorkflowItem[];
-  contexts: WorkflowContexts;
+  rules: PipelineItem[];
+  contexts: PipelineContexts;
   theme: Extension;
-  onChange: (update: WorkflowItem[] | ((rules: WorkflowItem[]) => WorkflowItem[])) => void;
+  onChange: (update: PipelineItem[] | ((rules: PipelineItem[]) => PipelineItem[])) => void;
   onRemove: (id: string) => void;
   onMove: (from: number, to: number) => void;
   focusItemId: string | null;
@@ -563,19 +563,19 @@ export function WorkflowPanel({
   focusItemIdRef.current = focusItemId;
   const hasTemplate = rules.some((item) => item.type === 'template');
   const labels = {
-    extract: t('jsonTool.workflow.types.extract'),
-    sort: t('jsonTool.workflow.types.sort'),
-    arraySort: t('jsonTool.workflow.types.arraySort'),
-    filter: t('jsonTool.workflow.types.filter'),
-    template: t('jsonTool.workflow.types.template'),
+    extract: t('jsonTool.pipeline.types.extract'),
+    sort: t('jsonTool.pipeline.types.sort'),
+    arraySort: t('jsonTool.pipeline.types.arraySort'),
+    filter: t('jsonTool.pipeline.types.filter'),
+    template: t('jsonTool.pipeline.types.template'),
   };
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
-  const update = (id: string, patch: Partial<WorkflowItem>) =>
+  const update = (id: string, patch: Partial<PipelineItem>) =>
     onChange((current) => current.map((item) => (item.id === id ? { ...item, ...patch } : item)));
-  const updateType = (item: WorkflowItem, type: WorkflowItemType) => {
+  const updateType = (item: PipelineItem, type: PipelineItemType) => {
     if (type === 'template' && hasTemplate && item.type !== 'template') return;
     if (type !== 'template') {
       update(item.id, { type });
@@ -616,17 +616,17 @@ export function WorkflowPanel({
     if (view) focusAddedItem(focusItemId, view);
   }, [focusItemId]);
   return (
-    <section className="json-workflow-rules flex h-full min-h-0 min-w-0 flex-col gap-2 [container-name:workflow-rules] [container-type:inline-size]">
+    <section className="json-pipeline-rules flex h-full min-h-0 min-w-0 flex-col gap-2 [container-name:pipeline-rules] [container-type:inline-size]">
       <span className="json-pane-label flex-none font-mono text-[10px] font-medium leading-none tracking-[.04em] text-muted-foreground uppercase">
-        {t('jsonTool.workflow.rules')}
+        {t('jsonTool.pipeline.rules')}
       </span>
       <div
         ref={listRef}
-        className="json-workflow-list min-h-0 flex-1 overflow-auto [scrollbar-gutter:auto]"
+        className="json-pipeline-list min-h-0 flex-1 overflow-auto [scrollbar-gutter:auto]"
       >
         {rules.length === 0 ? (
-          <div className="json-workflow-empty flex min-h-[74px] items-center justify-center text-[11px] text-muted-foreground">
-            {t('jsonTool.workflow.empty')}
+          <div className="json-pipeline-empty flex min-h-[74px] items-center justify-center text-[11px] text-muted-foreground">
+            {t('jsonTool.pipeline.empty')}
           </div>
         ) : (
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
@@ -635,7 +635,7 @@ export function WorkflowPanel({
               strategy={verticalListSortingStrategy}
             >
               {rules.map((item, index) => (
-                <WorkflowRuleRow
+                <PipelineRuleRow
                   key={item.id}
                   item={item}
                   index={index}
@@ -658,4 +658,4 @@ export function WorkflowPanel({
   );
 }
 
-export { newWorkflowItem };
+export { newPipelineItem };

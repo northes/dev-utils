@@ -142,7 +142,7 @@
 .json-cm .cm-editor.cm-focused {
   outline: none;
 }
-.json-workflow-path-cm {
+.json-pipeline-path-cm {
   height: calc(var(--code-editor-font-size) * 1.4 + 10px) !important;
   min-height: 0;
   overflow: visible;
@@ -150,33 +150,33 @@
   border-radius: var(--radius);
   background: var(--card);
 }
-.json-workflow-path-cm:focus-within {
+.json-pipeline-path-cm:focus-within {
   border-color: var(--ring);
 }
-.json-workflow-path-cm .cm-editor {
+.json-pipeline-path-cm .cm-editor {
   height: 100% !important;
   border-radius: inherit;
 }
-.json-workflow-path-cm .cm-scroller {
+.json-pipeline-path-cm .cm-scroller {
   height: 100% !important;
   min-height: 0;
   overflow-x: auto !important;
   overflow-y: auto !important;
   border-radius: inherit;
 }
-.json-workflow-path-cm .cm-editor.cm-focused {
+.json-pipeline-path-cm .cm-editor.cm-focused {
   outline: none;
 }
-.json-workflow-path-cm .cm-content {
+.json-pipeline-path-cm .cm-content {
   min-height: 0;
   padding: 5px 9px;
 }
-.json-workflow-path-cm .cm-editor,
-.json-workflow-path-cm .cm-scroller,
-.json-workflow-path-cm .cm-content {
+.json-pipeline-path-cm .cm-editor,
+.json-pipeline-path-cm .cm-scroller,
+.json-pipeline-path-cm .cm-content {
   font-size: calc(var(--code-editor-font-size) - 2px) !important;
 }
-.json-workflow-path-cm .cm-line {
+.json-pipeline-path-cm .cm-line {
   padding: 0;
 }
 .json-cm .cm-tooltip-autocomplete,

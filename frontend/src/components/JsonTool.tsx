@@ -58,14 +58,14 @@ import { JsonTablePreview } from './JsonTablePreview';
 import '../styles/tools/editor.css';
 import '../styles/tools/json.css';
 import {
-  newWorkflowItem,
-  parseWorkflowConfig,
-  serializeWorkflow,
-  WorkflowOutputPane,
-  WorkflowPanel,
-} from './JsonWorkflow';
-import type { WorkflowItem } from './JsonWorkflowEngine';
-import { useDebouncedWorkflowEvaluation } from './useDebouncedWorkflowEvaluation';
+  newPipelineItem,
+  parsePipelineConfig,
+  serializePipeline,
+  PipelineOutputPane,
+  PipelinePanel,
+} from './JsonPipeline';
+import type { PipelineItem } from './JsonPipelineEngine';
+import { useDebouncedPipelineEvaluation } from './useDebouncedPipelineEvaluation';
 import { pathCompletions as sharedPathCompletions } from './JsonPathCompletion';
 
 type PathToken = { type: 'key' | 'index' | 'all'; value: string };
@@ -273,7 +273,7 @@ function isConvertFormat(value: string | undefined): value is JsonConvertFormat 
   return value === 'yaml' || value === 'xml' || value === 'toml' || value === 'csv';
 }
 
-type JsonPageMode = 'plain' | 'schema' | 'workflow' | 'convert';
+type JsonPageMode = 'plain' | 'schema' | 'pipeline' | 'convert';
 function modeHostHidden(visible: boolean) {
   return visible ? '' : ' is-hidden absolute inset-0 invisible pointer-events-none';
 }
@@ -438,15 +438,15 @@ export default function JsonTool({
     e instanceof JsonPathError ? t(`jsonTool.errors.${e.code}`, e.params) : String(e);
   const [mode, setMode] = useState<JsonPageMode>('plain');
   const schema = mode === 'schema';
-  const workflowMode = mode === 'workflow';
+  const pipelineMode = mode === 'pipeline';
   const convertMode = mode === 'convert';
   const [convertFormat, setConvertFormat] = useState<JsonConvertFormat>('yaml');
   const [input, setInput] = useState('');
   const [path, setPath] = useState('$');
   const [result, setResult] = useState('');
   const [pathError, setPathError] = useState('');
-  const [workflowRules, setWorkflowRules] = useState<WorkflowItem[]>([]);
-  const [workflowFocusId, setWorkflowFocusId] = useState<string | null>(null);
+  const [pipelineRules, setPipelineRules] = useState<PipelineItem[]>([]);
+  const [pipelineFocusId, setPipelineFocusId] = useState<string | null>(null);
   const [inputTableMode, setInputTableMode] = useState(false);
   const [resultTableMode, setResultTableMode] = useState(false);
   const [commentDialog, setCommentDialog] = useState<null | {
@@ -576,8 +576,8 @@ export default function JsonTool({
   };
   const changeInput = setInput;
   const toggleSchema = () => setMode((current) => (current === 'schema' ? 'plain' : 'schema'));
-  const toggleWorkflow = () =>
-    setMode((current) => (current === 'workflow' ? 'plain' : 'workflow'));
+  const togglePipeline = () =>
+    setMode((current) => (current === 'pipeline' ? 'plain' : 'pipeline'));
   const toggleConvert = () => setMode((current) => (current === 'convert' ? 'plain' : 'convert'));
   const convertFormats = useMemo(
     () =>
@@ -627,7 +627,7 @@ export default function JsonTool({
       if (!navigator.clipboard) throw new Error('clipboard');
       await navigator.clipboard.writeText(text);
     } catch {
-      toast.add({ title: t('jsonTool.workflow.clipboardWriteFailed'), type: 'error' });
+      toast.add({ title: t('jsonTool.pipeline.clipboardWriteFailed'), type: 'error' });
       return;
     }
     const bytes = new TextEncoder().encode(text).length;
@@ -660,8 +660,8 @@ export default function JsonTool({
     window.dispatchEvent(new CustomEvent('devutils:json-schema', { detail: schema }));
   }, [schema]);
   useEffect(() => {
-    window.dispatchEvent(new CustomEvent('devutils:json-workflow', { detail: workflowMode }));
-  }, [workflowMode]);
+    window.dispatchEvent(new CustomEvent('devutils:json-pipeline', { detail: pipelineMode }));
+  }, [pipelineMode]);
   useEffect(() => {
     if (!schema) return;
     setPath((current) => {
@@ -669,22 +669,22 @@ export default function JsonTool({
       return normalized === '' || normalized === '$.' ? '$' : current;
     });
   }, [schema]);
-  const workflow = useDebouncedWorkflowEvaluation(workflowMode, input, workflowRules);
-  const addWorkflowItem = () => {
-    const next = newWorkflowItem();
-    const hasTemplate = workflowRules.some((item) => item.type === 'template');
-    setWorkflowFocusId(next.id);
-    if (hasTemplate) toast.add({ title: t('jsonTool.workflow.templateNotice'), type: 'warning' });
-    setWorkflowRules((r) => {
+  const pipeline = useDebouncedPipelineEvaluation(pipelineMode, input, pipelineRules);
+  const addPipelineItem = () => {
+    const next = newPipelineItem();
+    const hasTemplate = pipelineRules.some((item) => item.type === 'template');
+    setPipelineFocusId(next.id);
+    if (hasTemplate) toast.add({ title: t('jsonTool.pipeline.templateNotice'), type: 'warning' });
+    setPipelineRules((r) => {
       const template = r.find((item) => item.type === 'template');
       if (!template) return [...r, next];
       return [...r.filter((item) => item.id !== template.id), next, template];
     });
   };
-  const removeWorkflowItem = (id: string) =>
-    setWorkflowRules((r) => r.filter((item) => item.id !== id));
-  const moveWorkflowItem = (from: number, to: number) =>
-    setWorkflowRules((r) => {
+  const removePipelineItem = (id: string) =>
+    setPipelineRules((r) => r.filter((item) => item.id !== id));
+  const movePipelineItem = (from: number, to: number) =>
+    setPipelineRules((r) => {
       if (from === to || to < 0 || to >= r.length) return r;
       const next = [...r];
       const [moved] = next.splice(from, 1);
@@ -697,55 +697,55 @@ export default function JsonTool({
       );
       return next;
     });
-  const exportWorkflow = async () => {
+  const exportPipeline = async () => {
     try {
       if (!navigator.clipboard) throw new Error('clipboard');
-      await navigator.clipboard.writeText(serializeWorkflow(workflowRules));
-      toast.add({ title: t('jsonTool.workflow.exported') });
+      await navigator.clipboard.writeText(serializePipeline(pipelineRules));
+      toast.add({ title: t('jsonTool.pipeline.exported') });
     } catch {
       toast.add({
-        title: t('jsonTool.workflow.exportFailed'),
-        description: t('jsonTool.workflow.clipboardWriteFailed'),
+        title: t('jsonTool.pipeline.exportFailed'),
+        description: t('jsonTool.pipeline.clipboardWriteFailed'),
         type: 'error',
       });
     }
   };
-  const importWorkflow = async () => {
+  const importPipeline = async () => {
     try {
       const source = (await Clipboard.Text().catch(() => '')) || '';
       if (!source.trim()) {
-        toast.add({ title: t('jsonTool.workflow.importEmpty'), type: 'warning' });
+        toast.add({ title: t('jsonTool.pipeline.importEmpty'), type: 'warning' });
         return;
       }
-      setWorkflowRules(parseWorkflowConfig(source));
-      toast.add({ title: t('jsonTool.workflow.imported') });
+      setPipelineRules(parsePipelineConfig(source));
+      toast.add({ title: t('jsonTool.pipeline.imported') });
     } catch (error) {
       if (error instanceof Error && error.message === 'invalidConfig') {
         toast.add({
-          title: t('jsonTool.workflow.importFailed'),
-          description: t('jsonTool.workflow.invalidConfig'),
+          title: t('jsonTool.pipeline.importFailed'),
+          description: t('jsonTool.pipeline.invalidConfig'),
           type: 'error',
         });
         return;
       }
       toast.add({
-        title: t('jsonTool.workflow.importFailed'),
-        description: t('jsonTool.workflow.clipboardReadFailed'),
+        title: t('jsonTool.pipeline.importFailed'),
+        description: t('jsonTool.pipeline.clipboardReadFailed'),
         type: 'error',
       });
     }
   };
-  const copyWorkflow = () => {
-    if (workflow.error || !workflow.output) return;
-    void navigator.clipboard?.writeText(workflow.output).catch(() => {});
-    const bytes = new TextEncoder().encode(workflow.output).length;
+  const copyPipeline = () => {
+    if (pipeline.error || !pipeline.output) return;
+    void navigator.clipboard?.writeText(pipeline.output).catch(() => {});
+    const bytes = new TextEncoder().encode(pipeline.output).length;
     toast.add({ title: t('toast.copied', { value: `${bytes} ${t('jsonTool.bytes')}` }) });
     record(
       'json',
-      t('jsonTool.workflow.copy'),
+      t('jsonTool.pipeline.copy'),
       `${bytes} ${t('jsonTool.bytes')}`,
       input,
-      workflow.output,
+      pipeline.output,
     );
   };
   const copyPane = async (pane: 'input' | 'result') => {
@@ -806,58 +806,58 @@ export default function JsonTool({
       />
     );
   };
-  const workflowRuleActions = (
+  const pipelineRuleActions = (
     <ToolActionBar
-      label={t('jsonTool.workflow.ruleActions')}
+      label={t('jsonTool.pipeline.ruleActions')}
       actions={[
         {
           key: 'import',
-          label: t('jsonTool.workflow.importConfig'),
+          label: t('jsonTool.pipeline.importConfig'),
           icon: UploadSimple,
           variant: 'secondary',
-          onPress: () => void importWorkflow(),
+          onPress: () => void importPipeline(),
         },
         {
           key: 'export',
-          label: t('jsonTool.workflow.exportConfig'),
+          label: t('jsonTool.pipeline.exportConfig'),
           icon: DownloadSimple,
           variant: 'secondary',
-          onPress: () => void exportWorkflow(),
+          onPress: () => void exportPipeline(),
         },
         {
           key: 'add',
-          label: t('jsonTool.workflow.addItem'),
+          label: t('jsonTool.pipeline.addItem'),
           variant: 'primary',
-          onPress: addWorkflowItem,
+          onPress: addPipelineItem,
         },
       ]}
     />
   );
-  const workflowActions = (
+  const pipelineActions = (
     <ToolActionBar
-      label={t('jsonTool.workflow.actions')}
+      label={t('jsonTool.pipeline.actions')}
       actions={[
         {
           key: 'copy',
           label: t('jsonTool.copy'),
           icon: Copy,
           variant: 'primary',
-          disabled: !!workflow.error || !workflow.output,
-          onPress: copyWorkflow,
+          disabled: !!pipeline.error || !pipeline.output,
+          onPress: copyPipeline,
         },
       ]}
     />
   );
   const jsonGridClass = convertMode
     ? 'grid-cols-2 grid-rows-[minmax(0,1fr)] gap-3'
-    : workflowMode
+    : pipelineMode
       ? 'grid-cols-2 grid-rows-[minmax(0,1fr)] gap-3'
       : schema
         ? 'grid-cols-2 grid-rows-[minmax(0,1fr)] gap-3 @max-[959px]/json-page:grid-cols-2 @max-[959px]/json-page:grid-rows-1 @min-[960px]/json-page:grid-cols-3 @min-[960px]/json-page:grid-rows-1'
         : 'grid-cols-1 grid-rows-[minmax(0,1fr)] gap-0';
   const footerGridClass = convertMode
     ? 'grid-cols-1'
-    : workflowMode
+    : pipelineMode
       ? 'grid-cols-2'
       : schema
         ? 'grid-cols-[minmax(0,1fr)_minmax(0,1fr)] @max-[959px]/json-page:grid-cols-2 @min-[960px]/json-page:grid-cols-3'
@@ -898,8 +898,8 @@ export default function JsonTool({
       toggleSchema();
       return;
     }
-    if (pending.action === 'workflow') {
-      toggleWorkflow();
+    if (pending.action === 'pipeline') {
+      togglePipeline();
       return;
     }
     if (pending.action === 'convert') {
@@ -914,20 +914,20 @@ export default function JsonTool({
       void exportConvert();
       return;
     }
-    if (pending.action === 'workflowAddItem') {
-      addWorkflowItem();
+    if (pending.action === 'pipelineAddItem') {
+      addPipelineItem();
       return;
     }
-    if (pending.action === 'workflowCopy') {
-      copyWorkflow();
+    if (pending.action === 'pipelineCopy') {
+      copyPipeline();
       return;
     }
-    if (pending.action === 'workflowImport') {
-      void importWorkflow();
+    if (pending.action === 'pipelineImport') {
+      void importPipeline();
       return;
     }
-    if (pending.action === 'workflowExport') {
-      void exportWorkflow();
+    if (pending.action === 'pipelineExport') {
+      void exportPipeline();
       return;
     }
     if (pending.action === 'clear') {
@@ -980,7 +980,7 @@ export default function JsonTool({
     changeInput(next);
     if (autoFormatRef.current && next !== pending.input)
       record('json', t('jsonTool.formatted'), summary(next), next);
-  }, [pending, workflow]);
+  }, [pending, pipeline]);
   useEffect(() => {
     const onFill = () => {
       if (!autoFormatRef.current) return;
@@ -1044,8 +1044,8 @@ export default function JsonTool({
                 <Switch checked={schema} onCheckedChange={toggleSchema} size="sm" />
               </Label>
               <Label className="flex h-8 flex-none items-center gap-2 border border-transparent bg-transparent py-0 pr-1.5 text-[11px] text-muted-foreground">
-                <span>{t('jsonTool.workflow.title')}</span>
-                <Switch checked={workflowMode} onCheckedChange={toggleWorkflow} size="sm" />
+                <span>{t('jsonTool.pipeline.title')}</span>
+                <Switch checked={pipelineMode} onCheckedChange={togglePipeline} size="sm" />
               </Label>
               <Label className="flex h-8 flex-none items-center gap-2 border border-transparent bg-transparent py-0 pr-1.5 text-[11px] text-muted-foreground">
                 <span>{t('jsonTool.convert.title')}</span>
@@ -1057,12 +1057,12 @@ export default function JsonTool({
         <ToolLayoutContent>
           <div className="json-content h-full min-h-0 overflow-hidden">
             <div
-              className={`json-schema-layout relative grid h-full min-h-0 min-w-0 ${jsonGridClass}${workflowMode ? ' workflow-layout' : ''}`}
+              className={`json-schema-layout relative grid h-full min-h-0 min-w-0 ${jsonGridClass}${pipelineMode ? ' pipeline-layout' : ''}`}
             >
               <div
                 className={
-                  workflowMode
-                    ? 'json-workflow-source grid h-full min-h-0 min-w-0 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-3 overflow-hidden'
+                  pipelineMode
+                    ? 'json-pipeline-source grid h-full min-h-0 min-w-0 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-3 overflow-hidden'
                     : 'contents'
                 }
               >
@@ -1084,15 +1084,15 @@ export default function JsonTool({
                   tablePreview={<JsonTablePreview value={inputPreview.value} t={t} />}
                 />
                 <div
-                  className={`json-workflow-output-slot min-h-0 min-w-0${
-                    workflowMode ? ' h-full' : modeHostHidden(false)
+                  className={`json-pipeline-output-slot min-h-0 min-w-0${
+                    pipelineMode ? ' h-full' : modeHostHidden(false)
                   }`}
-                  aria-hidden={!workflowMode}
-                  {...(!workflowMode ? { inert: true } : {})}
+                  aria-hidden={!pipelineMode}
+                  {...(!pipelineMode ? { inert: true } : {})}
                 >
-                  <WorkflowOutputPane
-                    output={workflow.output}
-                    error={workflow.error}
+                  <PipelineOutputPane
+                    output={pipeline.output}
+                    error={pipeline.error}
                     theme={cmTheme}
                     foldExt={foldExt}
                   />
@@ -1213,7 +1213,7 @@ export default function JsonTool({
                       {pathError ? (
                         <div className="absolute inset-0 z-10 flex min-h-0">
                           <JsonErrorPanel
-                            title={t('jsonTool.workflow.errorTitle')}
+                            title={t('jsonTool.pipeline.errorTitle')}
                             description={pathError}
                           />
                         </div>
@@ -1254,21 +1254,21 @@ export default function JsonTool({
                 </div>
               </div>
               <div
-                className={`json-workflow-slot min-h-0 min-w-0${
-                  workflowMode ? ' h-full overflow-hidden' : modeHostHidden(false)
+                className={`json-pipeline-slot min-h-0 min-w-0${
+                  pipelineMode ? ' h-full overflow-hidden' : modeHostHidden(false)
                 }`}
-                aria-hidden={!workflowMode}
-                {...(!workflowMode ? { inert: true } : {})}
+                aria-hidden={!pipelineMode}
+                {...(!pipelineMode ? { inert: true } : {})}
               >
-                <WorkflowPanel
-                  contexts={workflow.contexts}
-                  rules={workflowRules}
+                <PipelinePanel
+                  contexts={pipeline.contexts}
+                  rules={pipelineRules}
                   theme={cmTheme}
-                  focusItemId={workflowFocusId}
-                  onFocusHandled={() => setWorkflowFocusId(null)}
-                  onChange={setWorkflowRules}
-                  onRemove={removeWorkflowItem}
-                  onMove={moveWorkflowItem}
+                  focusItemId={pipelineFocusId}
+                  onFocusHandled={() => setPipelineFocusId(null)}
+                  onChange={setPipelineRules}
+                  onRemove={removePipelineItem}
+                  onMove={movePipelineItem}
                 />
               </div>
             </div>
@@ -1286,7 +1286,7 @@ export default function JsonTool({
         </ToolLayoutContent>
         <ToolLayoutFooter>
           <div
-            className={`json-footer-actions grid items-start gap-3 ${footerGridClass}${workflowMode ? ' workflow-layout' : ''}`}
+            className={`json-footer-actions grid items-start gap-3 ${footerGridClass}${pipelineMode ? ' pipeline-layout' : ''}`}
           >
             {convertMode ? (
               convertActions
@@ -1294,15 +1294,15 @@ export default function JsonTool({
               <>
                 {mode === 'plain' ? (
                   editorActions('input')
-                ) : workflowMode ? (
-                  <div className="json-workflow-footer-actions min-w-0">{workflowActions}</div>
+                ) : pipelineMode ? (
+                  <div className="json-pipeline-footer-actions min-w-0">{pipelineActions}</div>
                 ) : schema ? (
                   <div className="min-w-0" aria-hidden="true" />
                 ) : null}
                 {schema && editorActions('result')}
-                {workflowMode && (
-                  <div className="json-workflow-rules-footer-actions min-w-0">
-                    {workflowRuleActions}
+                {pipelineMode && (
+                  <div className="json-pipeline-rules-footer-actions min-w-0">
+                    {pipelineRuleActions}
                   </div>
                 )}
               </>
