@@ -22,6 +22,7 @@ import {
   GetImageTasks,
   GetSSHConfigHosts,
   PushDockerImage,
+  RefreshDockerImages,
   StartImageExport,
   StartImageExports,
   TestImageSourceConnection,
@@ -32,6 +33,7 @@ import type {
   Config as Settings,
   DockerImage,
   DockerImageDetail,
+  DockerDeleteTarget,
   DockerStatus,
   ImageSource,
   ImageTask,
@@ -145,6 +147,8 @@ type WatchDockerImagesEvent = {
   progress?: WatchProgress;
   isUpdating?: boolean;
   isInitialLoad?: boolean;
+  hasSnapshot?: boolean;
+  snapshotUpdatedAt?: string;
   error?: string;
 };
 
@@ -153,9 +157,11 @@ type ConfirmState =
   | {
       type: 'delete';
       ids: string[];
+      targets: DockerDeleteTarget[];
       name: string;
       sourceId: string;
       sourceKind: string;
+      sourceConfigKey: string;
     }
   | null;
 
@@ -191,12 +197,14 @@ function resolveSourceViewState(
 // 内容区优先保留已有数据；只有没有任何镜像时，更新中才显示 loading。
 function resolveContentViewState(
   isConnecting: boolean,
+  hasSnapshot: boolean,
   imageCount: number,
   filteredCount: number,
   sourceViewState: SourceViewState,
 ): ContentViewState {
-  if (isConnecting) return 'loading';
+  if (isConnecting && !hasSnapshot && imageCount === 0) return 'loading';
   if (imageCount > 0) return filteredCount > 0 ? 'table' : 'no-results';
+  if (hasSnapshot) return 'empty';
   if (sourceViewState === 'unavailable') return 'error';
   if (sourceViewState === 'loading-details' || sourceViewState === 'updating') return 'loading';
   return 'empty';
@@ -378,18 +386,6 @@ function registryImageIdentity(image: DockerImage) {
   return digest ? `${image.repository}\u0000${digest}` : '';
 }
 
-function registryDeleteDigests(images: DockerImage[], ids: string[]) {
-  const selectedIds = new Set(ids);
-  return [
-    ...new Set(
-      images
-        .filter((image) => selectedIds.has(image.id))
-        .map((image) => image.digest?.trim() ?? '')
-        .filter(Boolean),
-    ),
-  ];
-}
-
 function associatedRegistryTags(images: DockerImage[], ids: string[]) {
   const selectedIds = new Set(ids);
   const selectedImages = images.filter((image) => selectedIds.has(image.id));
@@ -404,6 +400,14 @@ function associatedRegistryTags(images: DockerImage[], ids: string[]) {
         .filter((tag) => !selectedTags.has(tag)),
     ),
   ];
+}
+
+function deleteTargets(images: DockerImage[], ids: string[]): DockerDeleteTarget[] {
+  const byID = new Map(images.map((image) => [image.id, image]));
+  return ids.map((imageID) => ({
+    imageID,
+    expectedDigest: byID.get(imageID)?.digest?.trim() ?? '',
+  }));
 }
 
 function ImageSearchField({
@@ -923,6 +927,10 @@ export default function ImageManagerTool({
   const deferredSearch = useDeferredValue(search);
   const [isUpdating, setIsUpdating] = useState(false);
   const [isInitialLoad, setIsInitialLoad] = useState(false);
+  const [hasSnapshot, setHasSnapshot] = useState(false);
+  const [snapshotUpdatedAt, setSnapshotUpdatedAt] = useState('');
+  const watchClientID = useRef<string | null>(null);
+  const watchSourceIDRef = useRef<string | null>(null);
   const [taskSnapshot, setTaskSnapshot] = useState<ImageTaskSnapshot | null>(null);
   const tasks = taskSnapshot?.tasks ?? [];
   const applyTasks = useCallback((snapshot: ImageTaskSnapshot) => {
@@ -934,7 +942,20 @@ export default function ImageManagerTool({
   const sourceConfigKey = JSON.stringify(source);
   const sourceIsChanging = watchSourceId !== source.id;
   const isConnecting = connectionPending || sourceIsChanging;
+  const displayedImages = sourceIsChanging ? [] : images;
   const requestWatchReload = useCallback(() => {
+    const clientID = watchClientID.current;
+    if (clientID && watchSourceIDRef.current === source.id) {
+      void RefreshDockerImages(source.id, clientID).catch((error) => {
+        setLoadError(errorMessage(error) || t('imageManagerTool.loadFailed'));
+      });
+      return;
+    }
+    setConnectionPending(true);
+    setLoadError('');
+    setReloadNonce((value) => value + 1);
+  }, [source.id, t]);
+  const restartWatch = useCallback(() => {
     setConnectionPending(true);
     setLoadError('');
     setReloadNonce((value) => value + 1);
@@ -972,9 +993,12 @@ export default function ImageManagerTool({
   }, [sourceId, sources]);
 
   useEffect(() => {
-    let active = true;
+    if (!active) return undefined;
+    let mounted = true;
     const clientID = crypto.randomUUID();
     const sourceID = source.id;
+    watchClientID.current = clientID;
+    watchSourceIDRef.current = sourceID;
     let maxRevision = -1;
     let currentGeneration = -1;
     let restarting = false;
@@ -988,10 +1012,12 @@ export default function ImageManagerTool({
     setLoadError('');
     setIsUpdating(false);
     setIsInitialLoad(false);
+    setHasSnapshot(false);
+    setSnapshotUpdatedAt('');
 
     const offWatch = Events.On('image-manager:watch-docker-images', (event) => {
       const payload = event.data as WatchDockerImagesEvent | undefined;
-      if (!active || !payload || payload.clientID !== clientID || payload.sourceID !== sourceID) {
+      if (!mounted || !payload || payload.clientID !== clientID || payload.sourceID !== sourceID) {
         return;
       }
 
@@ -1002,6 +1028,8 @@ export default function ImageManagerTool({
           maxRevision = -1;
           map.clear();
           setImages([]);
+          setHasSnapshot(false);
+          setSnapshotUpdatedAt('');
         }
       }
 
@@ -1009,7 +1037,7 @@ export default function ImageManagerTool({
         if (maxRevision >= 0 && payload.revision !== maxRevision + 1) {
           if (!restarting) {
             restarting = true;
-            requestWatchReload();
+            restartWatch();
           }
           return;
         }
@@ -1028,6 +1056,12 @@ export default function ImageManagerTool({
       }
       if (payload.isInitialLoad !== undefined) {
         setIsInitialLoad(payload.isInitialLoad);
+      }
+      if (payload.hasSnapshot !== undefined) {
+        setHasSnapshot(payload.hasSnapshot);
+      }
+      if (payload.snapshotUpdatedAt) {
+        setSnapshotUpdatedAt(payload.snapshotUpdatedAt);
       }
       if (payload.progress) {
         const stage = payload.progress.stage;
@@ -1083,19 +1117,30 @@ export default function ImageManagerTool({
 
     const watchCall = WatchDockerImages(sourceID, clientID);
     void watchCall.catch((error) => {
-      if (!active || isWatchCancelError(error)) return;
+      if (!mounted || isWatchCancelError(error)) return;
       setConnectionPending(false);
       setLoadError(errorMessage(error) || t('imageManagerTool.loadFailed'));
     });
 
     return () => {
-      active = false;
+      mounted = false;
+      if (watchClientID.current === clientID) watchClientID.current = null;
+      if (watchSourceIDRef.current === sourceID) watchSourceIDRef.current = null;
       offWatch();
       if (typeof watchCall?.cancel === 'function') {
         watchCall.cancel();
       }
     };
-  }, [cliPath, reloadNonce, requestWatchReload, source.id, sourceConfigKey, t]);
+  }, [
+    active,
+    cliPath,
+    reloadNonce,
+    requestWatchReload,
+    restartWatch,
+    source.id,
+    sourceConfigKey,
+    t,
+  ]);
 
   useEffect(() => {
     if (!pending || pending.tool !== 'image-manager' || consumed.current === pending) return;
@@ -1115,14 +1160,14 @@ export default function ImageManagerTool({
   const unnamed = t('imageManagerTool.unnamed');
   const indexedImages = useMemo<IndexedImage[]>(
     () =>
-      images.map((image) => ({
+      displayedImages.map((image) => ({
         image,
         searchId: image.id.toLocaleLowerCase(),
         searchName: imageLabel(image, '').toLocaleLowerCase(),
         sizeBytes: imageSizeBytes(image),
         createdAtMs: imageCreatedAtMs(image.createdAt),
       })),
-    [images],
+    [displayedImages],
   );
   const filteredImages = useMemo(() => {
     const query = deferredSearch.trim().toLocaleLowerCase();
@@ -1150,7 +1195,7 @@ export default function ImageManagerTool({
     });
     return next.map((item) => item.image);
   }, [deferredSearch, i18n.language, indexedImages, sortDirection, sortKey]);
-  const selectedCount = selected.size;
+  const selectedCount = sourceIsChanging ? 0 : selected.size;
   const allSelected =
     filteredImages.length > 0 && filteredImages.every((image) => selected.has(image.id));
   const someSelected = filteredImages.some((image) => selected.has(image.id)) && !allSelected;
@@ -1168,14 +1213,22 @@ export default function ImageManagerTool({
   const contentError = loadError || status?.error || '';
   const contentViewState = resolveContentViewState(
     isConnecting,
+    hasSnapshot,
     images.length,
     filteredImages.length,
     sourceViewState,
   );
-  const working = isConnecting || busy !== null;
+  const actionBlocked = isConnecting || busy !== null || sourceViewState === 'unavailable';
+  const interactionBlocked = busy !== null;
   const registryConfirmDigests =
     confirm?.type === 'delete' && confirm.sourceKind === 'registry'
-      ? registryDeleteDigests(images, confirm.ids)
+      ? [
+          ...new Set(
+            confirm.targets
+              .map((target) => target.expectedDigest)
+              .filter((digest): digest is string => Boolean(digest)),
+          ),
+        ]
       : [];
   const registryConfirmTags =
     confirm?.type === 'delete' && confirm.sourceKind === 'registry'
@@ -1621,10 +1674,15 @@ export default function ImageManagerTool({
     }
   };
 
-  const runDelete = async (sourceID: string, ids: string[], name: string) => {
+  const runDelete = async (
+    sourceID: string,
+    ids: string[],
+    targets: DockerDeleteTarget[],
+    name: string,
+  ) => {
     setBusy('delete');
     try {
-      const result = await DeleteDockerImages(sourceID, ids);
+      const result = await DeleteDockerImages(sourceID, targets);
       const deleted = result.deleted?.length ?? 0;
       const failures = result.failed ?? [];
       const failed = failures.length;
@@ -1662,7 +1720,10 @@ export default function ImageManagerTool({
   const confirmAction = () => {
     if (!confirm || busy) return;
     if (confirm.type === 'push') void runPush(confirm.image);
-    else void runDelete(confirm.sourceId, confirm.ids, confirm.name);
+    else if (confirm.sourceConfigKey !== sourceConfigKey) {
+      toast.add({ title: t('imageManagerTool.sourceChangedRefresh'), type: 'warning' });
+      setConfirm(null);
+    } else void runDelete(confirm.sourceId, confirm.ids, confirm.targets, confirm.name);
   };
 
   const taskCutoff = Date.now() - IMAGE_TASK_RETENTION_MS;
@@ -1815,7 +1876,7 @@ export default function ImageManagerTool({
               <Button
                 variant="outline"
                 className="h-[30px] min-w-[30px] flex-none px-[11px] text-[11px]"
-                disabled={working}
+                disabled={busy !== null}
                 onClick={() => {
                   requestWatchReload();
                   record(
@@ -1967,7 +2028,7 @@ export default function ImageManagerTool({
                         <button
                           type="button"
                           className="inline-flex min-w-0 max-w-full cursor-pointer truncate text-left text-foreground hover:text-primary hover:underline hover:underline-offset-4 disabled:cursor-not-allowed disabled:opacity-50"
-                          disabled={working}
+                          disabled={interactionBlocked}
                           title={t('imageManagerTool.viewName', {
                             name: imageLabel(image, unnamed),
                           })}
@@ -1997,14 +2058,14 @@ export default function ImageManagerTool({
                           <Button
                             variant="outline"
                             size="sm"
-                            disabled={working}
+                            disabled={interactionBlocked}
                             onClick={() => void viewImage(image)}
                           >
                             {t('imageManagerTool.view')}
                           </Button>
                           <DropdownMenu>
                             <DropdownMenuTrigger
-                              disabled={working}
+                              disabled={interactionBlocked}
                               render={
                                 <Button
                                   variant="outline"
@@ -2026,13 +2087,17 @@ export default function ImageManagerTool({
                                     ? t('imageManagerTool.copied')
                                     : t('imageManagerTool.copyName')}
                                 </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => void runExport(image)}>
+                                <DropdownMenuItem
+                                  disabled={actionBlocked}
+                                  onClick={() => void runExport(image)}
+                                >
                                   <DownloadSimple data-icon="inline-start" weight="duotone" />
                                   {t('imageManagerTool.exportTar')}
                                 </DropdownMenuItem>
                                 {((source as ManagedImageSource).capabilities?.canPush ??
                                 source.kind !== 'registry') ? (
                                   <DropdownMenuItem
+                                    disabled={actionBlocked}
                                     onClick={() => setConfirm({ type: 'push', image })}
                                   >
                                     {t('imageManagerTool.push')}
@@ -2042,13 +2107,16 @@ export default function ImageManagerTool({
                                 true) ? (
                                   <DropdownMenuItem
                                     variant="destructive"
+                                    disabled={actionBlocked}
                                     onClick={() =>
                                       setConfirm({
                                         type: 'delete',
                                         ids: [image.id],
+                                        targets: deleteTargets(images, [image.id]),
                                         name: imageLabel(image, unnamed),
                                         sourceId: source.id,
                                         sourceKind: source.kind,
+                                        sourceConfigKey,
                                       })
                                     }
                                   >
@@ -2080,6 +2148,18 @@ export default function ImageManagerTool({
               </span>
               {selectedCount > 0 ? (
                 <span>{t('imageManagerTool.selectedCount', { count: selectedCount })}</span>
+              ) : null}
+              {hasSnapshot ? (
+                <span title={snapshotUpdatedAt || undefined}>
+                  {snapshotUpdatedAt
+                    ? t('imageManagerTool.snapshotUpdatedAt', {
+                        time: formatCreatedAt(snapshotUpdatedAt, i18n.language),
+                      })
+                    : t('imageManagerTool.snapshotCached')}
+                </span>
+              ) : null}
+              {hasSnapshot && contentError ? (
+                <span className="text-destructive">{contentError}</span>
               ) : null}
               {activeTasks.length > 0 || visibleTasks.length > 0 ? (
                 <button
@@ -2114,7 +2194,7 @@ export default function ImageManagerTool({
                 <Button
                   variant="outline"
                   className="h-[30px] flex-none px-[11px] text-[11px]"
-                  disabled={working || batchExportStarting}
+                  disabled={actionBlocked || batchExportStarting}
                   onClick={() => void runBatchExport()}
                 >
                   {batchExportStarting ? (
@@ -2128,16 +2208,18 @@ export default function ImageManagerTool({
               <Button
                 variant="destructive"
                 className={`h-[30px] flex-none px-[11px] text-[11px]${selectedCount > 0 ? '' : ' invisible pointer-events-none'}`}
-                disabled={working || selectedCount === 0}
+                disabled={actionBlocked || selectedCount === 0}
                 aria-hidden={selectedCount === 0}
                 tabIndex={selectedCount > 0 ? 0 : -1}
                 onClick={() =>
                   setConfirm({
                     type: 'delete',
                     ids: [...selected],
+                    targets: deleteTargets(images, [...selected]),
                     name: t('imageManagerTool.selectedCount', { count: selectedCount }),
                     sourceId: source.id,
                     sourceKind: source.kind,
+                    sourceConfigKey,
                   })
                 }
               >

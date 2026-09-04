@@ -34,8 +34,10 @@ type WatchDockerImagesEvent struct {
 	IsUpdating *bool          `json:"isUpdating,omitempty"`
 	// IsInitialLoad 表示当前来源尚无完整缓存，本轮用于首次构建镜像详情。
 	// false 表示已有完整缓存后的定时增量扫描。
-	IsInitialLoad *bool  `json:"isInitialLoad,omitempty"`
-	Error         string `json:"error,omitempty"`
+	IsInitialLoad     *bool  `json:"isInitialLoad,omitempty"`
+	HasSnapshot       *bool  `json:"hasSnapshot,omitempty"`
+	SnapshotUpdatedAt string `json:"snapshotUpdatedAt,omitempty"`
+	Error             string `json:"error,omitempty"`
 }
 
 // WatchProgress 是后台扫描进度，stage 取值见下方常量。
@@ -67,32 +69,35 @@ const (
 
 // watchScan 是某 sourceID+fingerprint 的权威完整列表缓存。
 type watchScan struct {
-	index map[string]DockerImage
+	index     map[string]DockerImage
+	updatedAt time.Time
 }
 
 // watchWorker 持有单个 watch run 的全部运行状态。
 // 每个 WatchDockerImages 调用建立且仅建立一个 worker；新调用替换旧 worker
 // （取消并等待旧 done）后发布自身，保证任意时刻至多一个活跃 run。
 type watchWorker struct {
-	service     *ImageService
-	clientID    string
-	sourceID    string
-	ctx         context.Context
-	cancel      context.CancelFunc
-	done        chan struct{}
-	stopBound   func() bool
-	generation  uint64
-	fingerprint string
-	// bootstrap 表示本轮是否需要把 Registry 的现有缓存逐行重新发给前端。
-	// Registry 不发送完整 snapshot，因此新的前端订阅必须通过 create/update
-	// 事件恢复已有行。
-	bootstrap bool
+	service       *ImageService
+	clientID      string
+	sourceID      string
+	ctx           context.Context
+	cancel        context.CancelFunc
+	done          chan struct{}
+	stopBound     func() bool
+	generation    uint64
+	fingerprint   string
+	fingerprintMu sync.RWMutex
 
 	// emitMu 是唯一事件提交锁：revision 分配与事件同步发送都在锁内完成，
 	// 保证任何并发数据路径（diff、detail 补全 worker、状态）的事件顺序单调。
-	emitMu   sync.Mutex
-	revision uint64
-	taskID   string
+	emitMu      sync.Mutex
+	revision    uint64
+	taskID      string
+	refresh     chan struct{}
+	runMu       sync.Mutex
+	running     bool
+	roundCtx    context.Context
+	roundCancel context.CancelFunc
 }
 
 func (w *watchWorker) stop() {
@@ -129,18 +134,89 @@ func (s *ImageService) watchPreviousSnapshot(worker *watchWorker, fingerprint st
 	return nil, false
 }
 
-func (s *ImageService) storeWatchSnapshot(worker *watchWorker, fingerprint string, index map[string]DockerImage) {
+func (s *ImageService) watchSnapshotInfo(worker *watchWorker, fingerprint string) (map[string]DockerImage, bool, time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.watchSnapshots == nil {
+		return nil, false, time.Time{}
+	}
+	scan := s.watchSnapshots[watchSnapshotKey(worker.sourceID, fingerprint)]
+	if scan == nil {
+		return nil, false, time.Time{}
+	}
+	return scan.index, true, scan.updatedAt
+}
+
+// removeWatchSnapshotImages 将用户已成功删除的镜像从运行期列表缓存中移除。
+func (s *ImageService) removeWatchSnapshotImages(sourceID, fingerprint, value, repository string, registry bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	scan := s.watchSnapshots[watchSnapshotKey(sourceID, fingerprint)]
+	if scan == nil {
+		return
+	}
+	for id, image := range scan.index {
+		remove := id == value
+		if registry {
+			remove = image.Digest == value && (repository == "" || image.Repository == repository)
+		}
+		if remove {
+			delete(scan.index, id)
+		}
+	}
+}
+
+func (s *ImageService) dropStaleWatchSnapshots(sourceID, fingerprint string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	prefix := sourceID + "\x00"
+	for key := range s.watchSnapshots {
+		if strings.HasPrefix(key, prefix) && key != watchSnapshotKey(sourceID, fingerprint) {
+			delete(s.watchSnapshots, key)
+		}
+	}
+}
+
+func (s *ImageService) storeWatchSnapshot(worker *watchWorker, fingerprint string, index map[string]DockerImage) time.Time {
+	updatedAt := time.Now()
 	s.mu.Lock()
 	if s.watchSnapshots == nil {
 		s.watchSnapshots = make(map[string]*watchScan)
 	}
-	s.watchSnapshots[watchSnapshotKey(worker.sourceID, fingerprint)] = &watchScan{index: index}
+	s.watchSnapshots[watchSnapshotKey(worker.sourceID, fingerprint)] = &watchScan{index: index, updatedAt: updatedAt}
 	s.mu.Unlock()
+	return updatedAt
+}
+
+// RefreshDockerImages 请求当前来源立即执行下一轮扫描。已有扫描不会被打断或并行。
+func (s *ImageService) RefreshDockerImages(sourceID string, clientID string) error {
+	if s == nil || sourceID == "" || clientID == "" {
+		return errors.New("sourceID 与 clientID 不能为空")
+	}
+	s.mu.Lock()
+	worker := s.watchWorker
+	s.mu.Unlock()
+	if worker == nil || worker.sourceID != sourceID || worker.clientID != clientID {
+		return errors.New("镜像来源未处于活动状态")
+	}
+	worker.runMu.Lock()
+	running := worker.running
+	worker.runMu.Unlock()
+	if running {
+		return nil
+	}
+	select {
+	case worker.refresh <- struct{}{}:
+	default:
+	}
+	return nil
 }
 
 func (w *watchWorker) setFingerprint(fingerprint string) bool {
 	w.emitMu.Lock()
 	defer w.emitMu.Unlock()
+	w.fingerprintMu.Lock()
+	defer w.fingerprintMu.Unlock()
 	if w.fingerprint == fingerprint {
 		return false
 	}
@@ -150,6 +226,13 @@ func (w *watchWorker) setFingerprint(fingerprint string) bool {
 	}
 	w.fingerprint = fingerprint
 	return true
+}
+
+func (w *watchWorker) currentFingerprint() string {
+	w.fingerprintMu.RLock()
+	fingerprint := w.fingerprint
+	w.fingerprintMu.RUnlock()
+	return fingerprint
 }
 
 func watchImagesFromIndex(index map[string]DockerImage) []DockerImage {
@@ -194,7 +277,7 @@ func (s *ImageService) startWatchRun(ctx context.Context, clientID, sourceID str
 		cancel:    runCancel,
 		done:      make(chan struct{}),
 		stopBound: context.AfterFunc(ctx, runCancel),
-		bootstrap: true,
+		refresh:   make(chan struct{}, 1),
 	}
 	if err := runCtx.Err(); err != nil {
 		worker.releaseBound()
@@ -274,9 +357,21 @@ func (s *ImageService) watchLoop(worker *watchWorker) {
 		case <-worker.ctx.Done():
 			return
 		case <-timer.C:
+			// 定时 tick 与手动刷新同时就绪时只执行一轮，避免重复扫描。
+			select {
+			case <-worker.refresh:
+			default:
+			}
 			s.runWatchRound(worker)
 			// 本轮执行期间错过的所有 tick 都跳过，只等待下一个
 			// 固定时间点，而不是在本轮完成后重新计算 2 分钟。
+			now := time.Now()
+			for !nextTick.After(now) {
+				nextTick = nextTick.Add(watchInterRoundDelay)
+			}
+			timer.Reset(time.Until(nextTick))
+		case <-worker.refresh:
+			s.runWatchRound(worker)
 			now := time.Now()
 			for !nextTick.After(now) {
 				nextTick = nextTick.Add(watchInterRoundDelay)
@@ -288,11 +383,37 @@ func (s *ImageService) watchLoop(worker *watchWorker) {
 
 // runWatchRound 执行一轮扫描与 diff。CLI/status 操作都从 worker.ctx 派生并带 timeout。
 func (s *ImageService) runWatchRound(worker *watchWorker) {
+	if worker == nil {
+		return
+	}
+	worker.runMu.Lock()
+	if worker.running {
+		worker.runMu.Unlock()
+		return
+	}
+	roundCtx, roundCancel := context.WithCancel(worker.ctx)
+	worker.running = true
+	worker.roundCtx = roundCtx
+	worker.roundCancel = roundCancel
+	worker.runMu.Unlock()
+	defer func() {
+		roundCancel()
+		worker.runMu.Lock()
+		worker.running = false
+		worker.roundCtx = nil
+		worker.roundCancel = nil
+		worker.runMu.Unlock()
+	}()
+	s.watchMutationMu.RLock()
+	defer s.watchMutationMu.RUnlock()
+	if s.watchSourceDeleting(worker.sourceID) || roundCtx.Err() != nil {
+		return
+	}
 	taskID := s.newImageTask(imageTaskTypeUpdate, worker.sourceID, "")
 	worker.taskID = taskID
 	s.updateTask(taskID, func(task *imageTaskState) { task.Status = imageTaskRunning; task.Stage = "scanning" })
 	finishTask := func(err error) {
-		if errors.Is(err, context.Canceled) || worker.ctx.Err() != nil {
+		if errors.Is(err, context.Canceled) || worker.ctx.Err() != nil || roundCtx.Err() != nil {
 			s.updateTask(taskID, func(task *imageTaskState) { task.Status = imageTaskCanceled; task.Stage = "canceled" })
 		} else if err != nil {
 			s.updateTask(taskID, func(task *imageTaskState) {
@@ -308,16 +429,46 @@ func (s *ImageService) runWatchRound(worker *watchWorker) {
 	fingerprintChanged := false
 	if err == nil {
 		fingerprintChanged = worker.setFingerprint(fingerprint)
+		s.dropStaleWatchSnapshots(worker.sourceID, fingerprint)
+	}
+	// 先恢复本运行期缓存。缓存事件必须早于连接探测，以便页面立即可用。
+	previous, hasPrevious, snapshotUpdatedAt := s.watchSnapshotInfo(worker, fingerprint)
+	restoreCached := func() {
+		if !hasPrevious {
+			return
+		}
+		cached := true
+		event := s.watchSnapshotEvent(worker, watchImagesFromIndex(previous))
+		event.HasSnapshot = &cached
+		event.SnapshotUpdatedAt = snapshotUpdatedAt.Format(time.RFC3339Nano)
+		s.emitWatchEvent(worker, event)
+	}
+	clearUncached := func() {
+		if hasPrevious {
+			return
+		}
+		s.emitWatchEvent(worker, s.watchSnapshotEvent(worker, nil))
+	}
+	if hasPrevious {
+		cached := true
+		cachedEvent := s.watchSnapshotEvent(worker, watchImagesFromIndex(previous))
+		cachedEvent.HasSnapshot = &cached
+		cachedEvent.SnapshotUpdatedAt = snapshotUpdatedAt.Format(time.RFC3339Nano)
+		s.emitWatchEvent(worker, cachedEvent)
 	}
 	status := DockerStatus{CLIPath: cliPath}
 	if err == nil {
-		status = s.sourceConnectionStatusContext(worker.ctx, source, cliPath)
+		status = s.sourceConnectionStatusContext(roundCtx, source, cliPath)
 	}
 	_, hasCompleteSnapshot := s.watchPreviousSnapshot(worker, fingerprint)
 	s.emitWatchEvent(worker, s.watchScanningEvent(worker, &status, !hasCompleteSnapshot))
 	if err != nil {
 		finishTask(err)
 		s.failWatchRound(worker, err)
+		return
+	}
+	if roundCtx.Err() != nil || s.watchSourceDeleting(worker.sourceID) {
+		finishTask(roundCtx.Err())
 		return
 	}
 	if !status.Available {
@@ -330,24 +481,24 @@ func (s *ImageService) runWatchRound(worker *watchWorker) {
 		s.failWatchRound(worker, statusErrValue)
 		return
 	}
-	// 连接状态必须先于缓存数据发布，避免前端在状态尚未判定时把
-	// snapshot 误认为连接完成并短暂显示“不可用”。
-	previous, hasPrevious := s.watchPreviousSnapshot(worker, fingerprint)
+	// 来源配置变化时，使用当前指纹的缓存重置本地列表；缓存仍不代表连接成功。
 	if fingerprintChanged && source.Kind != "registry" {
 		cached := previous
 		s.emitWatchEvent(worker, s.watchSnapshotEvent(worker, watchImagesFromIndex(cached)))
 	}
-	ctx, cancel := context.WithCancel(worker.ctx)
+	ctx, cancel := context.WithCancel(roundCtx)
 	defer cancel()
 	var images []DockerImage
 	var index map[string]DockerImage
 	doneScanned, doneTotal := 0, 0
 	if source.Kind == "registry" {
 		prev, _ := s.watchPreviousSnapshot(worker, fingerprint)
-		result, scanErr := s.scanRegistryFlow(ctx, worker, source, prev, fingerprintChanged || worker.bootstrap)
+		result, scanErr := s.scanRegistryFlow(ctx, worker, source, prev, !hasPrevious)
 		if scanErr != nil {
 			finishTask(scanErr)
 			s.failWatchRound(worker, scanErr)
+			restoreCached()
+			clearUncached()
 			return
 		}
 		images = result.images
@@ -359,6 +510,8 @@ func (s *ImageService) runWatchRound(worker *watchWorker) {
 		if err != nil {
 			finishTask(err)
 			s.failWatchRound(worker, err)
+			restoreCached()
+			clearUncached()
 			return
 		}
 		index = indexImages(images)
@@ -367,20 +520,26 @@ func (s *ImageService) runWatchRound(worker *watchWorker) {
 		// 同一 generation 内做精准 diff，generation 变化时发 snapshot。
 		s.diffWatchRound(worker, fingerprint, images)
 	}
-	if worker.ctx.Err() != nil {
-		finishTask(worker.ctx.Err())
+	if roundCtx.Err() != nil {
+		finishTask(roundCtx.Err())
 		return
 	}
-	worker.bootstrap = false
+	if !s.sourceFingerprintCurrent(worker.sourceID, fingerprint) {
+		finishTask(context.Canceled)
+		return
+	}
 	// 扫描成功才更新权威缓存与 inventory（供详情缓存 Name/Tags 补充）。
-	s.storeWatchSnapshot(worker, fingerprint, index)
+	updatedAt := s.storeWatchSnapshot(worker, fingerprint, index)
 	s.updateImageInventory(worker.sourceID, fingerprint, source, images)
-	if worker.ctx.Err() != nil {
-		finishTask(worker.ctx.Err())
+	if roundCtx.Err() != nil {
+		finishTask(roundCtx.Err())
 		return
 	}
 	doneEvent := s.watchStateEvent(worker, watchStageDone, doneScanned, doneTotal, "")
 	doneEvent.Status = &status
+	hasSnapshot := true
+	doneEvent.HasSnapshot = &hasSnapshot
+	doneEvent.SnapshotUpdatedAt = updatedAt.Format(time.RFC3339Nano)
 	s.emitWatchEvent(worker, doneEvent)
 	finishTask(nil)
 }
@@ -502,7 +661,7 @@ func (s *ImageService) enrichDockerWatchImages(ctx context.Context, worker *watc
 			defer wg.Done()
 			for index := range jobs {
 				base := images[index]
-				detail, err := s.inspectWithGeneration(worker.sourceID, source, cliPath, worker.fingerprint, base.ID, "", ctx, 0)
+				detail, err := s.inspectWithGeneration(worker.sourceID, source, cliPath, worker.currentFingerprint(), base.ID, "", ctx, 0)
 				if err != nil {
 					if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 						s.logWatch(worker, "镜像详情加载失败 image="+base.ID+": "+redactImageError(err, source).Error())
@@ -962,14 +1121,38 @@ func (s *ImageService) watchDeleteEvent(worker *watchWorker, imageID string) Wat
 	}
 }
 
+func (s *ImageService) watchEventAllowed(worker *watchWorker) bool {
+	if worker == nil || worker.ctx.Err() != nil {
+		return false
+	}
+	worker.runMu.Lock()
+	roundCtx := worker.roundCtx
+	worker.runMu.Unlock()
+	if roundCtx != nil && roundCtx.Err() != nil {
+		return false
+	}
+	fingerprint := worker.currentFingerprint()
+	if fingerprint != "" && !s.sourceFingerprintCurrent(worker.sourceID, fingerprint) {
+		return false
+	}
+	return true
+}
+
 // emitWatchEvent 是唯一事件提交入口：emitMu 保护下顺序分配 revision 并同步发送。
+// 已取消的扫描轮次或来源配置已变化时，迟到事件直接丢弃。
 func (s *ImageService) emitWatchEvent(worker *watchWorker, event WatchDockerImagesEvent) {
+	if !s.watchEventAllowed(worker) {
+		return
+	}
 	worker.emitMu.Lock()
+	defer worker.emitMu.Unlock()
+	if !s.watchEventAllowed(worker) {
+		return
+	}
 	worker.revision++
 	event.Generation = worker.generation
 	event.Revision = worker.revision
 	s.emitEvent(watchDockerImagesEventName, event)
-	worker.emitMu.Unlock()
 }
 
 func boolPtr(value bool) *bool { return &value }

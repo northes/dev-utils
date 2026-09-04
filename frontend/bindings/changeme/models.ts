@@ -33,6 +33,14 @@ export interface DockerDeleteResult {
     "failed": DockerDeleteFailure[] | null;
 }
 
+/**
+ * DockerDeleteTarget 固定删除确认时看到的镜像及其 digest。
+ */
+export interface DockerDeleteTarget {
+    "imageID": string;
+    "expectedDigest"?: string;
+}
+
 export interface DockerHealthcheck {
     "test": string[] | null;
     "interval": string;

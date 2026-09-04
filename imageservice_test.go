@@ -261,7 +261,7 @@ func TestDeleteDockerImagesDeduplicatesAndReturnsPartialResults(t *testing.T) {
 			return []byte("deleted"), nil
 		},
 	}
-	result := service.DeleteDockerImages("local", []string{"one", "one", "bad", "two"})
+	result := service.DeleteDockerImages("local", []DockerDeleteTarget{{ImageID: "one"}, {ImageID: "one"}, {ImageID: "bad"}, {ImageID: "two"}})
 	if !reflect.DeepEqual(result.Deleted, []string{"one", "two"}) {
 		t.Fatalf("成功删除结果为 %#v", result.Deleted)
 	}
@@ -324,6 +324,7 @@ func TestRegistryListDetailAndDeleteUseDigest(t *testing.T) {
 	manifest := []byte(fmt.Sprintf(`{"schemaVersion":2,"mediaType":"application/vnd.oci.image.manifest.v1+json","config":{"mediaType":"application/vnd.oci.image.config.v1+json","digest":%q,"size":%d},"layers":[{"mediaType":"application/vnd.oci.image.layer.v1.tar+gzip","digest":%q,"size":1234}]}`, configDigest, len(configBlob), layerDigest))
 	hash := sha256.Sum256(manifest)
 	digest := "sha256:" + hex.EncodeToString(hash[:])
+	currentDigest := digest
 	var deletedPath string
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		username, password, ok := r.BasicAuth()
@@ -340,11 +341,11 @@ func TestRegistryListDetailAndDeleteUseDigest(t *testing.T) {
 		case "GET /v2/repo/tags/list":
 			_ = json.NewEncoder(w).Encode(map[string]any{"name": "repo", "tags": []string{"latest", "stable"}})
 		case "HEAD /v2/repo/manifests/latest", "HEAD /v2/repo/manifests/stable":
-			w.Header().Set("Docker-Content-Digest", digest)
+			w.Header().Set("Docker-Content-Digest", currentDigest)
 			w.Header().Set("Content-Length", strconv.Itoa(len(manifest)))
 			w.Header().Set("Content-Type", "application/vnd.oci.image.manifest.v1+json")
 		case "GET /v2/repo/manifests/latest", "GET /v2/repo/manifests/stable", "GET /v2/repo/manifests/" + digest:
-			w.Header().Set("Docker-Content-Digest", digest)
+			w.Header().Set("Docker-Content-Digest", currentDigest)
 			w.Header().Set("Content-Type", "application/vnd.oci.image.manifest.v1+json")
 			_, _ = w.Write(manifest)
 		case "GET /v2/repo/blobs/" + configDigest:
@@ -401,7 +402,13 @@ func TestRegistryListDetailAndDeleteUseDigest(t *testing.T) {
 	if detail.Runtime.User != "app" || detail.Runtime.WorkingDir != "/srv" || len(detail.Runtime.Env) != 1 || detail.Runtime.Healthcheck == nil || detail.Runtime.Healthcheck.Retries != 3 {
 		t.Fatalf("Registry runtime 配置为 %#v", detail.Runtime)
 	}
-	result := service.DeleteDockerImages("reg", []string{images[0].ID})
+	currentDigest = "sha256:" + strings.Repeat("c", 64)
+	changed := service.DeleteDockerImages("reg", []DockerDeleteTarget{{ImageID: images[0].ID, ExpectedDigest: digest}})
+	if len(changed.Deleted) != 0 || len(changed.Failed) != 1 || deletedPath != "" {
+		t.Fatalf("digest 变化后不应删除 Registry manifest: %#v，路径为 %q", changed, deletedPath)
+	}
+	currentDigest = digest
+	result := service.DeleteDockerImages("reg", []DockerDeleteTarget{{ImageID: images[0].ID, ExpectedDigest: digest}})
 	if len(result.Deleted) != 1 || deletedPath != "/v2/repo/manifests/"+digest {
 		t.Fatalf("Registry 删除结果为 %#v，路径为 %q", result, deletedPath)
 	}
@@ -491,7 +498,7 @@ func TestImageDetailCacheIsolatedAndInvalidated(t *testing.T) {
 	if calls != 2 {
 		t.Fatalf("来源切换后错误复用旧缓存，调用次数为 %d", calls)
 	}
-	deleted := service.DeleteDockerImages("local", []string{imageID})
+	deleted := service.DeleteDockerImages("local", []DockerDeleteTarget{{ImageID: imageID}})
 	if len(deleted.Deleted) != 1 {
 		t.Fatalf("删除缓存镜像失败: %#v", deleted)
 	}

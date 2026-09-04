@@ -204,6 +204,12 @@ type DockerDeleteFailure struct {
 	Error   string `json:"error"`
 }
 
+// DockerDeleteTarget 固定删除确认时看到的镜像及其 digest。
+type DockerDeleteTarget struct {
+	ImageID        string `json:"imageID"`
+	ExpectedDigest string `json:"expectedDigest,omitempty"`
+}
+
 type DockerDeleteResult struct {
 	Deleted []string              `json:"deleted"`
 	Failed  []DockerDeleteFailure `json:"failed"`
@@ -240,6 +246,9 @@ type ImageService struct {
 	watchWorker           *watchWorker
 	watchGeneration       uint64
 	watchSnapshots        map[string]*watchScan
+	watchMutationMu       sync.RWMutex
+	watchDeleteMu         sync.Mutex
+	watchDeleting         map[string]bool
 	taskMu                sync.Mutex
 	tasks                 map[string]*imageTaskState
 	taskOrder             []string
@@ -276,6 +285,9 @@ type prewarmGeneration struct {
 func NewImageService(config *ConfigService) *ImageService {
 	ctx, cancel := context.WithCancel(context.Background())
 	service := &ImageService{config: config, ctx: ctx, cancel: cancel, cacheCalls: make(map[string]*imageCacheCall), inventory: make(map[string]imageInventory), prewarmGenerations: make(map[string]*prewarmGeneration), exportSem: make(chan struct{}, 2)}
+	if config != nil {
+		config.setOnChange(func(Config) { service.cleanupImageCache() })
+	}
 	service.ensurePrewarmWorkers()
 	return service
 }
@@ -364,20 +376,24 @@ func (s *ImageService) source(sourceID string) (ImageSource, string, error) {
 
 func imageSourceFingerprint(source ImageSource, cliPath string) string {
 	value := struct {
-		Kind     string `json:"kind"`
-		Endpoint string `json:"endpoint"`
-		Host     string `json:"host"`
-		Port     int    `json:"port"`
-		Username string `json:"username"`
-		CLI      string `json:"cli"`
-		KeyPath  string `json:"keyPath"`
+		Kind          string `json:"kind"`
+		Endpoint      string `json:"endpoint"`
+		Host          string `json:"host"`
+		Port          int    `json:"port"`
+		Username      string `json:"username"`
+		Password      string `json:"password"`
+		CLI           string `json:"cli"`
+		KeyPath       string `json:"keyPath"`
+		PrivateKey    string `json:"privateKey"`
+		KeyPassphrase string `json:"keyPassphrase"`
 	}{Kind: source.Kind, CLI: cliPath}
 	switch source.Kind {
 	case "registry":
-		value.Endpoint, value.Username = source.RegistryURL, source.RegistryUsername
+		value.Endpoint, value.Username, value.Password = source.RegistryURL, source.RegistryUsername, source.RegistryPassword
 	case "ssh":
 		value.Host, value.Port, value.Username = source.SSHHost, source.SSHPort, source.SSHUsername
-		value.KeyPath = source.SSHPrivateKeyPath
+		value.Password, value.KeyPath = source.SSHPassword, source.SSHPrivateKeyPath
+		value.PrivateKey, value.KeyPassphrase = source.SSHPrivateKey, source.SSHKeyPassphrase
 	}
 	b, _ := json.Marshal(value)
 	digest := sha256.Sum256(b)
@@ -1879,6 +1895,16 @@ func (s *ImageService) invalidatePrewarmSources(current map[string]string) {
 			delete(s.inventory, key)
 		}
 	}
+	for key := range s.watchSnapshots {
+		parts := strings.SplitN(key, "\x00", 2)
+		if len(parts) < 2 {
+			continue
+		}
+		fingerprint, ok := current[parts[0]]
+		if !ok || fingerprint != parts[1] {
+			delete(s.watchSnapshots, key)
+		}
+	}
 	if s.activeListToken != 0 && s.activeListFingerprint != "" {
 		fingerprint, ok := current[s.activeListSourceID]
 		if !ok || fingerprint != s.activeListFingerprint {
@@ -1893,6 +1919,13 @@ func (s *ImageService) invalidatePrewarmSources(current map[string]string) {
 func (s *ImageService) sourceFingerprintCurrent(sourceID, fingerprint string) bool {
 	_, _, current, err := s.sourceSnapshot(sourceID)
 	return err == nil && current == fingerprint
+}
+
+func (s *ImageService) watchSourceDeleting(sourceID string) bool {
+	s.mu.Lock()
+	deleting := s.watchDeleting[sourceID]
+	s.mu.Unlock()
+	return deleting
 }
 
 func (s *ImageService) serviceContext() context.Context {
@@ -2523,28 +2556,56 @@ func (s *ImageService) PushDockerImage(sourceID string, image string) (DockerOpe
 	return result, nil
 }
 
-func (s *ImageService) DeleteDockerImages(sourceID string, imageIDs []string) DockerDeleteResult {
+func (s *ImageService) DeleteDockerImages(sourceID string, targets []DockerDeleteTarget) DockerDeleteResult {
+	// 删除与扫描共享一个写锁。先标记来源进入删除态并取消当前扫描，
+	// 再获取写锁等待扫描退出；删除期间新扫描会在取得读锁后立即放弃。
+	s.watchDeleteMu.Lock()
+	defer s.watchDeleteMu.Unlock()
+	s.mu.Lock()
+	if s.watchDeleting == nil {
+		s.watchDeleting = make(map[string]bool)
+	}
+	s.watchDeleting[sourceID] = true
+	worker := s.watchWorker
+	s.mu.Unlock()
+	if worker != nil && worker.sourceID == sourceID {
+		worker.runMu.Lock()
+		cancelRound := worker.roundCancel
+		worker.runMu.Unlock()
+		if cancelRound != nil {
+			cancelRound()
+		}
+	}
+	s.watchMutationMu.Lock()
+	defer s.watchMutationMu.Unlock()
+	defer func() {
+		s.mu.Lock()
+		delete(s.watchDeleting, sourceID)
+		s.mu.Unlock()
+	}()
 	result := DockerDeleteResult{Deleted: []string{}, Failed: []DockerDeleteFailure{}}
 	seen := make(map[string]bool)
-	ids := make([]string, 0, len(imageIDs))
-	for _, imageID := range imageIDs {
-		imageID = strings.TrimSpace(imageID)
+	uniqueTargets := make([]DockerDeleteTarget, 0, len(targets))
+	for _, target := range targets {
+		imageID := strings.TrimSpace(target.ImageID)
 		if seen[imageID] {
 			continue
 		}
 		seen[imageID] = true
-		ids = append(ids, imageID)
+		target.ImageID = imageID
+		target.ExpectedDigest = strings.TrimSpace(target.ExpectedDigest)
+		uniqueTargets = append(uniqueTargets, target)
 	}
-	if len(ids) > maxDockerDeleteImages {
-		for _, imageID := range ids[maxDockerDeleteImages:] {
-			result.Failed = append(result.Failed, DockerDeleteFailure{ImageID: imageID, Error: "超过镜像删除数量限制"})
+	if len(uniqueTargets) > maxDockerDeleteImages {
+		for _, target := range uniqueTargets[maxDockerDeleteImages:] {
+			result.Failed = append(result.Failed, DockerDeleteFailure{ImageID: target.ImageID, Error: "超过镜像删除数量限制"})
 		}
-		ids = ids[:maxDockerDeleteImages]
+		uniqueTargets = uniqueTargets[:maxDockerDeleteImages]
 	}
 	source, cliPath, fingerprint, sourceErr := s.sourceSnapshot(sourceID)
 	if sourceErr != nil {
-		for _, imageID := range ids {
-			result.Failed = append(result.Failed, DockerDeleteFailure{ImageID: imageID, Error: sourceErr.Error()})
+		for _, target := range uniqueTargets {
+			result.Failed = append(result.Failed, DockerDeleteFailure{ImageID: target.ImageID, Error: sourceErr.Error()})
 		}
 		return result
 	}
@@ -2555,14 +2616,19 @@ func (s *ImageService) DeleteDockerImages(sourceID string, imageIDs []string) Do
 		defer cancel()
 		release, err := s.registryPermit(ctx)
 		if err != nil {
-			for _, imageID := range ids {
-				result.Failed = append(result.Failed, DockerDeleteFailure{ImageID: imageID, Error: err.Error()})
+			for _, target := range uniqueTargets {
+				result.Failed = append(result.Failed, DockerDeleteFailure{ImageID: target.ImageID, Error: err.Error()})
 			}
 			return result
 		}
 		defer release()
 	}
-	for _, imageID := range ids {
+	for _, target := range uniqueTargets {
+		imageID := target.ImageID
+		if !s.sourceFingerprintCurrent(sourceID, fingerprint) {
+			result.Failed = append(result.Failed, DockerDeleteFailure{ImageID: imageID, Error: "来源配置已变化，请刷新后重新确认删除"})
+			continue
+		}
 		if source.Kind == "registry" {
 			repository, tag, digest, err := parseRegistryImageReference(imageID)
 			if err != nil {
@@ -2576,6 +2642,14 @@ func (s *ImageService) DeleteDockerImages(sourceID string, imageIDs []string) Do
 					continue
 				}
 			}
+			if target.ExpectedDigest == "" {
+				result.Failed = append(result.Failed, DockerDeleteFailure{ImageID: imageID, Error: "删除确认缺少 manifest digest，请刷新后重试"})
+				continue
+			}
+			if digest != target.ExpectedDigest {
+				result.Failed = append(result.Failed, DockerDeleteFailure{ImageID: imageID, Error: "镜像 digest 已变化，请刷新后重新确认"})
+				continue
+			}
 			repo, err := registryRepository(source, repository)
 			if err != nil {
 				result.Failed = append(result.Failed, DockerDeleteFailure{ImageID: imageID, Error: err.Error()})
@@ -2586,6 +2660,7 @@ func (s *ImageService) DeleteDockerImages(sourceID string, imageIDs []string) Do
 				continue
 			}
 			s.removeImageCache(sourceID, fingerprint, digest, repository)
+			s.removeWatchSnapshotImages(sourceID, fingerprint, digest, repository, true)
 			result.Deleted = append(result.Deleted, imageID)
 			continue
 		}
@@ -2601,6 +2676,7 @@ func (s *ImageService) DeleteDockerImages(sourceID string, imageIDs []string) Do
 		if digest, _, ok := cacheIdentity(source, imageID, ""); ok {
 			s.removeImageCache(sourceID, fingerprint, digest, "")
 		}
+		s.removeWatchSnapshotImages(sourceID, fingerprint, imageID, "", false)
 		result.Deleted = append(result.Deleted, imageID)
 	}
 	return result

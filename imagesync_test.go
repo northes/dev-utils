@@ -86,6 +86,16 @@ func (h *watchTestHarness) manualRound() uint64 {
 	if worker == nil {
 		panic("watch worker 未创建")
 	}
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		worker.runMu.Lock()
+		running := worker.running
+		worker.runMu.Unlock()
+		if !running || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
 	h.service.runWatchRound(worker)
 	worker.emitMu.Lock()
 	revision := worker.revision
@@ -637,11 +647,14 @@ func TestWatchGenerationIncrementsOnNewClient(t *testing.T) {
 	if second.Generation <= first.Generation {
 		t.Fatalf("新 client 应使 generation 自增: first=%d second=%d", first.Generation, second.Generation)
 	}
+	if second.HasSnapshot == nil || !*second.HasSnapshot || second.SnapshotUpdatedAt == "" {
+		t.Fatalf("重新订阅应先恢复带更新时间的缓存快照: %#v", second)
+	}
 }
 
 // TestWatchSnapshotCacheKeyedByFingerprint 验证完整列表缓存在 service 层
 // 按 sourceID+fingerprint 保存；同一循环内来源配置变化（fingerprint 变化）
-// 后，新 fingerprint 无缓存首轮走 snapshot，旧 fingerprint 缓存保留。
+// 后，新 fingerprint 无缓存首轮走 snapshot，旧 fingerprint 缓存失效。
 func TestWatchSnapshotCacheKeyedByFingerprint(t *testing.T) {
 	config := &ConfigService{path: filepath.Join(t.TempDir(), "config.json"), cfg: normalizeConfig(defaultConfig())}
 	service := NewImageService(config)
@@ -690,11 +703,38 @@ func TestWatchSnapshotCacheKeyedByFingerprint(t *testing.T) {
 	if snapshotEvent.Generation <= first.Generation {
 		t.Fatalf("新 fingerprint snapshot generation 应更大: first=%d second=%d", first.Generation, snapshotEvent.Generation)
 	}
-	// 旧 fingerprint 缓存应保留（惰性失效）。
+	// 旧 fingerprint 缓存应被清理，避免认证配置变化后误复用。
 	service.mu.Lock()
 	_, oldCached := service.watchSnapshots["local\x00"+originalFingerprint]
 	service.mu.Unlock()
-	if !oldCached {
-		t.Fatal("来源变化不应删除其它 fingerprint 的缓存")
+	if oldCached {
+		t.Fatal("来源变化后不应保留旧 fingerprint 缓存")
+	}
+}
+
+func TestRefreshDockerImagesTargetsActiveWorkerAndCoalesces(t *testing.T) {
+	service := &ImageService{}
+	worker := &watchWorker{sourceID: "local", clientID: "client", refresh: make(chan struct{}, 1)}
+	service.watchWorker = worker
+	if err := service.RefreshDockerImages("local", "client"); err != nil {
+		t.Fatalf("刷新活动来源失败: %v", err)
+	}
+	if err := service.RefreshDockerImages("local", "client"); err != nil {
+		t.Fatalf("重复刷新请求失败: %v", err)
+	}
+	if got := len(worker.refresh); got != 1 {
+		t.Fatalf("重复刷新应合并为一个请求，实际 %d", got)
+	}
+	worker.runMu.Lock()
+	worker.running = true
+	worker.runMu.Unlock()
+	if err := service.RefreshDockerImages("local", "client"); err != nil {
+		t.Fatalf("扫描进行中刷新应安全忽略: %v", err)
+	}
+	if got := len(worker.refresh); got != 1 {
+		t.Fatalf("扫描进行中不应追加刷新请求，实际 %d", got)
+	}
+	if err := service.RefreshDockerImages("other", "client"); err == nil {
+		t.Fatal("来源不匹配时应拒绝刷新")
 	}
 }
