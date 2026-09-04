@@ -167,6 +167,11 @@ export interface HistoryPage {
     "total": number;
 }
 
+export interface ImageExportResult {
+    "started": number;
+    "snapshot": ImageTaskSnapshot;
+}
+
 export interface ImageSource {
     "id": string;
     "name": string;

@@ -48,6 +48,11 @@ type ImageTaskSnapshot struct {
 	Tasks    []ImageTask `json:"tasks"`
 }
 
+type ImageExportResult struct {
+	Started  int               `json:"started"`
+	Snapshot ImageTaskSnapshot `json:"snapshot"`
+}
+
 const (
 	imageTaskTypeExport = "export"
 	imageTaskTypeUpdate = "update"
@@ -84,23 +89,20 @@ func (s *ImageService) taskSnapshotLocked() ImageTaskSnapshot {
 	return result
 }
 
-func (s *ImageService) emitTaskSnapshot() {
+func (s *ImageService) updateTask(id string, update func(*imageTaskState)) {
 	s.taskMu.Lock()
+	task := s.tasks[id]
+	if task == nil {
+		s.taskMu.Unlock()
+		return
+	}
+	update(task)
+	task.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	// 版本与状态在同一临界区提交，查询和事件才能使用同一版本判定新旧。
 	s.taskRevision++
 	snapshot := s.taskSnapshotLocked()
 	s.taskMu.Unlock()
 	s.emitEvent(imageTasksEventName, snapshot)
-}
-
-func (s *ImageService) updateTask(id string, update func(*imageTaskState)) {
-	s.taskMu.Lock()
-	if task := s.tasks[id]; task != nil {
-		update(task)
-		task.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
-	}
-	s.pruneTasksLocked()
-	s.taskMu.Unlock()
-	s.emitTaskSnapshot()
 }
 
 func (s *ImageService) pruneTasksLocked() {
@@ -115,6 +117,7 @@ func (s *ImageService) pruneTasksLocked() {
 		updatedAt, err := time.Parse(time.RFC3339Nano, task.UpdatedAt)
 		if finished && err == nil && !updatedAt.After(cutoff) {
 			delete(s.tasks, id)
+			s.taskRevision++
 			continue
 		}
 		retained = append(retained, id)
@@ -136,17 +139,25 @@ func exportFilename(imageID string) string {
 }
 
 func (s *ImageService) newImageTask(taskType, sourceID, imageID string) string {
+	return s.createImageTask(imageTaskState{ImageTask: ImageTask{Type: taskType, SourceID: sourceID, ImageID: imageID}})
+}
+
+func (s *ImageService) createImageTask(task imageTaskState) string {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	id := newTaskID()
+	task.ID = id
+	task.Status, task.Stage = imageTaskQueued, imageTaskQueued
+	task.CreatedAt, task.UpdatedAt = now, now
 	s.taskMu.Lock()
 	if s.tasks == nil {
 		s.tasks = make(map[string]*imageTaskState)
 	}
-	s.tasks[id] = &imageTaskState{ImageTask: ImageTask{ID: id, Type: taskType, SourceID: sourceID, ImageID: imageID, Status: imageTaskQueued, Stage: imageTaskQueued, CreatedAt: now, UpdatedAt: now}}
+	s.tasks[id] = &task
 	s.taskOrder = append(s.taskOrder, id)
-	s.pruneTasksLocked()
+	s.taskRevision++
+	snapshot := s.taskSnapshotLocked()
 	s.taskMu.Unlock()
-	s.emitTaskSnapshot()
+	s.emitEvent(imageTasksEventName, snapshot)
 	return id
 }
 
@@ -177,13 +188,13 @@ func (s *ImageService) CancelImageTask(id string) error {
 }
 
 // StartImageExport opens a native save dialog and starts an asynchronous export.
-func (s *ImageService) StartImageExport(sourceID, imageID string) (ImageTask, error) {
+func (s *ImageService) StartImageExport(sourceID, imageID string) (ImageExportResult, error) {
 	if strings.TrimSpace(imageID) == "" {
-		return ImageTask{}, errors.New("镜像 ID 为空")
+		return ImageExportResult{}, errors.New("镜像 ID 为空")
 	}
 	app := application.Get()
 	if app == nil || app.Dialog == nil {
-		return ImageTask{}, errors.New("应用尚未初始化")
+		return ImageExportResult{}, errors.New("应用尚未初始化")
 	}
 	filename := exportFilename(imageID)
 	dialog := app.Dialog.SaveFile().SetFilename(filename).CanCreateDirectories(true).AddFilter("Tar archive", "*.tar")
@@ -192,26 +203,27 @@ func (s *ImageService) StartImageExport(sourceID, imageID string) (ImageTask, er
 	}
 	path, err := dialog.PromptForSingleSelection()
 	if err != nil {
-		return ImageTask{}, fmt.Errorf("选择保存路径: %w", err)
+		return ImageExportResult{}, fmt.Errorf("选择保存路径: %w", err)
 	}
 	if path == "" {
-		return ImageTask{}, nil
+		return ImageExportResult{}, nil
 	}
 	if filepath.Ext(strings.ToLower(path)) != ".tar" {
 		path += ".tar"
 	}
 	s.exportQueueMu.Lock()
 	defer s.exportQueueMu.Unlock()
-	return s.enqueueImageExport(sourceID, imageID, path, false), nil
+	s.enqueueImageExport(sourceID, imageID, path, false)
+	return ImageExportResult{Started: 1, Snapshot: s.GetImageTasks()}, nil
 }
 
 // StartImageExports 选择一次目录，为每个镜像创建独立导出任务。
-func (s *ImageService) StartImageExports(sourceID string, imageIDs []string) ([]ImageTask, error) {
+func (s *ImageService) StartImageExports(sourceID string, imageIDs []string) (ImageExportResult, error) {
 	ids := make([]string, 0, len(imageIDs))
 	seen := make(map[string]bool)
 	for _, id := range imageIDs {
 		if strings.TrimSpace(id) == "" {
-			return nil, errors.New("镜像 ID 为空")
+			return ImageExportResult{}, errors.New("镜像 ID 为空")
 		}
 		if !seen[id] {
 			seen[id] = true
@@ -219,14 +231,14 @@ func (s *ImageService) StartImageExports(sourceID string, imageIDs []string) ([]
 		}
 	}
 	if len(ids) == 0 {
-		return nil, errors.New("未选择镜像")
+		return ImageExportResult{}, errors.New("未选择镜像")
 	}
 	if _, _, _, err := s.sourceSnapshot(sourceID); err != nil {
-		return nil, err
+		return ImageExportResult{}, err
 	}
 	app := application.Get()
 	if app == nil || app.Dialog == nil {
-		return nil, errors.New("应用尚未初始化")
+		return ImageExportResult{}, errors.New("应用尚未初始化")
 	}
 	dialog := app.Dialog.OpenFile().CanChooseDirectories(true).CanChooseFiles(false).CanCreateDirectories(true)
 	if window := app.Window.Current(); window != nil {
@@ -234,11 +246,15 @@ func (s *ImageService) StartImageExports(sourceID string, imageIDs []string) ([]
 	}
 	directory, err := dialog.PromptForSingleSelection()
 	if err != nil {
-		return nil, fmt.Errorf("选择保存目录: %w", err)
+		return ImageExportResult{}, fmt.Errorf("选择保存目录: %w", err)
 	}
 	if directory == "" {
-		return nil, nil
+		return ImageExportResult{}, nil
 	}
+	return s.enqueueImageExports(sourceID, ids, directory)
+}
+
+func (s *ImageService) enqueueImageExports(sourceID string, ids []string, directory string) (ImageExportResult, error) {
 	s.exportQueueMu.Lock()
 	defer s.exportQueueMu.Unlock()
 	reserved := make(map[string]bool)
@@ -251,13 +267,12 @@ func (s *ImageService) StartImageExports(sourceID string, imageIDs []string) ([]
 	s.taskMu.Unlock()
 	paths, err := batchExportPaths(directory, ids, reserved)
 	if err != nil {
-		return nil, err
+		return ImageExportResult{}, err
 	}
-	result := make([]ImageTask, 0, len(ids))
 	for i, id := range ids {
-		result = append(result, s.enqueueImageExport(sourceID, id, paths[i], true))
+		s.enqueueImageExport(sourceID, id, paths[i], true)
 	}
-	return result, nil
+	return ImageExportResult{Started: len(ids), Snapshot: s.GetImageTasks()}, nil
 }
 
 func batchExportPaths(directory string, ids []string, reserved map[string]bool) ([]string, error) {
@@ -290,16 +305,15 @@ func batchExportPaths(directory string, ids []string, reserved map[string]bool) 
 
 // 调用方持有 exportQueueMu，避免批量任务分配到相同目标路径。
 func (s *ImageService) enqueueImageExport(sourceID, imageID, path string, exclusive bool) ImageTask {
-	id := s.newImageTask(imageTaskTypeExport, sourceID, imageID)
-	s.taskMu.Lock()
-	task := s.tasks[id]
 	ctx, cancel := context.WithCancel(s.serviceContext())
-	task.cancel = cancel
-	task.Path = path
-	task.exclusiveTarget = exclusive
-	result := task.ImageTask
+	id := s.createImageTask(imageTaskState{
+		ImageTask:       ImageTask{Type: imageTaskTypeExport, SourceID: sourceID, ImageID: imageID, Path: path},
+		cancel:          cancel,
+		exclusiveTarget: exclusive,
+	})
+	s.taskMu.Lock()
+	result := s.tasks[id].ImageTask
 	s.taskMu.Unlock()
-	s.emitTaskSnapshot()
 	s.exportWG.Add(1)
 	go func() {
 		defer s.exportWG.Done()

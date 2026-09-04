@@ -272,6 +272,9 @@ func TestImageTaskRetention(t *testing.T) {
 		add(fmt.Sprintf("recent-%d", i), imageTaskSuccess, time.Hour)
 	}
 	snapshot := s.GetImageTasks()
+	if snapshot.Revision == 0 {
+		t.Fatal("过期任务清理后没有更新快照版本")
+	}
 	if len(snapshot.Tasks) != 65 {
 		t.Fatalf("任务数量 = %d，期望 65", len(snapshot.Tasks))
 	}
@@ -282,5 +285,92 @@ func TestImageTaskRetention(t *testing.T) {
 		if _, exists := s.tasks["recent-"+status]; !exists {
 			t.Errorf("近期任务被清理: %s", status)
 		}
+	}
+}
+
+func TestBatchExportSnapshotWithoutEvents(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	s := &ImageService{ctx: ctx, exportSem: make(chan struct{}, 2)}
+	// 占满并发槽，使任务停在队列中，无需 Docker 或原生目录对话框。
+	s.exportSem <- struct{}{}
+	s.exportSem <- struct{}{}
+	defer func() {
+		cancel()
+		s.exportWG.Wait()
+	}()
+	var mu sync.Mutex
+	var events []ImageTaskSnapshot
+	s.eventEmitter = func(name string, data any) {
+		if name == imageTasksEventName {
+			mu.Lock()
+			events = append(events, data.(ImageTaskSnapshot))
+			mu.Unlock()
+		}
+	}
+	historyID := s.newImageTask(imageTaskTypeDetail, "local", "existing:latest")
+	ids := []string{"repo/a:latest", "repo/b:latest", "repo/c:latest"}
+	result, err := s.enqueueImageExports("local", ids, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Started != len(ids) || len(result.Snapshot.Tasks) != len(ids)+1 {
+		t.Fatalf("导出响应没有携带完整任务列表: %+v", result)
+	}
+	if result.Snapshot.Tasks[0].ID != historyID {
+		t.Fatal("导出响应丢失了已有任务")
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	for _, event := range events {
+		for _, task := range event.Tasks {
+			if task.Type == imageTaskTypeExport && task.Path == "" {
+				t.Fatal("导出任务尚未初始化完成就发出了事件")
+			}
+		}
+		if event.Revision > result.Snapshot.Revision {
+			t.Fatal("响应快照比创建事件更旧")
+		}
+	}
+}
+
+func TestImageTaskSnapshotRevisionConsistency(t *testing.T) {
+	s := &ImageService{}
+	id := s.newImageTask(imageTaskTypeExport, "local", "repo:latest")
+	var mu sync.Mutex
+	versions := make(map[uint64]string)
+	check := func(snapshot ImageTaskSnapshot) {
+		data, err := json.Marshal(snapshot.Tasks)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		if previous, ok := versions[snapshot.Revision]; ok && previous != string(data) {
+			t.Errorf("同一版本 %d 对应不同任务状态", snapshot.Revision)
+		}
+		versions[snapshot.Revision] = string(data)
+	}
+	s.eventEmitter = func(name string, data any) {
+		if name == imageTasksEventName {
+			check(data.(ImageTaskSnapshot))
+		}
+	}
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for range 64 {
+				check(s.GetImageTasks())
+				s.updateTask(id, func(task *imageTaskState) { task.Bytes++ })
+			}
+		}()
+	}
+	wg.Wait()
+	snapshot := s.GetImageTasks()
+	check(snapshot)
+	if snapshot.Tasks[0].Bytes != 512 {
+		t.Fatalf("并发更新丢失: %+v", snapshot)
 	}
 }

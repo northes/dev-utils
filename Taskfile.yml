@@ -20,6 +20,16 @@ includes:
   android: ./build/android/Taskfile.yml
 
 tasks:
+  test:go:
+    summary: Runs Go tests
+    cmds:
+      - go test {{.GO_TEST_FLAGS}} ./...
+
+  test:image-tasks:
+    summary: Checks image task snapshot ordering
+    cmds:
+      - node --experimental-strip-types --test frontend/src/lib/image-tasks.test.mjs
+
   gp:
     summary: push to all remote repos
     cmds:

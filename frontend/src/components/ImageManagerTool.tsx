@@ -35,7 +35,9 @@ import type {
   DockerStatus,
   ImageSource,
   ImageTask,
+  ImageTaskSnapshot,
 } from '../../bindings/changeme/models';
+import { applyImageTaskSnapshot } from '../lib/image-tasks';
 import {
   Reveal,
   ToolLayout,
@@ -159,8 +161,6 @@ type ConfirmState =
 
 type SourceViewState = 'connecting' | 'unavailable' | 'loading-details' | 'updating' | 'connected';
 type ContentViewState = 'loading' | 'error' | 'empty' | 'no-results' | 'table';
-
-type TaskSnapshot = { revision?: number; tasks?: ImageTask[] };
 
 function errorMessage(error: unknown) {
   if (error instanceof Error && error.message) return error.message;
@@ -923,7 +923,11 @@ export default function ImageManagerTool({
   const deferredSearch = useDeferredValue(search);
   const [isUpdating, setIsUpdating] = useState(false);
   const [isInitialLoad, setIsInitialLoad] = useState(false);
-  const [tasks, setTasks] = useState<ImageTask[]>([]);
+  const [taskSnapshot, setTaskSnapshot] = useState<ImageTaskSnapshot | null>(null);
+  const tasks = taskSnapshot?.tasks ?? [];
+  const applyTasks = useCallback((snapshot: ImageTaskSnapshot) => {
+    setTaskSnapshot((current) => applyImageTaskSnapshot(current, snapshot));
+  }, []);
   const [tasksOpen, setTasksOpen] = useState(false);
   const [batchExportStarting, setBatchExportStarting] = useState(false);
   const [taskClock, setTaskClock] = useState(Date.now);
@@ -938,22 +942,18 @@ export default function ImageManagerTool({
 
   useEffect(() => {
     let active = true;
-    let revision = -1;
-    const apply = (snapshot: TaskSnapshot | undefined) => {
-      if (!active || !snapshot) return;
-      if (typeof snapshot.revision === 'number' && snapshot.revision < revision) return;
-      if (typeof snapshot.revision === 'number') revision = snapshot.revision;
-      setTasks(snapshot.tasks ?? []);
+    const apply = (snapshot: ImageTaskSnapshot) => {
+      if (active) applyTasks(snapshot);
     };
-    const off = Events.On('image-manager:tasks', (event) => apply(event.data as TaskSnapshot));
+    const off = Events.On('image-manager:tasks', (event) => apply(event.data as ImageTaskSnapshot));
     void GetImageTasks()
-      .then((snapshot) => apply(snapshot as TaskSnapshot))
+      .then(apply)
       .catch(() => undefined);
     return () => {
       active = false;
       off();
     };
-  }, []);
+  }, [applyTasks]);
 
   useEffect(() => {
     const now = Date.now();
@@ -1719,13 +1719,14 @@ export default function ImageManagerTool({
     if (imageIDs.length === 0 || batchExportStarting) return;
     setBatchExportStarting(true);
     try {
-      const started = await StartImageExports(source.id, imageIDs);
-      if (started?.length) {
+      const result = await StartImageExports(source.id, imageIDs);
+      if (result.started > 0) {
+        applyTasks(result.snapshot);
         setTasksOpen(true);
         record(
           'image-manager',
           t('imageManagerTool.batchExport'),
-          t('imageManagerTool.selectedCount', { count: started.length }),
+          t('imageManagerTool.selectedCount', { count: result.started }),
           imageIDs.join('\n'),
         );
       }
@@ -1741,8 +1742,9 @@ export default function ImageManagerTool({
   };
   const runExport = async (image: DockerImage) => {
     try {
-      const task = await StartImageExport(source.id, image.name || image.id);
-      if (task?.id) {
+      const result = await StartImageExport(source.id, image.name || image.id);
+      if (result.started > 0) {
+        applyTasks(result.snapshot);
         setTasksOpen(true);
         record(
           'image-manager',
