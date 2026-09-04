@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { format } from 'date-fns';
 import { enUS, zhCN } from 'date-fns/locale';
@@ -200,7 +200,6 @@ function TimeResultRow({
   editing,
   onCopy,
   onToggle,
-  onSortIndexChange,
 }: {
   id: TimeResultId;
   label: string;
@@ -209,13 +208,9 @@ function TimeResultRow({
   editing: boolean;
   onCopy: () => void;
   onToggle?: () => void;
-  onSortIndexChange?: (index: number) => void;
 }) {
   const { t } = useTranslation();
-  const sortable = useSortable({ id });
-  useLayoutEffect(() => {
-    if (sortable.isDragging) onSortIndexChange?.(sortable.newIndex);
-  }, [onSortIndexChange, sortable.isDragging, sortable.newIndex]);
+  const sortable = useSortable({ id, disabled: !editing });
   const style = {
     transform: CSS.Transform.toString(sortable.transform),
     transition: sortable.transition,
@@ -297,8 +292,7 @@ export default function TimeTool({
   const [draftOrder, setDraftOrder] = useState<TimeResultId[]>(() => normalizeOrder(resultOrder));
   const [draftHidden, setDraftHidden] = useState<Set<string>>(() => new Set(hiddenResults));
   const draftOrderRef = useRef(draftOrder),
-    draftHiddenRef = useRef(draftHidden),
-    dragTargetIndexRef = useRef(-1);
+    draftHiddenRef = useRef(draftHidden);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -328,7 +322,7 @@ export default function TimeTool({
   }, [parsed, timeZone]);
   const order = normalizeOrder(resultOrder),
     hidden = new Set(hiddenResults),
-    shown = order.filter((id) => !hidden.has(id));
+    displayedResults = editing ? draftOrder : order.filter((id) => !hidden.has(id));
   const applyTimePreset = (preset: TimePreset) => {
     const date = resolveTimePreset(preset, new Date(), timeZone);
     if (!date) return;
@@ -548,57 +542,32 @@ export default function TimeTool({
               </Button>
             </div>
             <div className="min-h-0 overflow-x-hidden overflow-y-auto">
-              {editing ? (
+              {/* 预览和编辑共用上下文，保持拖拽回调注册稳定。 */}
+              {editing || parsed ? (
                 <DndContext
                   sensors={sensors}
                   collisionDetection={closestCenter}
-                  onDragStart={({ active }) => {
-                    dragTargetIndexRef.current = draftOrderRef.current.indexOf(
-                      String(active.id) as TimeResultId,
-                    );
-                  }}
-                  onDragEnd={({ active }) => {
+                  onDragEnd={({ active, collisions }) => {
+                    // over/newIndex 经由副作用更新，快速松手时可能落后于本轮碰撞结果。
+                    const targetId = collisions?.[0]?.id;
+                    if (targetId == null) return;
                     const from = draftOrderRef.current.indexOf(String(active.id) as TimeResultId);
-                    moveResult(from, dragTargetIndexRef.current);
-                    dragTargetIndexRef.current = -1;
-                  }}
-                  onDragCancel={() => {
-                    dragTargetIndexRef.current = -1;
+                    const to = draftOrderRef.current.indexOf(String(targetId) as TimeResultId);
+                    moveResult(from, to);
                   }}
                 >
-                  <SortableContext items={draftOrder} strategy={verticalListSortingStrategy}>
+                  <SortableContext items={displayedResults} strategy={verticalListSortingStrategy}>
                     <div>
-                      {draftOrder.map((id) => (
+                      {displayedResults.map((id) => (
                         <TimeResultRow
                           key={id}
                           id={id}
                           label={t(`timeTool.${id}`)}
                           value={values[id]}
-                          hidden={draftHidden.has(id)}
-                          editing
+                          hidden={editing && draftHidden.has(id)}
+                          editing={editing}
                           onCopy={() => copyResult(id)}
                           onToggle={() => toggleResult(id)}
-                          onSortIndexChange={(index) => {
-                            dragTargetIndexRef.current = index;
-                          }}
-                        />
-                      ))}
-                    </div>
-                  </SortableContext>
-                </DndContext>
-              ) : parsed ? (
-                <DndContext sensors={sensors}>
-                  <SortableContext items={shown} strategy={verticalListSortingStrategy}>
-                    <div>
-                      {shown.map((id) => (
-                        <TimeResultRow
-                          key={id}
-                          id={id}
-                          label={t(`timeTool.${id}`)}
-                          value={values[id]}
-                          hidden={false}
-                          editing={false}
-                          onCopy={() => copyResult(id)}
                         />
                       ))}
                     </div>
