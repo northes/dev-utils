@@ -92,6 +92,7 @@ type watchWorker struct {
 	// 保证任何并发数据路径（diff、detail 补全 worker、状态）的事件顺序单调。
 	emitMu   sync.Mutex
 	revision uint64
+	taskID   string
 }
 
 func (w *watchWorker) stop() {
@@ -287,6 +288,22 @@ func (s *ImageService) watchLoop(worker *watchWorker) {
 
 // runWatchRound 执行一轮扫描与 diff。CLI/status 操作都从 worker.ctx 派生并带 timeout。
 func (s *ImageService) runWatchRound(worker *watchWorker) {
+	taskID := s.newImageTask(imageTaskTypeUpdate, worker.sourceID, "")
+	worker.taskID = taskID
+	s.updateTask(taskID, func(task *imageTaskState) { task.Status = imageTaskRunning; task.Stage = "scanning" })
+	finishTask := func(err error) {
+		if errors.Is(err, context.Canceled) || worker.ctx.Err() != nil {
+			s.updateTask(taskID, func(task *imageTaskState) { task.Status = imageTaskCanceled; task.Stage = "canceled" })
+		} else if err != nil {
+			s.updateTask(taskID, func(task *imageTaskState) {
+				task.Status = imageTaskFailed
+				task.Stage = "failed"
+				task.Error = err.Error()
+			})
+		} else {
+			s.updateTask(taskID, func(task *imageTaskState) { task.Status = imageTaskSuccess; task.Stage = "done" })
+		}
+	}
 	source, cliPath, fingerprint, err := s.sourceSnapshot(worker.sourceID)
 	fingerprintChanged := false
 	if err == nil {
@@ -299,6 +316,7 @@ func (s *ImageService) runWatchRound(worker *watchWorker) {
 	_, hasCompleteSnapshot := s.watchPreviousSnapshot(worker, fingerprint)
 	s.emitWatchEvent(worker, s.watchScanningEvent(worker, &status, !hasCompleteSnapshot))
 	if err != nil {
+		finishTask(err)
 		s.failWatchRound(worker, err)
 		return
 	}
@@ -307,7 +325,9 @@ func (s *ImageService) runWatchRound(worker *watchWorker) {
 		if statusErr == "" {
 			statusErr = "镜像来源不可用"
 		}
-		s.failWatchRound(worker, errors.New(statusErr))
+		statusErrValue := errors.New(statusErr)
+		finishTask(statusErrValue)
+		s.failWatchRound(worker, statusErrValue)
 		return
 	}
 	// 连接状态必须先于缓存数据发布，避免前端在状态尚未判定时把
@@ -326,6 +346,7 @@ func (s *ImageService) runWatchRound(worker *watchWorker) {
 		prev, _ := s.watchPreviousSnapshot(worker, fingerprint)
 		result, scanErr := s.scanRegistryFlow(ctx, worker, source, prev, fingerprintChanged || worker.bootstrap)
 		if scanErr != nil {
+			finishTask(scanErr)
 			s.failWatchRound(worker, scanErr)
 			return
 		}
@@ -336,6 +357,7 @@ func (s *ImageService) runWatchRound(worker *watchWorker) {
 	} else {
 		images, err = s.scanDockerSource(ctx, worker, source, cliPath, !hasPrevious)
 		if err != nil {
+			finishTask(err)
 			s.failWatchRound(worker, err)
 			return
 		}
@@ -346,6 +368,7 @@ func (s *ImageService) runWatchRound(worker *watchWorker) {
 		s.diffWatchRound(worker, fingerprint, images)
 	}
 	if worker.ctx.Err() != nil {
+		finishTask(worker.ctx.Err())
 		return
 	}
 	worker.bootstrap = false
@@ -353,11 +376,13 @@ func (s *ImageService) runWatchRound(worker *watchWorker) {
 	s.storeWatchSnapshot(worker, fingerprint, index)
 	s.updateImageInventory(worker.sourceID, fingerprint, source, images)
 	if worker.ctx.Err() != nil {
+		finishTask(worker.ctx.Err())
 		return
 	}
 	doneEvent := s.watchStateEvent(worker, watchStageDone, doneScanned, doneTotal, "")
 	doneEvent.Status = &status
 	s.emitWatchEvent(worker, doneEvent)
+	finishTask(nil)
 }
 
 // diffWatchRound 计算上一轮与本轮差异并推送精准事件（Docker/SSH 源）。
@@ -894,6 +919,13 @@ func (s *ImageService) watchScanningEvent(worker *watchWorker, status *DockerSta
 // digest/size 的 tag 数量，total 随 tags list 返回动态增加；Docker 的
 // total 是 image ls 返回的唯一镜像数，scanned 是已完成 inspect 的数量。
 func (s *ImageService) watchProgressEvent(worker *watchWorker, scanned, total int) WatchDockerImagesEvent {
+	if worker != nil && worker.taskID != "" {
+		s.updateTask(worker.taskID, func(task *imageTaskState) {
+			task.Stage = "scanning"
+			task.Completed = int64(scanned)
+			task.Total = int64(total)
+		})
+	}
 	return WatchDockerImagesEvent{
 		ClientID:   worker.clientID,
 		SourceID:   worker.sourceID,

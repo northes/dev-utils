@@ -1,8 +1,6 @@
 import { useCallback, useDeferredValue, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { CancelError, Events } from '@wailsio/runtime';
-// @ts-ignore -- 遵循明确要求: 用且只用 import { TbBrandDocker } from "react-icons/tb"
-import { TbBrandDocker } from 'react-icons/tb';
 import {
   ArrowsClockwise,
   CaretDown,
@@ -10,7 +8,9 @@ import {
   CaretUp,
   Check,
   Copy,
+  DownloadSimple,
   HardDrives,
+  ListDashes,
   MagnifyingGlass,
   PencilSimple,
   Plus,
@@ -18,8 +18,12 @@ import {
 } from '@phosphor-icons/react';
 import {
   DeleteDockerImages,
+  CancelImageTask,
+  GetImageTasks,
   GetSSHConfigHosts,
   PushDockerImage,
+  StartImageExport,
+  StartImageExports,
   TestImageSourceConnection,
   WatchDockerImages,
 } from '../../bindings/changeme/imageservice';
@@ -30,6 +34,7 @@ import type {
   DockerImageDetail,
   DockerStatus,
   ImageSource,
+  ImageTask,
 } from '../../bindings/changeme/models';
 import {
   Reveal,
@@ -72,7 +77,6 @@ import {
 } from './ui/dropdown-menu';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
-import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Spinner } from './ui/spinner';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
@@ -88,6 +92,7 @@ const LOCAL_SOURCE = {
   sshHost: '',
 } as unknown as ImageSource;
 const IMAGE_SEARCH_DEBOUNCE_MS = 120;
+const IMAGE_TASK_RETENTION_MS = 24 * 60 * 60 * 1000;
 
 type SourceKind = 'local' | 'ssh' | 'registry';
 type ManagedImageSource = Omit<
@@ -154,6 +159,8 @@ type ConfirmState =
 
 type SourceViewState = 'connecting' | 'unavailable' | 'loading-details' | 'updating' | 'connected';
 type ContentViewState = 'loading' | 'error' | 'empty' | 'no-results' | 'table';
+
+type TaskSnapshot = { revision?: number; tasks?: ImageTask[] };
 
 function errorMessage(error: unknown) {
   if (error instanceof Error && error.message) return error.message;
@@ -916,7 +923,10 @@ export default function ImageManagerTool({
   const deferredSearch = useDeferredValue(search);
   const [isUpdating, setIsUpdating] = useState(false);
   const [isInitialLoad, setIsInitialLoad] = useState(false);
-  const [updateProgress, setUpdateProgress] = useState<WatchProgress | null>(null);
+  const [tasks, setTasks] = useState<ImageTask[]>([]);
+  const [tasksOpen, setTasksOpen] = useState(false);
+  const [batchExportStarting, setBatchExportStarting] = useState(false);
+  const [taskClock, setTaskClock] = useState(Date.now);
   const sourceConfigKey = JSON.stringify(source);
   const sourceIsChanging = watchSourceId !== source.id;
   const isConnecting = connectionPending || sourceIsChanging;
@@ -925,6 +935,36 @@ export default function ImageManagerTool({
     setLoadError('');
     setReloadNonce((value) => value + 1);
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    let revision = -1;
+    const apply = (snapshot: TaskSnapshot | undefined) => {
+      if (!active || !snapshot) return;
+      if (typeof snapshot.revision === 'number' && snapshot.revision < revision) return;
+      if (typeof snapshot.revision === 'number') revision = snapshot.revision;
+      setTasks(snapshot.tasks ?? []);
+    };
+    const off = Events.On('image-manager:tasks', (event) => apply(event.data as TaskSnapshot));
+    void GetImageTasks()
+      .then((snapshot) => apply(snapshot as TaskSnapshot))
+      .catch(() => undefined);
+    return () => {
+      active = false;
+      off();
+    };
+  }, []);
+
+  useEffect(() => {
+    const now = Date.now();
+    const expirations = tasks
+      .filter((task) => task.status !== 'queued' && task.status !== 'running')
+      .map((task) => Date.parse(task.updatedAt) + IMAGE_TASK_RETENTION_MS)
+      .filter((expiresAt) => expiresAt > now);
+    if (expirations.length === 0) return;
+    const timer = window.setTimeout(() => setTaskClock(Date.now()), Math.min(...expirations) - now);
+    return () => window.clearTimeout(timer);
+  }, [tasks, taskClock]);
 
   useEffect(() => {
     if (!sources.some((item) => item.id === sourceId))
@@ -948,7 +988,6 @@ export default function ImageManagerTool({
     setLoadError('');
     setIsUpdating(false);
     setIsInitialLoad(false);
-    setUpdateProgress(null);
 
     const offWatch = Events.On('image-manager:watch-docker-images', (event) => {
       const payload = event.data as WatchDockerImagesEvent | undefined;
@@ -991,7 +1030,6 @@ export default function ImageManagerTool({
         setIsInitialLoad(payload.isInitialLoad);
       }
       if (payload.progress) {
-        setUpdateProgress(payload.progress);
         const stage = payload.progress.stage;
         if (stage === 'scanning' || stage === 'done') {
           setLoadError('');
@@ -1627,30 +1665,100 @@ export default function ImageManagerTool({
     else void runDelete(confirm.sourceId, confirm.ids, confirm.name);
   };
 
-  const statusBadgeLabel =
-    sourceViewState === 'connecting'
-      ? t('imageManagerTool.statusBadgeChecking')
-      : sourceViewState === 'unavailable'
-        ? t('imageManagerTool.statusBadgeUnavailable')
-        : sourceViewState === 'loading-details'
-          ? t('imageManagerTool.statusBadgeLoadingDetails')
-          : sourceViewState === 'updating'
-            ? t('imageManagerTool.statusBadgeUpdating')
-            : t('imageManagerTool.statusBadgeAvailable');
-  const statusText =
-    sourceViewState === 'unavailable'
-      ? contentError ||
-        t(
-          source.kind === 'registry'
-            ? 'imageManagerTool.statusRegistryUnavailable'
-            : 'imageManagerTool.statusUnavailable',
-        )
-      : statusBadgeLabel;
-  const statusBadgeVariant = sourceViewState === 'unavailable' ? 'destructive' : 'outline';
-
-  const sourceKindLabel = t(
-    `imageManagerTool.kind${source.kind === 'registry' ? 'Registry' : source.kind === 'ssh' ? 'Ssh' : 'Local'}`,
+  const taskCutoff = Date.now() - IMAGE_TASK_RETENTION_MS;
+  const visibleTasks = tasks.filter(
+    (task) =>
+      task.status === 'queued' ||
+      task.status === 'running' ||
+      Date.parse(task.updatedAt) > taskCutoff,
   );
+  const activeTasks = visibleTasks.filter(
+    (task) => task.status === 'queued' || task.status === 'running',
+  );
+  const taskDone = (task: ImageTask) => (task.type === 'export' ? task.bytes : task.completed);
+  const taskPercent = (task: ImageTask) =>
+    task.status === 'success'
+      ? 100
+      : task.total > 0
+        ? Math.min(100, (taskDone(task) / task.total) * 100)
+        : null;
+  const taskProgress =
+    activeTasks.length === 1 && activeTasks[0].total > 0 ? taskPercent(activeTasks[0]) : null;
+  const taskTypeLabel = (task: ImageTask) => {
+    if (task.type === 'export') return t('imageManagerTool.taskStageExport');
+    if (task.type === 'detail') return t('imageManagerTool.taskStageDetail');
+    return t('imageManagerTool.taskStageUpdate');
+  };
+  const taskSourceLabel = (task: ImageTask) => {
+    const taskSource = sources.find((item) => item.id === task.sourceID);
+    return taskSource ? sourceDisplayName(taskSource, t) : task.sourceID;
+  };
+  const taskStatus = (task: ImageTask) =>
+    t(`imageManagerTool.taskStatus${task.status.charAt(0).toUpperCase()}${task.status.slice(1)}`);
+  const taskStatusVariant = (task: ImageTask): 'secondary' | 'destructive' | 'outline' =>
+    task.status === 'failed' ? 'destructive' : task.status === 'canceled' ? 'outline' : 'secondary';
+  const taskProgressLabel = (task: ImageTask) => {
+    if (task.type === 'export') {
+      const completed = formatBytes(task.bytes, i18n.language) || formatBytes(0, i18n.language);
+      return task.total > 0 || task.status === 'success'
+        ? t('imageManagerTool.taskExportProgress', {
+            completed,
+            total: formatBytes(task.total || task.bytes, i18n.language),
+          })
+        : t('imageManagerTool.taskExportProgressUnknown', { completed });
+    }
+    return t('imageManagerTool.taskProgressCount', {
+      completed: task.completed,
+      total: task.total,
+    });
+  };
+  const runBatchExport = async () => {
+    const imageIDs = filteredImages
+      .filter((image) => selected.has(image.id))
+      .map((image) => image.name || image.id);
+    if (imageIDs.length === 0 || batchExportStarting) return;
+    setBatchExportStarting(true);
+    try {
+      const started = await StartImageExports(source.id, imageIDs);
+      if (started?.length) {
+        setTasksOpen(true);
+        record(
+          'image-manager',
+          t('imageManagerTool.batchExport'),
+          t('imageManagerTool.selectedCount', { count: started.length }),
+          imageIDs.join('\n'),
+        );
+      }
+    } catch (error) {
+      toast.add({
+        title: t('imageManagerTool.exportFailed'),
+        description: errorMessage(error) || undefined,
+        type: 'error',
+      });
+    } finally {
+      setBatchExportStarting(false);
+    }
+  };
+  const runExport = async (image: DockerImage) => {
+    try {
+      const task = await StartImageExport(source.id, image.name || image.id);
+      if (task?.id) {
+        setTasksOpen(true);
+        record(
+          'image-manager',
+          t('imageManagerTool.exportTar'),
+          imageLabel(image, unnamed),
+          image.id,
+        );
+      }
+    } catch (error) {
+      toast.add({
+        title: t('imageManagerTool.exportFailed'),
+        description: errorMessage(error) || undefined,
+        type: 'error',
+      });
+    }
+  };
 
   return (
     <Reveal index={0} fill active={active}>
@@ -1702,79 +1810,6 @@ export default function ImageManagerTool({
           }
           right={
             <div className="flex min-w-0 flex-wrap items-center gap-2 max-[700px]:w-full max-[700px]:justify-end">
-              <Popover>
-                <PopoverTrigger
-                  render={
-                    <Badge
-                      variant={statusBadgeVariant}
-                      className="cursor-pointer text-[10px]"
-                      aria-label={statusText}
-                    />
-                  }
-                >
-                  {sourceViewState === 'connecting' ? (
-                    <Spinner
-                      data-icon="inline-start"
-                      className="size-3.5 shrink-0 motion-reduce:animate-none"
-                    />
-                  ) : source.kind !== 'registry' ? (
-                    <TbBrandDocker
-                      data-icon="inline-start"
-                      className="size-3.5 shrink-0"
-                      aria-hidden="true"
-                    />
-                  ) : null}
-                  {statusBadgeLabel}
-                </PopoverTrigger>
-                <PopoverContent align="end" className="w-auto min-w-56 gap-2 p-3 text-xs">
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="font-medium text-foreground">{sourceKindLabel}</div>
-                    <div className="text-muted-foreground">{statusBadgeLabel}</div>
-                  </div>
-                  {source.kind !== 'registry' ? (
-                    <>
-                      <div className="flex items-center justify-between gap-2 border-t border-border pt-1.5 text-[11px]">
-                        <span className="text-muted-foreground">
-                          {t('imageManagerTool.statusDockerVersion')}
-                        </span>
-                        <span className="font-mono text-foreground">
-                          {status?.version || t('imageManagerTool.emptyValue')}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between gap-2 border-t border-border pt-1.5 text-[11px]">
-                        <span className="text-muted-foreground">
-                          {t('imageManagerTool.dockerCliPath')}
-                        </span>
-                        <span className="font-mono text-foreground">
-                          {status?.cliPath || t('imageManagerTool.emptyValue')}
-                        </span>
-                      </div>
-                    </>
-                  ) : null}
-                  {(sourceViewState === 'loading-details' || sourceViewState === 'updating') &&
-                  updateProgress &&
-                  typeof updateProgress.scanned === 'number' ? (
-                    <div className="flex items-center justify-between gap-2 border-t border-border pt-1.5 text-[11px]">
-                      <span className="text-muted-foreground">
-                        {t(
-                          sourceViewState === 'loading-details'
-                            ? 'imageManagerTool.statusInitialLoadProgress'
-                            : 'imageManagerTool.statusUpdateProgress',
-                        )}
-                      </span>
-                      <span className="font-mono text-foreground">
-                        {t('imageManagerTool.statusProgressScan', {
-                          scanned: updateProgress.scanned,
-                          total:
-                            typeof updateProgress.total === 'number' && updateProgress.total > 0
-                              ? updateProgress.total
-                              : '?',
-                        })}
-                      </span>
-                    </div>
-                  ) : null}
-                </PopoverContent>
-              </Popover>
               <Button
                 variant="outline"
                 className="h-[30px] min-w-[30px] flex-none px-[11px] text-[11px]"
@@ -1989,6 +2024,10 @@ export default function ImageManagerTool({
                                     ? t('imageManagerTool.copied')
                                     : t('imageManagerTool.copyName')}
                                 </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => void runExport(image)}>
+                                  <DownloadSimple data-icon="inline-start" weight="duotone" />
+                                  {t('imageManagerTool.exportTar')}
+                                </DropdownMenuItem>
                                 {((source as ManagedImageSource).capabilities?.canPush ??
                                 source.kind !== 'registry') ? (
                                   <DropdownMenuItem
@@ -2026,24 +2065,64 @@ export default function ImageManagerTool({
             </div>
           )}
         </ToolLayoutContent>
-        {contentViewState === 'table' || contentViewState === 'no-results' ? (
-          <ToolLayoutFooter>
-            <div className="flex items-center justify-between gap-3 border-t border-border pt-3">
-              <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
-                <span>
-                  {t('imageManagerTool.filteredSummary', { count: filteredImages.length })}
-                </span>
-                <span>
-                  {t('imageManagerTool.filteredSize', {
-                    size:
-                      formatBytes(filteredTotalBytes, i18n.language) ||
-                      t('imageManagerTool.emptyValue'),
-                  })}
-                </span>
-                {selectedCount > 0 ? (
-                  <span>{t('imageManagerTool.selectedCount', { count: selectedCount })}</span>
-                ) : null}
-              </div>
+        <ToolLayoutFooter>
+          <div className="flex items-center justify-between gap-3 border-t border-border pt-3">
+            <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
+              <span>{t('imageManagerTool.filteredSummary', { count: filteredImages.length })}</span>
+              <span>
+                {t('imageManagerTool.filteredSize', {
+                  size:
+                    formatBytes(filteredTotalBytes, i18n.language) ||
+                    t('imageManagerTool.emptyValue'),
+                })}
+              </span>
+              {selectedCount > 0 ? (
+                <span>{t('imageManagerTool.selectedCount', { count: selectedCount })}</span>
+              ) : null}
+              {activeTasks.length > 0 || visibleTasks.length > 0 ? (
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-2 text-left text-muted-foreground hover:text-foreground"
+                  onClick={() => setTasksOpen(true)}
+                  aria-label={t('imageManagerTool.backgroundTasks')}
+                >
+                  {activeTasks.length > 0 ? (
+                    <>
+                      <span
+                        className={`relative h-1.5 w-20 overflow-hidden rounded-full bg-muted ${taskProgress === null ? 'animate-pulse motion-reduce:animate-none' : ''}`}
+                        aria-hidden="true"
+                      >
+                        <span
+                          className="absolute inset-y-0 left-0 rounded-full bg-primary"
+                          style={{ width: `${taskProgress ?? 0}%` }}
+                        />
+                      </span>
+                      <span>
+                        {t('imageManagerTool.backgroundTasksCount', { count: activeTasks.length })}
+                      </span>
+                    </>
+                  ) : (
+                    <ListDashes size={14} weight="duotone" aria-hidden="true" />
+                  )}
+                </button>
+              ) : null}
+            </div>
+            <div className="flex flex-none flex-wrap items-center justify-end gap-2">
+              {selectedCount > 0 ? (
+                <Button
+                  variant="outline"
+                  className="h-[30px] flex-none px-[11px] text-[11px]"
+                  disabled={working || batchExportStarting}
+                  onClick={() => void runBatchExport()}
+                >
+                  {batchExportStarting ? (
+                    <Spinner data-icon="inline-start" />
+                  ) : (
+                    <DownloadSimple data-icon="inline-start" weight="duotone" />
+                  )}
+                  {t('imageManagerTool.batchExport')}
+                </Button>
+              ) : null}
               <Button
                 variant="destructive"
                 className={`h-[30px] flex-none px-[11px] text-[11px]${selectedCount > 0 ? '' : ' invisible pointer-events-none'}`}
@@ -2064,8 +2143,99 @@ export default function ImageManagerTool({
                 {t('imageManagerTool.batchDelete')}
               </Button>
             </div>
-          </ToolLayoutFooter>
-        ) : null}
+          </div>
+        </ToolLayoutFooter>
+        <Dialog open={tasksOpen} onOpenChange={setTasksOpen}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>{t('imageManagerTool.backgroundTasks')}</DialogTitle>
+              <DialogDescription>{t('imageManagerTool.backgroundTasksDesc')}</DialogDescription>
+            </DialogHeader>
+            <div className="min-h-0 max-h-[55vh] overflow-hidden">
+              <div className="min-h-0 max-h-[55vh] overflow-x-hidden overflow-y-auto overscroll-contain [padding-inline-end:var(--overlay-scrollbar-hit-size)] [scrollbar-gutter:auto]">
+                {visibleTasks.length === 0 ? (
+                  <div className="py-8 text-center text-xs text-muted-foreground">
+                    {t('imageManagerTool.backgroundTasksEmpty')}
+                  </div>
+                ) : (
+                  visibleTasks
+                    .slice()
+                    .reverse()
+                    .map((task) => {
+                      const running = task.status === 'queued' || task.status === 'running';
+                      const percent = taskPercent(task);
+                      return (
+                        <div
+                          key={task.id}
+                          className="border-b border-border py-3 first:pt-0 last:border-b-0 last:pb-0"
+                        >
+                          <div className="min-w-0">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0 flex-1 truncate font-medium text-foreground">
+                                {taskTypeLabel(task)}
+                              </div>
+                              <div className="flex flex-none items-center gap-1.5">
+                                <Badge
+                                  variant={taskStatusVariant(task)}
+                                  className="h-5 text-[10px]"
+                                >
+                                  {taskStatus(task)}
+                                </Badge>
+                                {running ? (
+                                  <Button
+                                    variant="ghost"
+                                    size="xs"
+                                    className="h-6 px-2 text-[11px]"
+                                    onClick={() =>
+                                      void CancelImageTask(task.id).catch(() => undefined)
+                                    }
+                                  >
+                                    {t('imageManagerTool.cancelTask')}
+                                  </Button>
+                                ) : null}
+                              </div>
+                            </div>
+                            <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 text-[10px] text-muted-foreground">
+                              <span className="truncate">{taskSourceLabel(task)}</span>
+                              {task.imageID ? (
+                                <>
+                                  <span aria-hidden="true">·</span>
+                                  <span className="min-w-0 break-all">{task.imageID}</span>
+                                </>
+                              ) : null}
+                            </div>
+                            <div className="mt-2 flex items-center gap-2">
+                              <div
+                                className={`h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-muted ${percent === null && running ? 'animate-pulse motion-reduce:animate-none' : ''}`}
+                              >
+                                <div
+                                  className="h-full rounded-full bg-primary"
+                                  style={{ width: `${percent ?? 0}%` }}
+                                />
+                              </div>
+                              <span className="flex-none font-mono text-[10px] text-muted-foreground">
+                                {taskProgressLabel(task)}
+                              </span>
+                            </div>
+                            {task.error || task.path ? (
+                              <div className="mt-1 break-all text-[10px] text-muted-foreground">
+                                {task.error || task.path}
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
+                      );
+                    })
+                )}
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setTasksOpen(false)}>
+                {t('imageManagerTool.cancel')}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </ToolLayout>
       <Dialog
         open={manageOpen}

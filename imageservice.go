@@ -240,6 +240,13 @@ type ImageService struct {
 	watchWorker           *watchWorker
 	watchGeneration       uint64
 	watchSnapshots        map[string]*watchScan
+	taskMu                sync.Mutex
+	tasks                 map[string]*imageTaskState
+	taskOrder             []string
+	taskRevision          uint64
+	exportSem             chan struct{}
+	exportWG              sync.WaitGroup
+	exportQueueMu         sync.Mutex
 }
 
 type imageCacheCall struct {
@@ -268,7 +275,7 @@ type prewarmGeneration struct {
 
 func NewImageService(config *ConfigService) *ImageService {
 	ctx, cancel := context.WithCancel(context.Background())
-	service := &ImageService{config: config, ctx: ctx, cancel: cancel, cacheCalls: make(map[string]*imageCacheCall), inventory: make(map[string]imageInventory), prewarmGenerations: make(map[string]*prewarmGeneration)}
+	service := &ImageService{config: config, ctx: ctx, cancel: cancel, cacheCalls: make(map[string]*imageCacheCall), inventory: make(map[string]imageInventory), prewarmGenerations: make(map[string]*prewarmGeneration), exportSem: make(chan struct{}, 2)}
 	service.ensurePrewarmWorkers()
 	return service
 }
@@ -561,6 +568,88 @@ func runAuthenticatedSSH(ctx context.Context, source ImageSource, cliPath string
 	return nil, errors.New("连接 SSH 主机失败")
 }
 
+func runAuthenticatedSSHStream(ctx context.Context, source ImageSource, cliPath string, dst io.Writer, dockerArgs ...string) error {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return errors.New("获取 SSH 主目录失败")
+	}
+	hostKeyCallback, err := knownhosts.New(filepath.Join(home, ".ssh", "known_hosts"))
+	if err != nil {
+		return errors.New("读取 SSH known_hosts 失败")
+	}
+	user := source.SSHUsername
+	if user == "" {
+		user = os.Getenv("USER")
+	}
+	if user == "" {
+		return errors.New("SSH 用户名为空")
+	}
+	authMethods := make([]ssh.AuthMethod, 0, 2)
+	if source.SSHPassword != "" {
+		authMethods = append(authMethods, ssh.Password(source.SSHPassword))
+	}
+	keyData := source.SSHPrivateKey
+	if keyData == "" && source.SSHPrivateKeyPath != "" {
+		keyData, err = readSSHPrivateKeyFile(source.SSHPrivateKeyPath)
+		if err != nil {
+			return errors.New("读取 SSH 私钥文件失败")
+		}
+	}
+	if keyData != "" {
+		var signer ssh.Signer
+		if source.SSHKeyPassphrase != "" {
+			signer, err = ssh.ParsePrivateKeyWithPassphrase([]byte(keyData), []byte(source.SSHKeyPassphrase))
+		} else {
+			signer, err = ssh.ParsePrivateKey([]byte(keyData))
+		}
+		if err != nil {
+			return errors.New("解析 SSH 私钥失败")
+		}
+		authMethods = append(authMethods, ssh.PublicKeys(signer))
+	}
+	if len(authMethods) == 0 {
+		return errors.New("SSH 未配置认证凭据")
+	}
+	host := strings.TrimPrefix(strings.TrimSuffix(source.SSHHost, "]"), "[")
+	port := source.SSHPort
+	if port == 0 {
+		port = 22
+	}
+	config := &ssh.ClientConfig{User: user, Auth: authMethods, HostKeyCallback: hostKeyCallback, Timeout: imageCommandTimeout}
+	address := net.JoinHostPort(host, strconv.Itoa(port))
+	netConn, err := (&net.Dialer{}).DialContext(ctx, "tcp", address)
+	if err != nil {
+		return errors.New("连接 SSH 主机失败")
+	}
+	defer netConn.Close()
+	handshake := make(chan struct {
+		conn     ssh.Conn
+		channels <-chan ssh.NewChannel
+		requests <-chan *ssh.Request
+		err      error
+	}, 1)
+	go func() {
+		conn, channels, requests, handshakeErr := ssh.NewClientConn(netConn, address, config)
+		handshake <- struct {
+			conn     ssh.Conn
+			channels <-chan ssh.NewChannel
+			requests <-chan *ssh.Request
+			err      error
+		}{conn, channels, requests, handshakeErr}
+	}()
+	select {
+	case result := <-handshake:
+		if result.err != nil {
+			return errors.New("连接 SSH 主机失败")
+		}
+		client := ssh.NewClient(result.conn, result.channels, result.requests)
+		defer client.Close()
+		return runSSHCommandToWriter(ctx, client, cliPath, dst, dockerArgs...)
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
 func runSSHCommand(ctx context.Context, client *ssh.Client, cliPath string, dockerArgs ...string) ([]byte, error) {
 	session, err := client.NewSession()
 	if err != nil {
@@ -585,6 +674,35 @@ func runSSHCommand(ctx context.Context, client *ssh.Client, cliPath string, dock
 	case <-ctx.Done():
 		_ = client.Close()
 		return stdout.Bytes(), ctx.Err()
+	}
+}
+
+func runSSHCommandToWriter(ctx context.Context, client *ssh.Client, cliPath string, dst io.Writer, dockerArgs ...string) error {
+	session, err := client.NewSession()
+	if err != nil {
+		return errors.New("创建 SSH 会话失败")
+	}
+	defer session.Close()
+	stderr := &limitedBuffer{limit: maxImageCommandOutput}
+	session.Stdout = dst
+	session.Stderr = stderr
+	if err := session.Start(shellJoin(append([]string{cliPath}, dockerArgs...))); err != nil {
+		return errors.New("启动远程 Docker 命令失败")
+	}
+	wait := make(chan error, 1)
+	go func() { wait <- session.Wait() }()
+	select {
+	case err := <-wait:
+		if err != nil {
+			if stderr.Len() > 0 {
+				return fmt.Errorf("远程 Docker 导出失败: %s", stderr.String())
+			}
+			return err
+		}
+		return nil
+	case <-ctx.Done():
+		_ = client.Close()
+		return ctx.Err()
 	}
 }
 
@@ -1075,13 +1193,20 @@ type limitedRegistryTransport struct {
 	base http.RoundTripper
 }
 
+// 仅导出 blob 的请求携带声明大小，其他元数据请求继续使用默认上限。
+type registryBlobSizeKey struct{}
+
 func (t *limitedRegistryTransport) RoundTrip(request *http.Request) (*http.Response, error) {
 	response, err := t.base.RoundTrip(request)
 	if err == nil && response != nil && response.Body != nil {
+		limit := int64(maxRegistryBodySize)
+		if size, ok := request.Context().Value(registryBlobSizeKey{}).(int64); ok && size >= limit && request.Method == http.MethodGet && response.StatusCode == http.StatusOK {
+			limit = size + 1
+		}
 		response.Body = struct {
 			io.Reader
 			io.Closer
-		}{Reader: io.LimitReader(response.Body, maxRegistryBodySize), Closer: response.Body}
+		}{Reader: io.LimitReader(response.Body, limit), Closer: response.Body}
 	}
 	return response, err
 }
@@ -1919,6 +2044,7 @@ func (s *ImageService) shutdown() {
 		s.watchSnapshots = make(map[string]*watchScan)
 		s.mu.Unlock()
 		s.prewarmWG.Wait()
+		s.exportWG.Wait()
 	})
 }
 
@@ -2333,21 +2459,43 @@ type dockerImageInspectJSON struct {
 }
 
 func (s *ImageService) InspectDockerImage(sourceID string, imageID string) (DockerImageDetail, error) {
+	taskID := s.newImageTask(imageTaskTypeDetail, sourceID, imageID)
+	s.updateTask(taskID, func(task *imageTaskState) {
+		task.Status = imageTaskRunning
+		task.Stage = "loading"
+		task.Total = 1
+	})
+	finish := func(detail DockerImageDetail, err error) (DockerImageDetail, error) {
+		if err != nil {
+			s.updateTask(taskID, func(task *imageTaskState) {
+				task.Status = imageTaskFailed
+				task.Stage = "failed"
+				task.Error = err.Error()
+			})
+		} else {
+			s.updateTask(taskID, func(task *imageTaskState) {
+				task.Status = imageTaskSuccess
+				task.Stage = "done"
+				task.Completed = task.Total
+			})
+		}
+		return detail, err
+	}
 	s.cleanupImageCache()
 	source, cliPath, fingerprint, err := s.sourceSnapshot(sourceID)
 	if err != nil {
-		return DockerImageDetail{}, err
+		return finish(DockerImageDetail{}, err)
 	}
 	repository := ""
 	if source.Kind == "registry" {
 		repository, _, _, err = parseRegistryImageReference(imageID)
 		if err != nil {
-			return DockerImageDetail{}, err
+			return finish(DockerImageDetail{}, err)
 		}
 	} else if !validImageReference(imageID) {
-		return DockerImageDetail{}, errors.New("镜像 ID 无效")
+		return finish(DockerImageDetail{}, errors.New("镜像 ID 无效"))
 	}
-	return s.inspectWithSnapshot(sourceID, source, cliPath, fingerprint, imageID, repository)
+	return finish(s.inspectWithSnapshot(sourceID, source, cliPath, fingerprint, imageID, repository))
 }
 
 func (s *ImageService) PushDockerImage(sourceID string, image string) (DockerOperationResult, error) {

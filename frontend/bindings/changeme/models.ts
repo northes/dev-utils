@@ -183,6 +183,27 @@ export interface ImageSource {
     "registryPassword": string;
 }
 
+export interface ImageTask {
+    "id": string;
+    "type": string;
+    "sourceID": string;
+    "imageID": string;
+    "status": string;
+    "stage": string;
+    "completed": number;
+    "total": number;
+    "bytes": number;
+    "error"?: string;
+    "path"?: string;
+    "createdAt": string;
+    "updatedAt": string;
+}
+
+export interface ImageTaskSnapshot {
+    "revision": number;
+    "tasks": ImageTask[] | null;
+}
+
 export interface RegistryDescriptor {
     "mediaType": string;
     "digest": string;
